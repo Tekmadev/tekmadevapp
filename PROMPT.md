@@ -511,7 +511,7 @@ The Marketing tab has a segmented control at the top: Blog, Email, Links, CRM.
 
 **Blog: editor** (the most important writing surface in the app; make it a joy)
 - Full-screen editor with a collapsing top bar: status badge, Preview, Save, overflow (Publish / Unpublish, Archive, Move to trash, View live).
-- Title (large display field), then the body as **Markdown** in a monospace-free, comfortable writing field (Geist 17sp, 28sp line height) with a formatting toolbar above the keyboard: H2, H3, bold, italic, link, bullet list, numbered list, quote, callout (tip / info / warning), Q&A answer block, table template, CTA template, divider, image (URL + alt + caption). The toolbar inserts the exact syntax below.
+- Title (large display field), then the body as **Markdown** in a monospace-free, comfortable writing field (Geist 17sp, 28sp line height) with a formatting toolbar above the keyboard: H2, H3, bold, italic, link, bullet list, numbered list, quote, callout (tip / info / warning), Q&A answer block, table template, CTA template, divider, image (upload from the phone or paste a URL, then alt + caption). The toolbar inserts the exact syntax below; an uploaded image is inserted as `![Describe the image](url)` with the placeholder selected so the alt text can be typed at once.
 - **Supported Markdown** (the server converts it into blocks; anything else becomes a paragraph):
   - `##`, `###`, `####` headings (a single `#` becomes `##`)
   - paragraphs separated by a blank line; inline `**bold**`, `*italic*`, `` `code` ``, `[text](url)`
@@ -529,7 +529,7 @@ The Marketing tab has a segmented control at the top: Blog, Email, Links, CRM.
   - Basics: slug (hint "Leave blank to auto-generate."; the server slugifies; warn when changing the slug of a published post: "The old link will stop working."), status (Draft, In review, Published, Archived), author, category (with "+ New category" inline), excerpt, featured.
   - Search: target query, meta title (with a live character count, aim for 60 or fewer), meta description (aim for 155 or fewer), keywords (chips), tags (chips), canonical URL, noindex switch. Show a live Google-style result preview.
   - Answer engine: key takeaways (one per row, reorderable), FAQs (question and answer pairs, reorderable).
-  - Media: cover image URL and alt text (with a live image preview), social image URL.
+  - Media: cover image (alt text required) and social image. Each has **Upload** (pick from the gallery or take a photo with `expo-image-picker`, then resize to at most 2400px wide and compress to WebP or JPEG under 10 MB with `expo-image-manipulator`) or paste a link, with a live preview and a remove button. 1200 x 630 is the recommended size.
 - Saving: PendingButton "Save changes" / "Create post". Toasts: "Saved. A version snapshot was recorded." / "Post created. Keep editing, then publish when ready." / "Published and live on the site." Publishing asks HoldToConfirm ("Publish this post to tekmadev.com?").
 - Autosave a local draft every 3 seconds while typing; on open, if a local draft is newer than the server copy, offer "Restore your unsaved changes?".
 - Unsaved-changes guard on back (sheet: Save, Discard, Keep editing).
@@ -715,6 +715,7 @@ Marketing (owner)
   - `POST /blog/posts` (Idempotency-Key) and `PATCH /blog/posts/:id` (partial; send `bodyMarkdown` for the body) → the full post. The server slugifies, checks uniqueness (409 `slug_taken`), records a revision, and refreshes the public site.
   - `POST /blog/posts/:id/publish`; `POST /blog/posts/:id/status` `{ status: "draft"|"in_review"|"published"|"archived" }`; `DELETE /blog/posts/:id` (trash)
   - `POST /blog/render` `{ markdown }` → `{ blocks: BlogBlock[], readingTimeMinutes }`
+  - `POST /blog/media` `{ fileName, size, type }` → `{ bucket, path, token, publicUrl }`: a one-time signed upload URL for the public `blog-media` Storage bucket (PNG, JPG, WebP, AVIF, GIF; 10 MB max; errors `type`, `size`). The app then uploads the bytes itself with supabase-js `storage.from(bucket).uploadToSignedUrl(path, token, data, { contentType })` (read the picked file into an ArrayBuffer first) and uses `publicUrl`. The website's blog editor works the same way.
   - `GET /blog/categories` (with post counts); `POST /blog/categories` `{ name }` (409 `category_dup`); `PATCH /blog/categories/:id` `{ name }`; `DELETE /blog/categories/:id`
   - `GET /blog/authors`
   - Block types: `heading {level 2|3|4, text}`, `paragraph {text}`, `list {ordered?, items}`, `quote {text, cite?}`, `callout {variant? info|tip|warning, text}`, `answer {question?, text}`, `image {url, alt, caption?}`, `table {caption?, headers, rows}`, `code {language?, code}`, `cta {heading, body?, buttonLabel, href}`, `divider`. Inline text inside blocks may contain `**bold**`, `*italic*`, `` `code` `` and `[text](url)`.
