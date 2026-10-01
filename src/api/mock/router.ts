@@ -1,3 +1,5 @@
+import { addDays, todayToronto } from '@/lib/dates';
+
 import type { HttpMethod, Page, Role } from '../types';
 
 /**
@@ -130,17 +132,12 @@ export const daysAgo = (d: number, atHourOffset = 0) => minutesAgo(d * 1440 + at
 export const minutesFromNow = (m: number) => isoMicros(new Date(Date.now() + m * 60_000));
 export const daysFromNow = (d: number) => minutesFromNow(d * 1440);
 
-/** A Toronto calendar date `YYYY-MM-DD`, offset from today by `days`. */
+/**
+ * A Toronto calendar date `YYYY-MM-DD`, offset from today by `days`.
+ * Calendar arithmetic, not 24 hour steps: DST days are 23 or 25 hours long.
+ */
 export function torontoDate(days = 0): string {
-  const d = new Date(Date.now() + days * 86_400_000);
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Toronto',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(d);
-  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
-  return `${get('year')}-${get('month')}-${get('day')}`;
+  return addDays(todayToronto(new Date(Date.now())), days);
 }
 
 /** Sort newest first by an ISO string field (string compare is exact for same-format instants). */

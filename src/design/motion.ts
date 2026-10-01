@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import { AccessibilityInfo } from 'react-native';
 import {
   Easing,
@@ -102,19 +102,19 @@ export function isReduceMotion() {
   return reduceMotionCache;
 }
 
+function subscribeReduceMotion(onChange: () => void) {
+  ensureSubscribed();
+  listeners.add(onChange);
+  return () => {
+    listeners.delete(onChange);
+  };
+}
+
 /**
  * Live "Remove animations" (Android) state. When true: no rotation or scale on the
  * loader (opacity pulse instead), no list staggers, no parallax, no count-ups.
  */
 export function useReduceMotion(): boolean {
-  const [value, setValue] = useState(isReduceMotion);
-  useEffect(() => {
-    ensureSubscribed();
-    listeners.add(setValue);
-    setValue(reduceMotionCache);
-    return () => {
-      listeners.delete(setValue);
-    };
-  }, []);
-  return value;
+  return useSyncExternalStore(subscribeReduceMotion, isReduceMotion);
 }
+

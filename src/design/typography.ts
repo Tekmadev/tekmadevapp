@@ -24,11 +24,19 @@ type Variant = Pick<
   'fontFamily' | 'fontWeight' | 'fontSize' | 'lineHeight' | 'letterSpacing' | 'textTransform' | 'fontVariant'
 >;
 
+/**
+ * The brief's display line height is 0.94, but Geist's natural line is 1.30em
+ * (ascent 1005, descent 295 per 1000) and Android trims a short line box equally
+ * from the top and the bottom, which cuts the descenders of g, p, y, j and q.
+ * 1.16 is the tightest value that keeps the full descender on Android.
+ */
+const DISPLAY_LINE = 1.16;
+
 const display = (size: number): Variant => ({
   fontFamily: fonts.sans,
   fontWeight: '800',
   fontSize: size,
-  lineHeight: Math.round(size * 0.94),
+  lineHeight: Math.round(size * DISPLAY_LINE),
   letterSpacing: tracking(size, -4),
   fontVariant: ['tabular-nums'],
 });
@@ -37,7 +45,7 @@ const headline = (size: number): Variant => ({
   fontFamily: fonts.sans,
   fontWeight: '700',
   fontSize: size,
-  lineHeight: Math.round(size * 1.18),
+  lineHeight: Math.round(size * 1.22),
   letterSpacing: tracking(size, -2.5),
 });
 

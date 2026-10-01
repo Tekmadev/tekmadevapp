@@ -17,3 +17,32 @@ jest.mock('expo-secure-store', () => {
 
 jest.mock('expo-application', () => ({ nativeApplicationVersion: '0.1.0', nativeBuildVersion: '1' }));
 jest.mock('@react-native-community/netinfo', () => ({ addEventListener: () => () => undefined, fetch: async () => ({ isConnected: true }) }));
+
+// MMKV is a Nitro native module; give tests an in-memory store with the same surface.
+jest.mock('react-native-mmkv', () => {
+  const make = (config?: { id?: string }) => {
+    const data = new Map<string, string | number | boolean>();
+    return {
+      id: config?.id ?? 'mmkv.default',
+      set: (k: string, v: string | number | boolean) => void data.set(k, v),
+      getString: (k: string) => {
+        const v = data.get(k);
+        return typeof v === 'string' ? v : undefined;
+      },
+      getNumber: (k: string) => {
+        const v = data.get(k);
+        return typeof v === 'number' ? v : undefined;
+      },
+      getBoolean: (k: string) => {
+        const v = data.get(k);
+        return typeof v === 'boolean' ? v : undefined;
+      },
+      contains: (k: string) => data.has(k),
+      remove: (k: string) => data.delete(k),
+      getAllKeys: () => [...data.keys()],
+      clearAll: () => data.clear(),
+      addOnValueChangedListener: () => ({ remove: () => undefined }),
+    };
+  };
+  return { createMMKV: make, existsMMKV: () => false, deleteMMKV: () => true };
+});

@@ -237,16 +237,18 @@ export function relativeTime(input: string | Date, now: Date = new Date()): stri
   if (diffMs < 0) {
     // Future instants (bookings, expiries).
     const ahead = -diffMs;
-    if (ahead < 60 * 60_000) return `in ${Math.max(1, Math.round(ahead / 60_000))} min`;
+    // Clamped so 59.6 minutes never reads "in 60 min".
+    if (ahead < 60 * 60_000) return `in ${Math.min(59, Math.max(1, Math.round(ahead / 60_000)))} min`;
     const days = daysBetween(todayToronto(now), torontoDateOf(d));
     if (days === 0) return `today ${formatTime(d)}`;
     if (days === 1) return `tomorrow ${formatTime(d)}`;
     return formatShortDate(d, now);
   }
   if (diffMs < 45_000) return 'just now';
-  if (diffMs < 60 * 60_000) return `${Math.max(1, Math.round(diffMs / 60_000))} min ago`;
+  // Whole elapsed units (floor), so 59.6 minutes is "59 min ago", never "60 min ago".
+  if (diffMs < 60 * 60_000) return `${Math.max(1, Math.floor(diffMs / 60_000))} min ago`;
   const days = daysBetween(torontoDateOf(d), todayToronto(now));
-  if (days === 0) return `${Math.round(diffMs / 3_600_000)} h ago`;
+  if (days === 0) return `${Math.floor(diffMs / 3_600_000)} h ago`;
   if (days === 1) return 'Yesterday';
   return formatShortDate(d, now);
 }

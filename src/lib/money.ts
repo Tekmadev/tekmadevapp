@@ -33,11 +33,13 @@ export type MoneyFormatOptions = {
 export function formatCents(cents: number, currency = 'CAD', options: MoneyFormatOptions = {}): string {
   if (!Number.isFinite(cents)) return '';
   const { dropZeroCents = true, signed = false } = options;
-  const whole = Math.round(cents) % 100 === 0;
+  // `|| 0` turns -0 into 0: Intl prints a negative zero as "-$0".
+  const rounded = Math.round(cents) || 0;
+  const whole = rounded % 100 === 0;
   const text = nf(currency.toUpperCase(), whole && dropZeroCents ? 0 : 2)
-    .format(Math.round(cents) / 100)
+    .format(rounded / 100)
     .replace(/ /g, ' ');
-  return signed && cents > 0 ? `+${text}` : text;
+  return signed && rounded > 0 ? `+${text}` : text;
 }
 
 export function formatMoney(money: Money | null | undefined, options?: MoneyFormatOptions): string {
@@ -51,12 +53,13 @@ export function formatCentsCompact(cents: number, currency = 'CAD'): string {
   const abs = Math.abs(dollars);
   const symbol = currency.toUpperCase() === 'CAD' ? '$' : `${currency.toUpperCase()} `;
   const sign = dollars < 0 ? '-' : '';
-  if (abs >= 1_000_000) return `${sign}${symbol}${trim(abs / 1_000_000)}M`;
+  // $999,950 rounds to "1000K": say "$1M" instead.
+  if (abs >= 1_000_000 || trim(abs / 1_000) >= 1000) return `${sign}${symbol}${trim(abs / 1_000_000)}M`;
   if (abs >= 1_000) return `${sign}${symbol}${trim(abs / 1_000)}K`;
   return formatCents(cents, currency);
 }
 
-const trim = (n: number) => (Math.round(n * 10) / 10).toString();
+const trim = (n: number) => Math.round(n * 10) / 10;
 
 /**
  * Parse what someone typed into a money field into cents.
@@ -65,10 +68,14 @@ const trim = (n: number) => (Math.round(n * 10) / 10).toString();
 export function parseDollarsToCents(input: string): number | null {
   const cleaned = input.replace(/[$,\s]/g, '');
   if (!cleaned) return null;
-  if (!/^-?\d*(\.\d{0,2})?$/.test(cleaned) || cleaned === '.' || cleaned === '-') return null;
+  // At least one digit: ".", "-" and "-." are not amounts.
+  if (!/^-?\d*(\.\d{0,2})?$/.test(cleaned) || !/\d/.test(cleaned)) return null;
   const [whole, frac = ''] = cleaned.replace('-', '').split('.');
   const cents = Number(whole || '0') * 100 + Number((frac + '00').slice(0, 2));
-  return cleaned.startsWith('-') ? -cents : cents;
+  // Too many digits to be exact as a JS number: refuse rather than save a rounded amount.
+  if (!Number.isSafeInteger(cents)) return null;
+  // "-0" is just 0, never a negative zero.
+  return cleaned.startsWith('-') && cents !== 0 ? -cents : cents;
 }
 
 /** Cents to the editable text of a money field: 7750 → "77.50", 99700 → "997". */

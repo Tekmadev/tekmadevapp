@@ -1,10 +1,6 @@
-import type { ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, View } from 'react-native';
+import { useContext, useId, useLayoutEffect, type ReactNode } from 'react';
 
-import { useTheme } from '@/design/theme';
-import { radius } from '@/design/tokens';
-
-import { Text } from '../Text';
+import { SheetStoreContext } from './context';
 
 export type SheetProps = {
   visible: boolean;
@@ -23,19 +19,42 @@ export type SheetProps = {
   testID?: string;
 };
 
-/** STUB (replaced by the component kit): bottom sheet with snap points, 28dp radius, warm scrim. */
-export function Sheet({ visible, onClose, title, subtitle, scrollable, footer, children, dismissible = true }: SheetProps) {
-  const { colors } = useTheme();
-  const Body = scrollable ? ScrollView : View;
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={() => dismissible && onClose()}>
-      <Pressable style={{ flex: 1, backgroundColor: colors.scrim }} onPress={() => dismissible && onClose()} />
-      <View style={{ backgroundColor: colors.surface, borderTopLeftRadius: radius.sheet, borderTopRightRadius: radius.sheet, padding: 16, maxHeight: '92%' }}>
-        {title ? <Text variant="headlineSmall">{title}</Text> : null}
-        {subtitle ? <Text variant="body" color="ink3">{subtitle}</Text> : null}
-        <Body>{children}</Body>
-        {footer}
-      </View>
-    </Modal>
-  );
+/**
+ * Bottom sheet. Declarative: render it where it belongs and drive it with
+ * `visible`; while visible it is shown by the root SheetProvider, above every
+ * screen and the tab bar, in the same window (so FLAG_SECURE covers it).
+ *
+ * The content renders at the root, so it sees the app-wide providers (theme,
+ * queries, safe area, keyboard) but not React context from the screen that
+ * declared it (navigation hooks, a screen's own providers): pass those values
+ * in as props. Every sheet is its own SubmitGroup, and while one of its submit
+ * buttons runs the sheet cannot be dismissed.
+ *
+ *   <Sheet visible={open} onClose={() => setOpen(false)} title="New coupon" scrollable
+ *     footer={<PendingButton label="Create coupon" pendingLabel="Creating" onPress={create} />}>
+ *     <TextField ... />
+ *   </Sheet>
+ */
+export function Sheet(props: SheetProps) {
+  const store = useContext(SheetStoreContext);
+  const id = useId();
+  const { visible } = props;
+
+  // Every render while visible: the host always draws the latest props.
+  useLayoutEffect(() => {
+    if (!store) return;
+    if (visible) store.show(id, props);
+    else store.close(id);
+  });
+
+  // Unmounting while visible still plays the close animation.
+  useLayoutEffect(() => {
+    if (!store) return undefined;
+    return () => store.close(id);
+  }, [store, id]);
+
+  if (__DEV__ && !store && visible) {
+    console.warn('[Sheet] rendered outside <SheetProvider>: nothing will show.');
+  }
+  return null;
 }

@@ -10,7 +10,7 @@ import type { Role } from '@/api/types';
  * Adding a future automation is adding a module, not editing navigation code.
  */
 
-export type ModuleGroup = 'home' | 'inbox' | 'customers' | 'marketing' | 'more';
+export type ModuleGroup = 'home' | 'inbox' | 'customers' | 'analytics' | 'marketing' | 'more';
 
 /** Sections inside the More tab (and the order they appear in). */
 export type MoreSection = 'insights' | 'sales' | 'settings' | 'app';

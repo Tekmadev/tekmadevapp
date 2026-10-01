@@ -1,8 +1,15 @@
+import { useContext, useEffect } from 'react';
+
+import { OverlayRootContext } from './sheet/context';
+import { ToastStack } from './Toast';
+
 /**
- * STUB (replaced by the component kit): renders the notice queue from
- * src/lib/notice.ts. Slides down from the top, ok = gold border, err = signal
- * border, auto-dismiss 3.5s, swipe up to dismiss.
+ * Mounts the toast stack once, at the root. Inside a SheetProvider the stack is
+ * drawn by the provider, above every open sheet; on its own it draws here.
+ * Show toasts with notice.ok() / notice.err() from src/lib/notice.ts.
  */
 export function ToastHost() {
-  return null;
+  const root = useContext(OverlayRootContext);
+  useEffect(() => root?.hostToasts(), [root]);
+  return root ? null : <ToastStack />;
 }

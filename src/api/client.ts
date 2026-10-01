@@ -47,7 +47,8 @@ let mockTransport: Transport | undefined;
 function transport(): Transport {
   if (env.apiMode === 'live') return liveTransport;
   if (!mockTransport) {
-    // Loaded lazily so live builds never evaluate the fixtures.
+    // Loaded lazily so live builds never evaluate the fixtures (a static import would).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- intentional lazy require, see above
     mockTransport = (require('./mock') as typeof import('./mock')).mockTransport;
   }
   return mockTransport;

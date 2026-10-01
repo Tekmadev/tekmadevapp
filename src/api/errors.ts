@@ -84,6 +84,16 @@ function isErrorBody(value: unknown): value is ErrorBody {
   return typeof v.code === 'string' && typeof v.message === 'string';
 }
 
+/** Keep only string messages: inline field errors are rendered as text, never as arrays or objects. */
+function stringFields(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [field, message] of Object.entries(value)) {
+    if (typeof message === 'string') out[field] = message;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 /**
  * Turn an HTTP status and parsed body into an ApiError. Accepts the documented
  * envelope `{ ok:false, error:{ code, message, fields? } }` and falls back to
@@ -101,7 +111,7 @@ export function toApiError(status: number, body: unknown): ApiError {
     status,
     code: error?.code ?? fallback.code,
     message: error?.message?.trim() ? error.message : fallback.message,
-    fields: error?.fields,
+    fields: stringFields(error?.fields),
   });
 }
 

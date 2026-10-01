@@ -1,6 +1,6 @@
 import { env } from '@/lib/env';
 
-import type { MockStaff } from '../router';
+import { daysAgo, type MockStaff } from '../router';
 
 /**
  * Mock staff accounts (test values for the mock adapter only; they do not exist
@@ -8,6 +8,7 @@ import type { MockStaff } from '../router';
  *
  *   Owner:   owner@tekmadev.test   / tekmadev-owner
  *   Manager: manager@tekmadev.test / tekmadev-manager
+ *   Manager: alexandra@tekmadev.test / tekmadev-manager-2 (invited, never signed in)
  *   Not staff (portal client): client@acmeplumbing.test / tekmadev-client
  */
 export type MockAccount = MockStaff & { password: string; lastSignInAt: string | null; addedAt: string };
@@ -32,6 +33,17 @@ export const MOCK_ACCOUNTS: MockAccount[] = [
     password: 'tekmadev-manager',
     lastSignInAt: null,
     addedAt: '2026-02-17T14:40:09.002114Z',
+  },
+  {
+    // Listed here, not in the team fixture, so mock sign-in knows them before the mock API has loaded.
+    id: 'usr_mgr02',
+    email: 'alexandra@tekmadev.test',
+    name: 'Alexandra Kowalczyk-Fitzgerald',
+    role: 'manager',
+    locked: false,
+    password: 'tekmadev-manager-2',
+    lastSignInAt: null,
+    addedAt: daysAgo(6, -3),
   },
 ];
 

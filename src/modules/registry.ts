@@ -54,13 +54,17 @@ export const MODULES: readonly ModuleManifest[] = [
 ];
 
 export type TabId = ModuleGroup;
-export type TabDef = { id: TabId; title: string; route: 'index' | 'inbox' | 'customers' | 'marketing' | 'more' };
+export type TabDef = { id: TabId; title: string; route: 'index' | 'customers' | 'analytics' | 'marketing' | 'more' };
 
-/** The five tabs, in order. A tab shows when at least one visible module belongs to it. */
+/**
+ * The tabs, in order. A tab shows when at least one visible module belongs to it.
+ * The Inbox is not a tab (owner decision): it opens from the bell in every tab
+ * header; its tab slot went to Analytics (owner decision).
+ */
 export const TABS: readonly TabDef[] = [
   { id: 'home', title: 'Home', route: 'index' },
-  { id: 'inbox', title: 'Inbox', route: 'inbox' },
   { id: 'customers', title: 'Customers', route: 'customers' },
+  { id: 'analytics', title: 'Analytics', route: 'analytics' },
   { id: 'marketing', title: 'Marketing', route: 'marketing' },
   { id: 'more', title: 'More', route: 'more' },
 ];

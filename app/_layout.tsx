@@ -11,6 +11,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { CACHE_BUSTER, CACHE_MAX_AGE, queryClient, queryPersister, shouldPersistQuery, wireQueryManagers } from '@/api/query';
 import { installAuthBridge, session, useSession } from '@/auth/session';
+import { useSignInMarkAnchor } from '@/auth/SignInScreen';
 import { SheetProvider } from '@/components/sheet/SheetProvider';
 import { ToastHost } from '@/components/ToastHost';
 import { ThemeProvider, useTheme } from '@/design/theme';
@@ -91,6 +92,9 @@ function RootNavigator() {
   }, []);
 
   const signedIn = status === 'signedIn';
+  // Signed out, the mark lands on the sign-in hero mark (or stays centred until that is measured),
+  // instead of flying to a Home header that is not there.
+  const signInMark = useSignInMarkAnchor((s) => s.anchor);
 
   return (
     <View style={[styles.fill, { backgroundColor: theme.colors.bg }]} onLayout={onLayout}>
@@ -114,7 +118,13 @@ function RootNavigator() {
           </Stack.Protected>
         </Stack>
       </NavigationThemeProvider>
-      {!bootDone ? <BootSplash ready={status !== 'restoring'} onFinish={() => setBootDone(true)} /> : null}
+      {!bootDone ? (
+        <BootSplash
+          ready={status !== 'restoring'}
+          exitTo={signedIn ? 'header' : (signInMark ?? 'center')}
+          onFinish={() => setBootDone(true)}
+        />
+      ) : null}
     </View>
   );
 }

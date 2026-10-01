@@ -23,6 +23,8 @@ export const liveTransport: Transport = async (request) => {
   }, request.timeoutMs);
   const onAbort = () => controller.abort();
   request.signal?.addEventListener('abort', onAbort);
+  // Cancelled while the access token was being read: the abort event has already fired.
+  if (request.signal?.aborted) controller.abort();
 
   try {
     const response = await fetch(buildUrl(env.apiBase, request.path, request.query), {

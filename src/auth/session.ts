@@ -11,6 +11,7 @@ import { notice } from '@/lib/notice';
 import { readJSON, storage, StorageKeys, writeJSON } from '@/lib/storage';
 import { useLoaderStore } from '@/loader/settings';
 
+import { isBelowMinVersion } from './appVersion';
 import { mockAuth } from './mockAuth';
 import { getSupabase, isSupabaseConfigured } from './supabase';
 
@@ -41,10 +42,10 @@ export const useSession = create<SessionState>()(() => ({
   justSignedIn: false,
 }));
 
-const useSupabaseAuth = () => env.authMode === 'supabase' && isSupabaseConfigured();
+const isSupabaseAuth = () => env.authMode === 'supabase' && isSupabaseConfigured();
 
 async function currentAccessToken(): Promise<string | null> {
-  if (useSupabaseAuth()) {
+  if (isSupabaseAuth()) {
     const { data } = await getSupabase().auth.getSession();
     return data.session?.access_token ?? null;
   }
@@ -52,7 +53,7 @@ async function currentAccessToken(): Promise<string | null> {
 }
 
 async function refreshAccessToken(): Promise<string | null> {
-  if (useSupabaseAuth()) {
+  if (isSupabaseAuth()) {
     const { data, error } = await getSupabase().auth.refreshSession();
     if (error) return null;
     return data.session?.access_token ?? null;
@@ -60,15 +61,24 @@ async function refreshAccessToken(): Promise<string | null> {
   return mockAuth.refresh();
 }
 
+/**
+ * Below `app.minVersion` blocks the app with the update screen (brief section 10),
+ * the same as a 426. An unknown build version (no native module) never blocks.
+ */
+function applyVersionGate(me: Me) {
+  if (env.appVersion !== '0.0.0' && isBelowMinVersion(me.app)) useSession.setState({ updateRequired: true });
+}
+
 function setMe(me: Me) {
   writeJSON(storage, StorageKeys.lastMe, me);
   useLoaderStore.getState().apply(me.loader);
   queryClient.setQueryData(['me'], me);
   useSession.setState({ me });
+  applyVersionGate(me);
 }
 
 async function clearAuthSession() {
-  if (useSupabaseAuth()) {
+  if (isSupabaseAuth()) {
     await getSupabase()
       .auth.signOut({ scope: 'local' })
       .catch(() => undefined);
@@ -96,6 +106,7 @@ export const session = {
     const cached = useSession.getState().me;
     if (cached) {
       useLoaderStore.getState().apply(cached.loader);
+      applyVersionGate(cached);
       useSession.setState({ status: 'signedIn' });
       // Confirm in the background; a 401 after refresh signs out through the bridge.
       session.refreshMe().catch(() => undefined);
@@ -123,7 +134,7 @@ export const session = {
 
   async signIn(email: string, password: string): Promise<SignInResult> {
     const trimmed = email.trim();
-    if (useSupabaseAuth()) {
+    if (isSupabaseAuth()) {
       const { error } = await getSupabase().auth.signInWithPassword({ email: trimmed, password });
       if (error) {
         const status = (error as { status?: number }).status ?? 0;
@@ -155,7 +166,7 @@ export const session = {
   },
 
   async sendPasswordReset(email: string): Promise<void> {
-    if (useSupabaseAuth()) {
+    if (isSupabaseAuth()) {
       await getSupabase()
         .auth.resetPasswordForEmail(email.trim(), { redirectTo: env.resetRedirectUrl })
         .catch(() => undefined);
@@ -165,7 +176,7 @@ export const session = {
   },
 
   async updatePassword(password: string): Promise<{ ok: true } | { ok: false; message: string }> {
-    if (useSupabaseAuth()) {
+    if (isSupabaseAuth()) {
       const { error } = await getSupabase().auth.updateUser({ password });
       if (error) return { ok: false, message: error.message || 'Could not change the password.' };
       return { ok: true };

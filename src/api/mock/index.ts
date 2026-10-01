@@ -49,13 +49,19 @@ const LATENCY: Record<Exclude<Latency, 'long'>, [number, number]> = {
 
 const sleep = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
-    const t = setTimeout(resolve, ms);
-    signal?.addEventListener('abort', () => {
+    const onAbort = () => {
       clearTimeout(t);
       const e = new Error('aborted');
       e.name = 'AbortError';
       reject(e);
-    });
+    };
+    const t = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    // Already cancelled (like fetch, which rejects at once), else listen for it.
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener('abort', onAbort, { once: true });
   });
 
 function decodeJwtPayload(token: string): Record<string, unknown> | undefined {

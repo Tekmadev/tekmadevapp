@@ -1,3 +1,5 @@
+import { mockControls } from '@/api/mock/controls';
+import { MOCK_ACCOUNTS, MOCK_PORTAL_USER } from '@/api/mock/fixtures/staff';
 import { readJSON, secureStorage, writeJSON } from '@/lib/storage';
 
 /**
@@ -22,9 +24,6 @@ function issue(userId: string, email: string): MockSession {
 
 export const mockAuth = {
   async signIn(email: string, password: string): Promise<MockSignInResult> {
-    // Lazy import keeps fixtures out of live builds' startup path.
-    const { MOCK_ACCOUNTS, MOCK_PORTAL_USER } = await import('@/api/mock/fixtures/staff');
-    const { mockControls } = await import('@/api/mock/controls');
     await new Promise((r) => setTimeout(r, 450));
     if (mockControls.state.offline) return { ok: false, reason: 'network' };
     const needle = email.trim().toLowerCase();
@@ -54,7 +53,6 @@ export const mockAuth = {
   async refresh(): Promise<string | null> {
     const session = mockAuth.getSession();
     if (!session) return null;
-    const { mockControls } = await import('@/api/mock/controls');
     if (mockControls.state.expireTokens) return null;
     const next = issue(session.userId, session.email);
     writeJSON(secureStorage, KEY, next);
