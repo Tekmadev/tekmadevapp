@@ -1,0 +1,108 @@
+import { useMemo } from 'react';
+
+import { useSession } from '@/auth/session';
+
+import { adsModule } from './ads/module';
+import { analyticsModule } from './analytics/module';
+import { appSettingsModule } from './appSettings/module';
+import { assistantModule } from './assistant/module';
+import { blogModule } from './blog/module';
+import { clientsModule } from './clients/module';
+import { couponsModule } from './coupons/module';
+import { crmModule } from './crm/module';
+import { emailModule } from './email/module';
+import { inboxModule } from './inbox/module';
+import { kitModule } from './kit/module';
+import { leadsModule } from './leads/module';
+import { linksModule } from './links/module';
+import { loaderModule } from './loader/module';
+import { overviewModule } from './overview/module';
+import { pricingModule } from './pricing/module';
+import { profileModule } from './profile/module';
+import { subscriptionsModule } from './subscriptions/module';
+import { teamModule } from './team/module';
+import { testModeModule } from './testMode/module';
+import { toolsModule } from './tools/module';
+import { isVisible, type ModuleGroup, type ModuleManifest, type MoreSection, type QuickAction, type ScreenEntry, type Visibility } from './types';
+
+/**
+ * The module registry, in display order. A future automation ships as a new
+ * module here (with a `feature` flag) and stays hidden until GET /me lists it.
+ */
+export const MODULES: readonly ModuleManifest[] = [
+  overviewModule,
+  inboxModule,
+  clientsModule,
+  leadsModule,
+  toolsModule,
+  subscriptionsModule,
+  blogModule,
+  emailModule,
+  linksModule,
+  crmModule,
+  analyticsModule,
+  adsModule,
+  pricingModule,
+  couponsModule,
+  loaderModule,
+  testModeModule,
+  teamModule,
+  profileModule,
+  appSettingsModule,
+  kitModule,
+  assistantModule,
+];
+
+export type TabId = ModuleGroup;
+export type TabDef = { id: TabId; title: string; route: 'index' | 'inbox' | 'customers' | 'marketing' | 'more' };
+
+/** The five tabs, in order. A tab shows when at least one visible module belongs to it. */
+export const TABS: readonly TabDef[] = [
+  { id: 'home', title: 'Home', route: 'index' },
+  { id: 'inbox', title: 'Inbox', route: 'inbox' },
+  { id: 'customers', title: 'Customers', route: 'customers' },
+  { id: 'marketing', title: 'Marketing', route: 'marketing' },
+  { id: 'more', title: 'More', route: 'more' },
+];
+
+export const MORE_SECTIONS: readonly { id: MoreSection; title: string }[] = [
+  { id: 'insights', title: 'Insights' },
+  { id: 'sales', title: 'Sales' },
+  { id: 'settings', title: 'Settings' },
+  { id: 'app', title: 'App' },
+];
+
+export function visibleModules(v: Visibility): ModuleManifest[] {
+  return MODULES.filter((m) => isVisible(m, v));
+}
+
+export function visibleTabs(v: Visibility): TabDef[] {
+  const mods = visibleModules(v);
+  return TABS.filter((t) => t.id === 'more' || mods.some((m) => m.group === t.id && !m.hidden));
+}
+
+export function quickActionsFor(v: Visibility): QuickAction[] {
+  return visibleModules(v).flatMap((m) =>
+    (m.quickActions ?? []).filter((q) => !q.ownerOnly || v.role === 'owner'),
+  );
+}
+
+export function searchableScreens(v: Visibility): (ScreenEntry & { moduleId: string })[] {
+  return visibleModules(v).flatMap((m) => (m.searchable?.screens ?? []).map((s) => ({ ...s, moduleId: m.id })));
+}
+
+export function moduleById(id: string): ModuleManifest | undefined {
+  return MODULES.find((m) => m.id === id);
+}
+
+/** Visibility for the signed-in user (role + feature flags from GET /me). */
+export function useVisibility(): Visibility {
+  const role = useSession((s) => s.me?.role ?? null);
+  const features = useSession((s) => s.me?.features);
+  return useMemo(() => ({ role, features }), [role, features]);
+}
+
+export function useVisibleModules() {
+  const v = useVisibility();
+  return useMemo(() => visibleModules(v), [v]);
+}
