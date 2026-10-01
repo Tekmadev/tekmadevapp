@@ -1,0 +1,166 @@
+{
+  "expo": {
+    "name": "Tekmadev Admin",
+    "slug": "tekmadev-admin",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "tekmadev-admin",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#0e0d0b",
+    "platforms": [
+      "android"
+    ],
+    "android": {
+      "package": "com.tekmadev.admin",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-foreground.png",
+        "monochromeImage": "./assets/images/adaptive-monochrome.png",
+        "backgroundColor": "#0e0d0b"
+      },
+      "predictiveBackGestureEnabled": true,
+      "softwareKeyboardLayoutMode": "resize",
+      "allowBackup": false,
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.DETECT_SCREEN_CAPTURE",
+        "android.permission.ACCESS_MEDIA_LOCATION"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-system-ui",
+      [
+        "expo-navigation-bar",
+        {
+          "enforceContrast": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#f5f2eb",
+          "image": "./assets/images/splash-light.png",
+          "imageWidth": 112,
+          "dark": {
+            "backgroundColor": "#0e0d0b",
+            "image": "./assets/images/splash-dark.png"
+          }
+        }
+      ],
+      [
+        "expo-font",
+        {
+          "android": {
+            "fonts": [
+              {
+                "fontFamily": "Geist",
+                "fontDefinitions": [
+                  {
+                    "path": "./assets/fonts/geist_400.ttf",
+                    "weight": 400
+                  },
+                  {
+                    "path": "./assets/fonts/geist_500.ttf",
+                    "weight": 500
+                  },
+                  {
+                    "path": "./assets/fonts/geist_600.ttf",
+                    "weight": 600
+                  },
+                  {
+                    "path": "./assets/fonts/geist_700.ttf",
+                    "weight": 700
+                  },
+                  {
+                    "path": "./assets/fonts/geist_800.ttf",
+                    "weight": 800
+                  },
+                  {
+                    "path": "./assets/fonts/geist_900.ttf",
+                    "weight": 900
+                  }
+                ]
+              },
+              {
+                "fontFamily": "GeistMono",
+                "fontDefinitions": [
+                  {
+                    "path": "./assets/fonts/geistmono_400.ttf",
+                    "weight": 400
+                  },
+                  {
+                    "path": "./assets/fonts/geistmono_500.ttf",
+                    "weight": 500
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-quick-actions",
+        {
+          "androidIcons": {
+            "shortcut_inbox": {
+              "foregroundImage": "./assets/images/shortcut-inbox.png",
+              "backgroundColor": "#0e0d0b"
+            },
+            "shortcut_client": {
+              "foregroundImage": "./assets/images/shortcut-client.png",
+              "backgroundColor": "#0e0d0b"
+            },
+            "shortcut_post": {
+              "foregroundImage": "./assets/images/shortcut-post.png",
+              "backgroundColor": "#0e0d0b"
+            },
+            "shortcut_analytics": {
+              "foregroundImage": "./assets/images/shortcut-analytics.png",
+              "backgroundColor": "#0e0d0b"
+            }
+          }
+        }
+      ],
+      "expo-sharing",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#c89c65"
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "savePhotosPermission": "Save QR codes to your photos.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ],
+      "expo-local-authentication",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "extraProguardRules": "-keep class com.shopify.reactnative.skia.** { *; }\n-keep class com.margelo.nitro.** { *; }\n-keep class com.mrousavy.mmkv.** { *; }"
+          }
+        }
+      ],
+      "./plugins/withLauncherLabel.js"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
