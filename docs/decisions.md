@@ -413,3 +413,39 @@ I need no changes in files I do not own.
 - Recent searches are tied to the user id, capped at 8 of 100 characters, saved when a result opens or the search key is pressed. Results are never written to disk.
 - Launcher shortcuts follow role and feature flags, are cleared on sign-out, and a shortcut that launched the app is handled once per run.
 - Sign out: "Sign out?" with "Hold to sign out"; when drafts exist the message says they will be deleted and the hold turns red. Sign-out works offline.
+
+## Phase 3: customers and insights
+
+### Leads
+
+- "Lead forms" means source `grow` (the website's qualifying form), not status qualified. It shows the newest 3 under the same search, status and need, with "View all" (sets Source to Lead form). It shows only when Source is "All sources", is hidden when empty, and those leads also appear under "All leads".
+- Filters are three chips (Source, Status, Need) that each open a short sheet. "Clear" keeps the search; "Clear filters" in the empty state clears it too. `view=booked` resets the other filters and shows a removable gold "Booked calls" chip.
+- Detail: "Open client" replaces "Create client from this lead" once the lead became a client. Copy asks which when there is both an email and a phone. Call and Text are dimmed without a phone.
+- Missing UTM values read "Not set"; a missing referrer reads "Direct visit". A 404 shows "That lead no longer exists." with no Retry.
+
+### Free tools
+
+- KPI cards scroll sideways, sized to fit the whole money figure at font scale 1.3.
+- Badge tones: Opted in ok, No muted; Email ok, No email warn; CRM ok, No CRM muted. A missing leak reads "Not worked out"; a missing close rate or reply speed reads "Skipped".
+- The breakdown shows the server's text exactly, headline lines on a gold tint.
+
+### Subscriptions
+
+- The inner tab is the route param `sub` (default Subscriptions); only the visible tab fetches. Status chips come from meta, with a "No ... with this status." empty and "Show all".
+- An ending subscription drops the period line (the "Ending <date>" badge carries it). The order sheet says "Paid with" once paid, otherwise "Payment method". Both sheets have "Open client" when the row has a client.
+- A detail sheet keeps its row even if a refetch drops it.
+
+### Analytics
+
+- The range is the route param `range` (not remembered across launches); `/admin/analytics?range=` passes it through and Home's Pageviews card opens 30 days. The chips pin under the header once scrolled.
+- Averages under 10 show one decimal. Country flags come from the ISO code; an unknown code gets a globe.
+
+### Ads
+
+- The range is shared by both Ads screens and kept in memory. KPI panels are 2x2, one column when a money figure would not fit; money is never shortened outside chart axes.
+- Sync time: "just now", "5 min ago", "3 h ago" today, then a date and time; "Not synced yet" before the first. A pull timeout toasts that it may still finish. A refused pull refreshes the bell and the Inbox lists.
+- Empty copy: "No ad spend in this range.", "This campaign spent nothing in this range.", "No ad in this campaign spent in this range."
+
+### Everywhere
+
+- Offline, a filter or range that was never loaded shows the network error, never the previous filter's rows dimmed (a placeholder reports success, so the check includes `isPlaceholderData`). Applied to the Clients list too.

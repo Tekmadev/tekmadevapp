@@ -97,10 +97,11 @@ export function ClientsSegment({ chrome, view, onViewChange }: ClientsSegmentPro
   useRefreshOnFocus([clientKeys.lists(), sessionKeys.meta]);
 
   const pages = list.data?.pages;
-  const rows = rowsOf(pages);
-  const hasData = list.data !== undefined;
-  // Offline with nothing cached the first read waits for the connection: say so, not a skeleton that never ends.
-  const pausedWithoutData = list.isPending && list.fetchStatus === 'paused';
+  // Offline with nothing cached for these filters the read waits for the connection: say so, not a skeleton
+  // that never ends, and not the previous filters' rows (a placeholder reports success, not pending).
+  const pausedWithoutData = (list.isPending || list.isPlaceholderData) && list.fetchStatus === 'paused';
+  const rows = pausedWithoutData ? [] : rowsOf(pages);
+  const hasData = list.data !== undefined && !pausedWithoutData;
   const firstPageCount = pages?.[0]?.items.length ?? 0;
   const filtered = status !== 'active' || q !== '' || view !== null;
 

@@ -15,13 +15,18 @@ import { SEED_CLIENTS, type SeedClient } from './seed';
  * Fixtures for the "billing" domain (Subscriptions screen). Live mode only: the
  * test client (cl_testco_0001) and every test purchase stay out of these lists.
  *
- * Rows line up with the clients fixture: same client ids, emails and prices,
- * the same id scheme (`sub_<x>`, `sub_care_<x>`, `ord_<x>` where cl_<x> is the
- * client id), the same plan statuses (Kanata paused, Westdale cancelled,
- * Barrhaven ending, Waterdown's checkout pending) and the same "lighter accounts"
- * list the clients fixture pages with. On top of that: a few checkouts that never
- * became a client (failed, abandoned, a 3D Secure step), instalment payments,
- * refunds and a dispute.
+ * Rows line up with the clients fixture's billing block (GET /clients/:id):
+ * same client ids, emails and prices, the same id scheme (`sub_<x>`,
+ * `sub_care_<x>`, `ord_<x>` where cl_<x> is the client id), the same plan
+ * statuses (Kanata paused, Westdale cancelled, Barrhaven ending, Waterdown's
+ * checkout pending) and the same "lighter accounts" list the clients fixture
+ * pages with. Every client's order is the one its bundle shows as the latest
+ * order: paid by card (the bundle shows the card brand), or pending for Waterdown.
+ *
+ * The rest of Stripe's variety (instalments, Link, refunds, a dispute) sits on
+ * checkouts with no client in the list: ones that never became a client
+ * (failed, abandoned, a 3D Secure step) and ones whose client was since moved
+ * to the trash.
  */
 
 /* ---------- prices (cents), as the clients fixture and the pricing page have them ---------- */
@@ -227,17 +232,20 @@ const EXTRAS: Extra[] = [
   ['cl_gloucgarage', 'Gloucester Garage Builders', 'Mike Bergeron', 'convert', 'churned', 330],
 ];
 
-/** How some of them paid or ended (everything else: card, paid, no cancellation details). */
-const EXTRA_DETAILS: Record<string, { paidWith?: PaymentMethod; orderStatus?: OrderStatus; refundedCents?: number; cancellation?: Cancellation; source?: string; campaign?: string }> = {
-  cl_kingstonwin: { paidWith: 'klarna', source: 'facebook', campaign: 'webline-fall-bnpl' },
-  cl_orilliainsp: { paidWith: 'affirm', source: 'facebook', campaign: 'webline-hamilton-trades' },
-  cl_miltonmass: { paidWith: 'afterpay', source: 'instagram', campaign: 'retargeting-30d' },
-  cl_peterlock: { paidWith: 'link', source: 'google' },
-  cl_perthcab: { paidWith: 'klarna', source: 'facebook', campaign: 'webline-hamilton-trades' },
-  cl_cambfloor: { paidWith: 'afterpay', source: 'newsletter', campaign: 'sept-roundup' },
-  cl_burlbooks: { orderStatus: 'partially_refunded', refundedCents: 15_000, source: 'google' },
-  cl_waterlootut: { paidWith: 'klarna', orderStatus: 'refunded', cancellation: CANCELLATION.paymentFailed },
-  cl_bellbasement: { orderStatus: 'disputed', cancellation: CANCELLATION.unused },
+/**
+ * Attribution and how some of them ended. Their orders stay paid by card, as the
+ * clients fixture's billing block has them (it bills every client by card).
+ */
+const EXTRA_DETAILS: Record<string, { cancellation?: Cancellation; source?: string; campaign?: string }> = {
+  cl_kingstonwin: { source: 'facebook', campaign: 'webline-fall-bnpl' },
+  cl_orilliainsp: { source: 'facebook', campaign: 'webline-hamilton-trades' },
+  cl_miltonmass: { source: 'instagram', campaign: 'retargeting-30d' },
+  cl_peterlock: { source: 'google' },
+  cl_perthcab: { source: 'facebook', campaign: 'webline-hamilton-trades' },
+  cl_cambfloor: { source: 'newsletter', campaign: 'sept-roundup' },
+  cl_burlbooks: { source: 'google' },
+  cl_waterlootut: { cancellation: CANCELLATION.paymentFailed },
+  cl_bellbasement: { cancellation: CANCELLATION.unused },
   cl_gloucgarage: { cancellation: CANCELLATION.localAgency },
   cl_arnpriorsno: { source: 'google' },
 };
@@ -251,7 +259,7 @@ function extraRows(): { subscriptions: Subscription[]; orders: Order[] } {
     const first = contact.replace(/^Dr\. /, '').split(' ')[0].toLowerCase();
     const p = party({ id, businessName, email: `${first}@${domain}.test` });
     const d = EXTRA_DETAILS[id] ?? {};
-    const o = { paidWith: d.paidWith, status: d.orderStatus, refundedCents: d.refundedCents, source: d.source ?? null, campaign: d.campaign ?? null };
+    const o = { source: d.source ?? null, campaign: d.campaign ?? null };
     const churned = status === 'churned';
     if (planId === 'webline') {
       orders.push(order(p, 'Webline', WEBLINE, ageDays, o));
@@ -283,10 +291,16 @@ function strayRows(): { subscriptions: Subscription[]; orders: Order[] } {
     order({ clientId: null, business: null, email: 'jen.morrow@mailbox.test' }, 'Webline', WEBLINE, 0, { id: 'ord_f3k9q2', status: 'failed', paidWith: 'klarna', at: hoursAgo(3), source: 'facebook', campaign: 'webline-hamilton-trades' }),
     // Checkout opened from a deal link and abandoned.
     order({ clientId: null, business: 'Hess Village Barbers', email: 'tony@hessbarbers.test' }, 'Webline', WEBLINE, 0, { id: 'ord_p7m2x8', status: 'pending', at: minutesAgo(52), source: 'deal-link', campaign: 'barber-week' }),
+    // Link declined the saved card (expired); they never came back.
+    order({ clientId: null, business: 'Vanier Vacuum Repair', email: 'paul@vaniervac.test' }, 'Webline', WEBLINE, 6, { id: 'ord_l5v2c7', status: 'failed', paidWith: 'link', source: 'google' }),
     order({ clientId: null, business: null, email: 'owner@kanatakidsdental.test' }, setupProduct('convert'), SETUP.convert, 12, { id: 'ord_c4t1r6', status: 'failed', paidWith: 'card' }),
     order({ clientId: null, business: 'Glebe Bike Repair', email: 'sam@glebebikes.test' }, 'Webline', WEBLINE, 27, { id: 'ord_a9b3v5', status: 'failed', paidWith: 'afterpay', source: 'google' }),
+    // Cancelled before the build started: everything but the $150 discovery work went back. The client record went to the trash.
+    order({ clientId: null, business: 'Westboro Yoga Studio', email: 'maya@westboroyoga.test' }, 'Webline', WEBLINE, 38, { id: 'ord_y8q4w3', status: 'partially_refunded', paidWith: 'affirm', refundedCents: WEBLINE - 15_000, source: 'instagram', campaign: 'retargeting-30d' }),
     // Refunded inside the first two weeks; the client record went to the trash.
-    order({ clientId: null, business: 'Hamel Handyman', email: 'rick.hamel@mailbox.test' }, 'Webline', WEBLINE, 61, { id: 'ord_z2w8n1', status: 'refunded', source: 'google' }),
+    order({ clientId: null, business: 'Hamel Handyman', email: 'rick.hamel@mailbox.test' }, 'Webline', WEBLINE, 61, { id: 'ord_z2w8n1', status: 'refunded', paidWith: 'klarna', source: 'google' }),
+    // The bank opened a dispute after the kickoff call went unanswered; the client record went to the trash.
+    order({ clientId: null, business: 'Dunrobin Decks', email: 'chris@dunrobindecks.test' }, setupProduct('convert'), SETUP.convert, 47, { id: 'ord_d3k7r2', status: 'disputed', source: 'facebook', campaign: 'growth-ottawa-home-services' }),
   ];
   const subscriptions: Subscription[] = [
     // First Grow invoice waiting on a 3D Secure step: the client appears once it is paid.

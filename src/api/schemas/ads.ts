@@ -87,7 +87,11 @@ export const zAdsCampaign = z.object({
 });
 export type AdsCampaign = z.infer<typeof zAdsCampaign>;
 
-/** The ads inside a campaign (tap a campaign card), sorted by spend. */
+/**
+ * The ads inside a campaign (tap a campaign card), sorted by spend. Same
+ * metrics as a campaign card (the site records the ad through utm_content),
+ * so the drill-down reads the same at both levels.
+ */
 export const zAdsAd = z.object({
   id: z.string(),
   campaignId: z.string(),
@@ -96,6 +100,11 @@ export const zAdsAd = z.object({
   linkClicks: z.number().int(),
   visits: z.number().int(),
   leads: z.number().int(),
+  booked: z.number().int(),
+  sales: z.number().int(),
+  revenue: zMoney,
+  costPerLead: zMoney.nullable(),
+  costPerSale: zMoney.nullable(),
 });
 export type AdsAd = z.infer<typeof zAdsAd>;
 

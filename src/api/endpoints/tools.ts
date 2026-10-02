@@ -17,6 +17,8 @@ export const TOOL_SUBMISSIONS_PAGE_SIZE = 30;
 export const toolKeys = {
   all: ['tools'] as const,
   stats: () => ['tools', 'stats'] as const,
+  /** Prefix of every loaded submissions list, whatever its page size (refresh and cache lookups). */
+  lists: () => ['tools', 'submissions'] as const,
   submissions: (limit: number = TOOL_SUBMISSIONS_PAGE_SIZE) => ['tools', 'submissions', { limit }] as const,
   submission: (id: string) => ['tools', 'submission', id] as const,
 };

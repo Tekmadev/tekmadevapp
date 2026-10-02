@@ -38,6 +38,9 @@ export const CLIENT_SECTIONS = [
 ] as const;
 export type ClientSection = (typeof CLIENT_SECTIONS)[number];
 
+/** Mirrors zAnalyticsRange in src/api/schemas/analytics.ts (kept local so this file stays dependency free). */
+const ANALYTICS_RANGE_VALUES: readonly string[] = ['24h', '7d', '30d', '3m', '6m', '1y', 'all'];
+
 const tab = (pathname: string, segment?: string): AppLink => (segment ? { pathname, params: { segment } } : { pathname });
 
 const CORE_RULES: DeepLinkRule[] = [
@@ -64,7 +67,13 @@ const CORE_RULES: DeepLinkRule[] = [
       return { pathname: '/clients/[id]', params };
     },
   },
-  { pattern: '/analytics', to: () => ({ pathname: '/analytics' }) },
+  {
+    pattern: '/analytics',
+    to: (_p, _h, search) => {
+      const range = search.get('range');
+      return range && ANALYTICS_RANGE_VALUES.includes(range) ? { pathname: '/analytics', params: { range } } : { pathname: '/analytics' };
+    },
+  },
   { pattern: '/ads', ownerOnly: true, to: () => ({ pathname: '/ads' }) },
   { pattern: '/email', ownerOnly: true, to: () => tab('/marketing', 'email') },
   { pattern: '/email/subscribers/:id', ownerOnly: true, to: ({ id }) => ({ pathname: '/email/subscriber/[id]', params: { id } }) },

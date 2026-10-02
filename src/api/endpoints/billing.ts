@@ -1,15 +1,18 @@
-import { infiniteQueryOptions } from '@tanstack/react-query';
+import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
 
 import { api } from '../client';
 import {
   zOrderPage,
   zSubscriptionPage,
+  type BillingMeta,
   type OrderPage,
   type OrderStatus,
   type SubscriptionKind,
   type SubscriptionPage,
   type SubscriptionStatus,
 } from '../schemas/billing';
+import type { Meta } from '../schemas/meta';
+import { getMeta, sessionKeys } from './session';
 
 /**
  * Typed endpoints and query keys for the "billing" domain (Subscriptions screen,
@@ -68,5 +71,18 @@ export function subscriptionsInfiniteQuery(params: SubscriptionListParams = {}) 
     queryFn: ({ pageParam, signal }) => getSubscriptions({ ...params, cursor: pageParam }, signal),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+}
+
+/**
+ * This domain's slice of GET /meta (order and subscription status labels and
+ * tones, payment method labels). Same cache entry as every other meta read.
+ */
+export function billingMetaQuery() {
+  return queryOptions({
+    queryKey: sessionKeys.meta,
+    queryFn: ({ signal }) => getMeta(signal),
+    staleTime: 10 * 60_000,
+    select: (meta: Meta): BillingMeta => meta,
   });
 }

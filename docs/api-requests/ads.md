@@ -41,3 +41,7 @@ No totals, no zeros: the app shows the "not connected" card and nothing else (br
 - Meta refuses: `502 upstream` with the message "Meta refused the pull. The inbox has the reason; an expired token is the usual cause.", `lastSync` becomes `{ ok: false, error }`, and the `system.meta_pull_failed` inbox row is bumped (same row, one more occurrence).
 - Not connected: `503 not_configured` "The server is missing a setting for this feature."
 - In the mock, every 3rd refresh fails so both outcomes can be tried from the app.
+
+## Added in phase 3
+
+- `ads[]` inside a campaign has the same metric fields as campaigns: `booked`, `sales`, `revenue`, `costPerLead`, `costPerSale` (the section 2 sketch is out of date).

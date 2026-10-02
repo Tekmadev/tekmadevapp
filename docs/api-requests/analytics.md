@@ -39,3 +39,7 @@ When nothing was tracked every list is empty (`[]`), so each chart shows "No dat
 ## 4. `GET /meta`
 
 Nothing needed. The range chip labels are app copy (brief 8.9).
+
+## Added in phase 3
+
+- `countries[]` carries `code`, an ISO 3166-1 alpha-2 code the app turns into the flag; `flag` is an optional fallback.

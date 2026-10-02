@@ -25,7 +25,7 @@ export type SubscriptionKind = z.infer<typeof zSubscriptionKind>;
 
 export const zOrder = z.object({
   id: z.string(),
-  /** The client the checkout created or matched; null for abandoned or failed checkouts. */
+  /** The client the checkout created or matched; null when there is none (abandoned or failed checkouts, or a client since moved to the trash). */
   clientId: z.string().nullable(),
   /** Row title is the business, or the email when there is none. */
   business: z.string().nullable(),

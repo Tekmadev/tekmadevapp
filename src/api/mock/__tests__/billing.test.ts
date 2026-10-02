@@ -1,7 +1,8 @@
 import { api, setAuthBridge } from '@/api/client';
 import { getOrders, getSubscriptions, ordersInfiniteQuery, subscriptionsInfiniteQuery, type OrderListParams, type SubscriptionListParams } from '@/api/endpoints/billing';
 import { ApiError } from '@/api/errors';
-import { metaFixture } from '@/api/mock/fixtures/billing';
+import { metaFixture, ordersDb, subscriptionsDb } from '@/api/mock/fixtures/billing';
+import { clientsDb } from '@/api/mock/fixtures/clients';
 import { SEED_CLIENTS } from '@/api/mock/fixtures/seed';
 import { metaFragment, zOrderPage, zSubscriptionPage, type Order, type Subscription } from '@/api/schemas/billing';
 
@@ -128,6 +129,46 @@ describe('GET /billing/orders', () => {
     const acme = items.find((o) => o.id === 'ord_acmeplumb01');
     expect(acme).toMatchObject({ clientId: 'cl_acmeplumb01', email: 'dan@acmeplumbing.test', product: 'Build & Install: Grow', status: 'paid', amount: { amount: 249_700, currency: 'CAD' } });
     expect(items.find((o) => o.id === 'ord_waterdown_d')).toMatchObject({ status: 'pending', paidWith: null });
+  });
+
+  it("matches every live client's billing block (GET /clients/:id)", () => {
+    const day = (iso: string | null | undefined) => iso?.slice(0, 10) ?? null;
+    const live = clientsDb.clients.filter((c) => !c.isTest);
+    for (const c of live) {
+      const block = clientsDb.billing[c.id] ?? null;
+      const sub = subscriptionsDb.filter((s) => s.clientId === c.id);
+      const ord = ordersDb.filter((o) => o.clientId === c.id);
+      expect([c.id, sub.length]).toEqual([c.id, block?.subscription ? 1 : 0]);
+      expect([c.id, ord.length]).toEqual([c.id, block?.latestOrder ? 1 : 0]);
+      const bs = block?.subscription;
+      if (bs) {
+        expect({ id: sub[0].id, kind: sub[0].kind, status: sub[0].status, ending: sub[0].cancelAtPeriodEnd, cents: sub[0].amount.amount, end: day(sub[0].currentPeriodEnd) }).toEqual({
+          id: bs.id,
+          kind: bs.kind,
+          status: bs.status,
+          ending: bs.cancelAtPeriodEnd,
+          cents: bs.amount.amount,
+          end: day(bs.currentPeriodEnd),
+        });
+        expect([sub[0].email, sub[0].business]).toEqual([c.primaryEmail, c.businessName]);
+      }
+      const bo = block?.latestOrder;
+      if (bo) {
+        // The bundle shows the card brand ("Visa •••• 4242"); the list says "card".
+        const method = bo.paymentMethod === null ? null : /^(Visa|Mastercard|Amex)\b/.test(bo.paymentMethod) ? 'card' : bo.paymentMethod;
+        expect({ id: ord[0].id, product: ord[0].product, status: ord[0].status, cents: ord[0].amount.amount, paidWith: ord[0].paidWith, paid: day(ord[0].paidAt) }).toEqual({
+          id: bo.id,
+          product: bo.productName,
+          status: bo.status,
+          cents: bo.amount.amount,
+          paidWith: method,
+          paid: day(bo.paidAt),
+        });
+      }
+    }
+    // Nothing points at a client the clients fixture does not have.
+    const ids = new Set(live.map((c) => c.id));
+    expect([...subscriptionsDb, ...ordersDb].filter((r) => r.clientId !== null && !ids.has(r.clientId))).toEqual([]);
   });
 
   it('is open to managers and rejects unknown statuses', async () => {

@@ -51,3 +51,7 @@ leadStatuses: { value: LeadStatus; label: string; tone: Tone }[];  // new gold, 
 leadNeeds: { value: LeadNeed; label: string }[];              // the five labels in brief 8.6
 leadRevenueBands: { value: LeadRevenue; label: string }[];    // the six labels in brief 8.6
 ```
+
+## Added in phase 3
+
+- The Lead forms section calls `GET /leads?source=grow&limit=3` with the list's `q`, `status` and `need`, and relies on `nextCursor` being non-null when there are more.

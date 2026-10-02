@@ -12,7 +12,12 @@ export const subscriptionsModule: ModuleManifest = {
   href: { pathname: '/customers', params: { segment: 'subscriptions' } },
   searchable: {
     screens: [
-      { title: 'Subscriptions', keywords: ['orders', 'billing', 'stripe', 'payments'], href: { pathname: '/customers', params: { segment: 'subscriptions' } } },
+      { title: 'Subscriptions', keywords: ['billing', 'stripe', 'payments', 'webline care', 'past due'], href: { pathname: '/customers', params: { segment: 'subscriptions' } } },
+      {
+        title: 'One-time orders',
+        keywords: ['orders', 'webline', 'refunds', 'klarna', 'afterpay', 'affirm', 'instalments'],
+        href: { pathname: '/customers', params: { segment: 'subscriptions', sub: 'orders' } },
+      },
     ],
   },
 };

@@ -20,6 +20,7 @@ const TABLE: [path: string, link: AppLink, ownerOnly: boolean][] = [
   ['/admin/notifications', INBOX, false],
   ['/admin/notifications?filter=action', { pathname: '/inbox', params: { filter: 'action' } }, false],
   ['/admin/notifications?filter=bogus', INBOX, false],
+  ['/admin/analytics?range=7d', { pathname: '/analytics', params: { range: '7d' } }, false],
   ['/admin/leads', segment('/customers', 'leads'), false],
   ['/admin/tools', segment('/customers', 'tools'), false],
   ['/admin/subscriptions', segment('/customers', 'subscriptions'), false],

@@ -264,15 +264,16 @@ const PAGES: [string, number][] = [
   ['/contact', 0.02],
   ['/blog/what-a-booked-appointment-guarantee-really-means', 0.015],
 ];
-const COUNTRIES: [string, string, number][] = [
-  ['Canada', '\u{1F1E8}\u{1F1E6}', 0.86],
-  ['United States', '\u{1F1FA}\u{1F1F8}', 0.08],
-  ['India', '\u{1F1EE}\u{1F1F3}', 0.015],
-  ['United Kingdom', '\u{1F1EC}\u{1F1E7}', 0.01],
-  ['Philippines', '\u{1F1F5}\u{1F1ED}', 0.008],
-  ['Pakistan', '\u{1F1F5}\u{1F1F0}', 0.006],
-  ['Germany', '\u{1F1E9}\u{1F1EA}', 0.004],
-  ['France', '\u{1F1EB}\u{1F1F7}', 0.003],
+/** Name, ISO 3166-1 alpha-2 code, flag emoji, share. */
+const COUNTRIES: [string, string, string, number][] = [
+  ['Canada', 'CA', '\u{1F1E8}\u{1F1E6}', 0.86],
+  ['United States', 'US', '\u{1F1FA}\u{1F1F8}', 0.08],
+  ['India', 'IN', '\u{1F1EE}\u{1F1F3}', 0.015],
+  ['United Kingdom', 'GB', '\u{1F1EC}\u{1F1E7}', 0.01],
+  ['Philippines', 'PH', '\u{1F1F5}\u{1F1ED}', 0.008],
+  ['Pakistan', 'PK', '\u{1F1F5}\u{1F1F0}', 0.006],
+  ['Germany', 'DE', '\u{1F1E9}\u{1F1EA}', 0.004],
+  ['France', 'FR', '\u{1F1EB}\u{1F1F7}', 0.003],
 ];
 const REFERRERS: [string, number][] = [
   ['google.com', 0.3],
@@ -355,15 +356,15 @@ export function analyticsFor(range: AnalyticsRange, nowMs: number = Date.now()):
   // Today counts as the share of it that has gone by, so the average is not dragged down at 9 AM.
   const elapsedDays = range === '24h' ? 24 : Math.max(w.days - 1 + elapsedShare(c), 1);
   const peak = w.points.reduce<AnalyticsPoint | null>((best, p) => (p.count > 0 && (!best || p.count >= best.count) ? p : best), null);
-  const flags = new Map(COUNTRIES.map(([label, flag]) => [label, flag]));
+  const byName = new Map(COUNTRIES.map(([label, code, flag]) => [label, { code, flag }]));
   // Every pageview has a country: the list adds up to the total.
   const countries: CountryCount[] = partition(
     total,
-    COUNTRIES.map(([label, , share]): [string, number] => [label, share]),
+    COUNTRIES.map(([label, , , share]): [string, number] => [label, share]),
     range,
   ).map((row) => {
-    const flag = flags.get(row.label);
-    return flag ? { ...row, flag } : row;
+    const extra = byName.get(row.label);
+    return extra ? { ...row, ...extra } : row;
   });
 
   return {

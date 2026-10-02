@@ -40,8 +40,13 @@ export const zAnalyticsPoint = z.object({
 });
 export type AnalyticsPoint = z.infer<typeof zAnalyticsPoint>;
 
-/** Countries: the label is the country name; the flag emoji is optional. */
-export const zCountryCount = zLabelCount.extend({ flag: z.string().optional() });
+/**
+ * Countries: the label is the country name. `code` is the ISO 3166-1 alpha-2
+ * code ("CA"); the app builds the flag emoji from it (Hermes has no
+ * Intl.DisplayNames, so the name still comes from the server). `flag` is an
+ * optional ready-made emoji, used only when there is no code.
+ */
+export const zCountryCount = zLabelCount.extend({ code: z.string().optional(), flag: z.string().optional() });
 export type CountryCount = z.infer<typeof zCountryCount>;
 
 export const zAnalytics = z.object({

@@ -271,7 +271,20 @@ export function adsReport(range: AdsRange, nowMs: number = Date.now()): AdsConne
       const a = byAd.get(ad.id);
       if (!a) continue;
       sum = add(sum, a);
-      ads.push({ id: ad.id, campaignId: c.id, name: ad.name, spend: cad(a.spend), linkClicks: a.linkClicks, visits: a.visits, leads: a.leads });
+      ads.push({
+        id: ad.id,
+        campaignId: c.id,
+        name: ad.name,
+        spend: cad(a.spend),
+        linkClicks: a.linkClicks,
+        visits: a.visits,
+        leads: a.leads,
+        booked: a.booked,
+        sales: a.sales,
+        revenue: cad(a.revenue),
+        costPerLead: per(a.spend, a.leads),
+        costPerSale: per(a.spend, a.sales),
+      });
     }
     if (sum.spend === 0) continue;
     campaigns.push({

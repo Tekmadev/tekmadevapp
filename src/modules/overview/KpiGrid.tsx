@@ -31,7 +31,7 @@ const KPIS: readonly Kpi[] = [
     href: { pathname: '/customers', params: { segment: 'subscriptions' } },
     hint: 'Opens Subscriptions',
   },
-  { key: 'pageviews30d', label: 'Pageviews 30d', href: '/analytics', hint: 'Opens Analytics' },
+  { key: 'pageviews30d', label: 'Pageviews 30d', href: { pathname: '/analytics', params: { range: '30d' } }, hint: 'Opens Analytics' },
 ];
 
 /** 2 x 2, or 1 column when the longest label would not fit a half-width card at this font scale. */
