@@ -2,6 +2,8 @@ import { Stack } from 'expo-router';
 import { useQuickActionRouting } from 'expo-quick-actions/router';
 
 import { BiometricOfferSheet } from '@/auth/BiometricOfferSheet';
+import { LockGate } from '@/auth/lock/LockGate';
+import { useSecureScreen } from '@/auth/lock/useSecureScreen';
 import { useTheme } from '@/design/theme';
 import { onQuickAction, useAppShortcuts } from '@/modules/quickActions/shortcuts';
 import { SearchSheet } from '@/modules/search/SearchSheet';
@@ -9,14 +11,17 @@ import { SearchSheet } from '@/modules/search/SearchSheet';
 /**
  * The signed-in area: tabs plus every pushed screen (native stack), and the
  * app-level pieces that live as long as someone is signed in: the global
- * search sheet, the biometric offer, and the Android launcher shortcuts
- * (registered here, routed here, cleared when this unmounts on sign-out).
+ * search sheet, the biometric offer, the Android launcher shortcuts
+ * (registered here, routed here, cleared when this unmounts on sign-out),
+ * the app lock and "Hide content in the recent apps screen" (brief 8.18).
  */
 export default function AppLayout() {
   const { colors } = useTheme();
   // Inside the signed-in layout (not the root) so a shortcut can navigate once routes exist.
   useQuickActionRouting(onQuickAction);
   useAppShortcuts();
+  // FLAG_SECURE on Android (app switcher blur on iOS) while the setting is on.
+  useSecureScreen();
 
   return (
     <>
@@ -38,6 +43,8 @@ export default function AppLayout() {
       <SearchSheet />
       {/* The one-time "Unlock with your fingerprint next time?" offer after the first sign-in (brief 8.2). */}
       <BiometricOfferSheet />
+      {/* Biometric unlock: above everything, including sheets and toasts, until unlocked. */}
+      <LockGate />
     </>
   );
 }

@@ -10,12 +10,15 @@ import {
   zSubscriberPage,
   type Campaign,
   type CampaignCreate,
+  type EmailMeta,
   type EmailOverview,
   type EmailTemplate,
   type SubscriberDetail,
   type SubscriberPage,
   type SubscriberStatus,
 } from '../schemas/email';
+import type { Meta } from '../schemas/meta';
+import { getMeta, sessionKeys } from './session';
 
 /**
  * Typed endpoints and query keys for the "email" domain (owner only): the
@@ -146,6 +149,21 @@ export function subscribersInfiniteQuery(params: SubscriberListParams) {
     queryFn: ({ pageParam, signal }) => getSubscribers({ ...params, cursor: pageParam }, signal),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+}
+
+/**
+ * The email slice of GET /meta (subscriber statuses with tones, unsubscribe
+ * reasons and sources, signup sources, consent events, campaign and engagement
+ * badges). Shares the one ['meta'] cache entry with every other domain; the
+ * labels change only with a server deploy, so it stays fresh for an hour.
+ */
+export function emailMetaQuery() {
+  return queryOptions({
+    queryKey: sessionKeys.meta,
+    queryFn: ({ signal }) => getMeta(signal),
+    staleTime: 60 * 60_000,
+    select: (meta: Meta): EmailMeta => meta,
   });
 }
 

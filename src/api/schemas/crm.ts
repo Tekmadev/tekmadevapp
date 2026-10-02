@@ -73,8 +73,12 @@ export type CrmSwitches = z.infer<typeof zCrmSwitches>;
 export const zCrmAppStatus = z.enum(['installed_here', 'installed_elsewhere', 'not_installed']);
 export type CrmAppStatus = z.infer<typeof zCrmAppStatus>;
 
-/** The webhook app. Installing happens in the browser (the website's CRM page). */
-export const zCrmApp = z.object({ status: zCrmAppStatus, explanation: z.string() });
+/**
+ * The webhook app. Installing happens in the browser (the website's CRM page).
+ * `installUrl`: where "Install in the browser" opens, when the server sends it
+ * (otherwise the app opens https://www.tekmadev.com/admin/crm).
+ */
+export const zCrmApp = z.object({ status: zCrmAppStatus, explanation: z.string(), installUrl: z.string().optional() });
 export type CrmApp = z.infer<typeof zCrmApp>;
 
 /** A merge field: copy `{{contact.<key>}}`. */

@@ -9,9 +9,9 @@ The spec is [PROMPT.md](../PROMPT.md). This file records the phases, the folder 
 | 1 | Foundation | Project setup, tokens, fonts, theme switching, component Kit (both themes), the black hole loader (all variants, reduced motion, settings), splash and boot, sign in and session, API client with the mock adapter and fixtures for every endpoint, module registry, tabs, deep link mapper | Done |
 | 2 | Daily driver | Home, Inbox (full), Clients (list, new, detail with every section, templates), global search, quick actions, app shortcuts, More | Done (owner checked) |
 | 3 | Customers and insights | Leads, Free tools, Subscriptions, Analytics, Ads | Built; on-device check by the owner |
-| 4 | Marketing | Blog (incl. the editor), Email, Links, CRM sync | Planned |
-| 5 | Sales and settings | Pricing, Coupons, Loader, Test mode, Team, Profile, App settings | Planned |
-| 6 | Push and security | FCM, channels, device registration, biometric lock, FLAG_SECURE, update checks | Needs the owner's `google-services.json` for the FCM part |
+| 4 | Marketing | Blog (incl. the editor), Email, Links, CRM sync | Built; on-device check by the owner |
+| 5 | Sales and settings | Pricing, Coupons, Loader, Test mode, Team, Profile, App settings | Built; on-device check by the owner |
+| 6 | Push and security | FCM, channels, device registration, biometric lock, FLAG_SECURE, update checks | Biometric lock, FLAG_SECURE and update checks built; FCM needs the owner's `google-services.json` |
 | 7 | Live API switch-over | Flip `EXPO_PUBLIC_API_MODE=live`, run every screen on real data, fix schema drift | Waits for the owner to say the API is live |
 | 8 | Automation foundations | Module flags, ApprovalCard, JobProgress, hidden `/assistant` route, extensible deep links | Foundations land in phase 1 and 2; finished in 8 |
 

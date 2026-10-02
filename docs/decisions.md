@@ -449,3 +449,63 @@ I need no changes in files I do not own.
 ### Everywhere
 
 - Offline, a filter or range that was never loaded shows the network error, never the previous filter's rows dimmed (a placeholder reports success, so the check includes `isPlaceholderData`). Applied to the Clients list too.
+
+## Phases 4 and 5: marketing, sales and settings
+
+- The app ships on Android first and on iPhone right after, from the same code: Android-only APIs sit behind Platform checks with an iOS path.
+- Settings was built first at the owner's request. Push delivery waits for the Firebase file; the Notifications screen says so.
+- The black hole loader now runs every instance off one shared frame loop (same poses, pause and reduced-motion behaviour).
+
+### App settings and lock
+- The lock is a full-screen Modal with no fade, above sheets and toasts. Android back does nothing on it.
+- It locks on a cold start with a saved session, but not right after a password sign-in.
+- "Immediately" locks on the way out. The system unlock prompt's own trip to the background does not count as leaving.
+- It locks if the phone's clock moved backwards while the app was away.
+- It asks for the fingerprint or screen lock once by itself, then waits for Unlock. Sign out is offered with a hold.
+- Turning biometric unlock on needs one successful unlock first. It is only offered when the phone has a biometric or a screen lock set up.
+- Theme change: a snapshot covers the screen, the theme switches underneath, and the snapshot fades out over 320ms. With reduced motion, or a snapshot slower than 600ms, the theme switches at once.
+- "Clear cached data" keeps the session, settings, drafts and recent searches. Open screens reload.
+- Quiet and Push switches are optimistic with rollback. Quiet refreshes the Inbox lists and the bell; Push refreshes nothing else.
+- The Kit opens after 7 taps on the version, with a haptic countdown from the 4th tap.
+
+
+### Blog list
+- Posts are full-width rows. Swipe right publishes or unpublishes, swipe left moves to trash, long press opens every action.
+- Publish and Unpublish use an ink hold; trash uses a red hold.
+- "Share link" is disabled until the post is published.
+- Featured and AI draft badges are neutral, so gold stays for Published.
+
+
+### Editor
+- The top bar slides away while scrolling down and comes back on the first scroll up.
+- The toolbar shows only while the body has focus.
+- Choosing Published in Details goes through the publish hold.
+- New posts start as drafts.
+
+
+### Email
+- Preview links open their real destination (not the click tracker) in a Custom Tab, so previewing never counts a click.
+- The library origin whitelist is `*`, with "only about:blank loads" enforced in the navigation handler.
+- Pause / Resume waits for the server.
+
+
+### Links
+- Disable confirms with an ink hold; Enable needs no confirm.
+- Save to photos uses the write-only legacy media library call, so it asks for nothing on Android 13 and newer.
+
+
+### CRM
+- One long job at a time, with no Cancel.
+- Sync, Run now and turning a switch on need a verified connection.
+- The Outbound hold is ink.
+- The inspector refreshes only on Look up or a pull.
+
+
+### Pricing
+- When Stripe reports `skipped`, the toast says "Saved. The site is updated."
+- A partial Stripe failure is shown on the card. Unsaved fields keep their edits so Save can retry them.
+
+
+### Team
+- The temporary password is pre-filled: 14 characters, no look-alike characters.
+- After adding, the sheet stays open with the sign-in details and a Share button.

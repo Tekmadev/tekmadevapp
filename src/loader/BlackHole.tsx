@@ -1,14 +1,17 @@
-import { memo, useEffect } from 'react';
+import type { Transforms3d } from '@shopify/react-native-skia';
+import { memo, useEffect, useId } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
-import { useDerivedValue, useFrameCallback, useSharedValue } from 'react-native-reanimated';
+import { makeMutable, useSharedValue, type SharedValue } from 'react-native-reanimated';
+import { scheduleOnUI } from 'react-native-worklets';
 
+import type { LoaderSettings } from '@/api/schemas/session';
 import { useReduceMotion } from '@/design/motion';
 import { useTheme } from '@/design/theme';
 
-import { beatFrame, KEY_REST, REDUCED_CYCLE_MS, reducedOpacity } from './keyframes';
-import { MarkCanvas } from './MarkCanvas';
-import { beatPose, bleedFor, MARK_RADIUS, restPose } from './pose';
-import { useLoaderSettings } from './settings';
+import { beatFrame, degToRad, KEY_REST, REDUCED_CYCLE_MS, reducedOpacity } from './keyframes';
+import { MarkScene } from './MarkCanvas';
+import { bleedFor, MARK_RADIUS } from './pose';
+import { useLoaderStore } from './settings';
 
 export type BlackHoleProps = {
   /** Rendered size in dp (the 2400 unit viewBox is scaled to this). */
@@ -27,15 +30,236 @@ export type BlackHoleProps = {
 /** Just enough canvas bleed for the outer arc tips while they spin. */
 const BEAT_BLEED = bleedFor(MARK_RADIUS);
 
+/** The whole logo at the start of a beat (p = 0). */
+const START: Transforms3d = [{ rotate: 0 }, { scale: 1 }];
+
+/* ------------------------------------------------------------------ */
+/* Live settings on the UI thread                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The settings every mark reads each frame: the saved ones, or the Loader
+ * screen's live preview while the owner drags a slider. One shared value for
+ * the whole app, fed by the store, so a slider step reaches every running mark
+ * on the next frame with no React render.
+ */
+function storeSettings(): LoaderSettings {
+  const state = useLoaderStore.getState();
+  return state.previewing ?? state.settings;
+}
+let pushedSettings = storeSettings();
+const liveSettings = makeMutable<LoaderSettings>(pushedSettings);
+useLoaderStore.subscribe((state) => {
+  const next = state.previewing ?? state.settings;
+  if (next === pushedSettings) return;
+  pushedSettings = next;
+  liveSettings.set(next);
+});
+
+/* ------------------------------------------------------------------ */
+/* One beat loop for every mark                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A mark's state on the UI thread. It lives in the loop, not in shared values:
+ * only the four Skia props are shared values, written when the pose changes.
+ */
+type Mark = {
+  /** Raw beat position, 0 to 1. */
+  phase: number;
+  /** The progress the Skia props show now (NaN forces the next draw). */
+  shown: number;
+  /** The props hold the reduced motion pose (still logo) rather than a beat pose. */
+  reducedShown: boolean;
+  /** Just registered: its first frame does not advance, like a frame callback's first frame. */
+  fresh: boolean;
+  /** Beat length in ms; 0 follows the live `beatMs`. */
+  period: number;
+  paused: boolean;
+  reduced: boolean;
+  outer: SharedValue<Transforms3d>;
+  inner: SharedValue<Transforms3d>;
+  innerOpacity: SharedValue<number>;
+  opacity: SharedValue<number>;
+};
+
+type BeatLoop = {
+  marks: Map<string, Mark>;
+  /** Marks that still need frames: running, finishing a beat before a pause, or due one redraw. */
+  active: Set<string>;
+  running: boolean;
+  /** Timestamp of the previous frame; -1 when the loop is (re)starting. */
+  last: number;
+  wake: () => void;
+};
+
+/** Per module load, so a Fast Refresh starts a fresh loop with the new code. */
+const LOOP_KEY = `__tekmadevBeatLoop_${Math.random().toString(36).slice(2)}`;
+
+/** Writes the Skia props for progress `q`, only when the pose actually changes. */
+function draw(m: Mark, q: number, s: LoaderSettings) {
+  'worklet';
+  if (m.reduced) {
+    if (!m.reducedShown) {
+      m.reducedShown = true;
+      m.outer.set([]);
+      m.inner.set([]);
+      m.innerOpacity.set(1);
+      m.shown = NaN;
+    }
+    if (q !== m.shown) {
+      m.shown = q;
+      m.opacity.set(reducedOpacity(q));
+    }
+    return;
+  }
+  if (m.reducedShown) {
+    m.reducedShown = false;
+    m.opacity.set(1);
+    m.shown = NaN;
+  }
+  // During the rest (and while held) the pose is the same whole logo: no writes, no redraw.
+  if (q === m.shown) return;
+  m.shown = q;
+  const f = beatFrame(q, s);
+  m.outer.set([{ rotate: degToRad(f.outerRotate) }, { scale: f.outerScale }]);
+  m.inner.set([{ rotate: degToRad(f.innerRotate) }, { scale: f.innerScale }]);
+  m.innerOpacity.set(f.innerOpacity);
+}
+
+/**
+ * Advances one mark by `elapsed` ms and draws it. Returns false once it is
+ * still (paused at the whole logo), so the loop stops visiting it.
+ */
+function step(m: Mark, elapsed: number, s: LoaderSettings): boolean {
+  'worklet';
+  const dt = m.fresh ? 0 : elapsed;
+  m.fresh = false;
+  const reduced = m.reduced;
+  const cycle = reduced ? REDUCED_CYCLE_MS : Math.max(m.period > 0 ? m.period : s.beatMs, 1);
+  const p = m.phase;
+  let next = p + dt / cycle;
+  let moving = true;
+  if (m.paused) {
+    // Finish the beat (or the fade) into the whole logo, then hold still.
+    if (reduced) {
+      if (p === 0 || next >= 1) {
+        next = 0;
+        moving = false;
+      }
+    } else if (p === 0 || p >= KEY_REST) {
+      next = p;
+      moving = false;
+    } else if (next >= KEY_REST) {
+      next = KEY_REST;
+      moving = false;
+    }
+  } else if (next >= 1) {
+    next -= Math.floor(next);
+  }
+  m.phase = next;
+  draw(m, reduced ? next : Math.min(next, KEY_REST), s);
+  return moving;
+}
+
+/** The loop on the UI runtime, made on first use. One requestAnimationFrame chain serves every mark. */
+function getLoop(): BeatLoop {
+  'worklet';
+  const g = globalThis as unknown as Record<string, BeatLoop | undefined>;
+  const existing = g[LOOP_KEY];
+  if (existing) return existing;
+
+  const loop: BeatLoop = { marks: new Map(), active: new Set(), running: false, last: -1, wake: () => undefined };
+  const frame = (timestamp: number) => {
+    const elapsed = loop.last < 0 ? 0 : timestamp - loop.last;
+    loop.last = timestamp;
+    const s = liveSettings.get();
+    loop.active.forEach((id) => {
+      const m = loop.marks.get(id);
+      if (!m || !step(m, elapsed, s)) loop.active.delete(id);
+    });
+    if (loop.active.size > 0) {
+      requestAnimationFrame(frame);
+    } else {
+      // Nothing moves: no frame work at all until a mark wakes the loop again.
+      loop.running = false;
+      loop.last = -1;
+    }
+  };
+  loop.wake = () => {
+    if (loop.running || loop.active.size === 0) return;
+    loop.running = true;
+    loop.last = -1;
+    requestAnimationFrame(frame);
+  };
+  g[LOOP_KEY] = loop;
+  return loop;
+}
+
+function registerMark(
+  id: string,
+  outer: SharedValue<Transforms3d>,
+  inner: SharedValue<Transforms3d>,
+  innerOpacity: SharedValue<number>,
+  opacity: SharedValue<number>,
+) {
+  'worklet';
+  const loop = getLoop();
+  if (loop.marks.has(id)) return;
+  // Starts held at the whole logo (the props' initial values); configureMark sets it going.
+  loop.marks.set(id, {
+    phase: 0,
+    shown: 0,
+    reducedShown: false,
+    fresh: true,
+    period: 0,
+    paused: true,
+    reduced: false,
+    outer,
+    inner,
+    innerOpacity,
+    opacity,
+  });
+}
+
+function configureMark(id: string, period: number, paused: boolean, reduced: boolean) {
+  'worklet';
+  const loop = getLoop();
+  const m = loop.marks.get(id);
+  if (!m) return;
+  m.period = period;
+  m.paused = paused;
+  if (m.reduced !== reduced) {
+    // A new mode starts its own cycle from the whole logo.
+    m.reduced = reduced;
+    m.phase = 0;
+    m.shown = NaN;
+  }
+  // One visit at least: a held mark draws once if it must, then drops out.
+  loop.active.add(id);
+  loop.wake();
+}
+
+function unregisterMark(id: string) {
+  'worklet';
+  const loop = getLoop();
+  loop.marks.delete(id);
+  loop.active.delete(id);
+}
+
 /**
  * The Tekmadev black hole (brief section 5). The inner hooks spin a full turn
  * clockwise while the outer arcs spin half a turn counterclockwise, everything
  * pulled toward the centre at the peak, then released into the logo to rest.
  *
- * A frame callback advances the beat on the UI thread and every pose comes from
- * beatFrame(), so there is no JS work and no React render per frame. Settings
- * (beat length, pulls, fade) live in shared values: when the owner drags a slider
- * the next frame uses the new value, mid beat, with no restart.
+ * Every mark in the app shares one UI-thread loop (a single
+ * requestAnimationFrame chain) that runs only while some mark moves. Each frame
+ * it advances each moving mark's own beat (its own period and start) and writes
+ * the four Skia props directly: no frame callback per mark, no derived values,
+ * no JS work and no React render per frame. A mark at rest in its beat, or
+ * paused at the whole logo, writes nothing, so its canvas does not redraw.
+ * Settings come from one shared value: dragging a Loader slider changes the
+ * beat on the next frame, mid beat, with no restart.
  *
  * Reduced motion: no rotation or scale; all four paths fade 1, 0.4, 1 over 1.6s.
  */
@@ -48,72 +272,24 @@ export const BlackHole = memo(function BlackHole({
   accessibilityLabel,
 }: BlackHoleProps) {
   const { colors } = useTheme();
-  const settings = useLoaderSettings();
   const reduceMotion = useReduceMotion();
+  const id = useId();
 
-  const period = useSharedValue(beatMs ?? settings.beatMs);
-  const innerPull = useSharedValue(settings.innerPull);
-  const outerPull = useSharedValue(settings.outerPull);
-  const innerFade = useSharedValue(settings.innerFade);
-  const reduced = useSharedValue(reduceMotion);
-  const pausedSV = useSharedValue(paused);
-  // `clock` is the raw beat position. `progress` is what the pose reads: it holds
-  // at KEY_REST through the rest of the beat, because every pose there is the
-  // same whole logo, so the canvas does not redraw an identical frame 40% of the time.
-  const clock = useSharedValue(0);
-  const progress = useSharedValue(0);
+  const outer = useSharedValue<Transforms3d>(START);
+  const inner = useSharedValue<Transforms3d>(START);
+  const innerOpacity = useSharedValue(1);
+  const opacity = useSharedValue(1);
 
-  const effectiveBeat = beatMs ?? settings.beatMs;
   useEffect(() => {
-    period.set(effectiveBeat);
-  }, [effectiveBeat, period]);
-  useEffect(() => {
-    innerPull.set(settings.innerPull);
-    outerPull.set(settings.outerPull);
-    innerFade.set(settings.innerFade);
-  }, [settings.innerPull, settings.outerPull, settings.innerFade, innerPull, outerPull, innerFade]);
-  useEffect(() => {
-    // A new mode starts its own cycle from the whole logo.
-    reduced.set(reduceMotion);
-    clock.set(0);
-    progress.set(0);
-  }, [reduceMotion, reduced, clock, progress]);
-  useEffect(() => {
-    pausedSV.set(paused);
-  }, [paused, pausedSV]);
+    scheduleOnUI(registerMark, id, outer, inner, innerOpacity, opacity);
+    return () => scheduleOnUI(unregisterMark, id);
+  }, [id, outer, inner, innerOpacity, opacity]);
 
-  useFrameCallback((frame) => {
-    'worklet';
-    const dt = frame.timeSincePreviousFrame;
-    if (dt === null || dt <= 0) return;
-    const isReduced = reduced.get();
-    const cycle = isReduced ? REDUCED_CYCLE_MS : Math.max(period.get(), 1);
-    const p = clock.get();
-    let next = p + dt / cycle;
-    if (pausedSV.get()) {
-      // Finish the beat into the whole logo, then hold still (no writes, no redraws).
-      if (isReduced) {
-        if (p === 0) return;
-        if (next >= 1) next = 0;
-      } else {
-        if (p === 0 || p >= KEY_REST) return;
-        if (next >= KEY_REST) next = KEY_REST;
-      }
-    } else if (next >= 1) {
-      next -= Math.floor(next);
-    }
-    clock.set(next);
-    // Setting the same number is a no-op in Reanimated, so the rest costs nothing.
-    progress.set(isReduced ? next : Math.min(next, KEY_REST));
-  });
-
-  const pose = useDerivedValue(() => {
-    const p = progress.get();
-    if (reduced.get()) return restPose(reducedOpacity(p));
-    return beatPose(
-      beatFrame(p, { innerPull: innerPull.get(), outerPull: outerPull.get(), innerFade: innerFade.get() }),
-    );
-  });
+  // Runs after the registration above (same UI queue, in order).
+  const period = beatMs ?? 0;
+  useEffect(() => {
+    scheduleOnUI(configureMark, id, period, paused, reduceMotion);
+  }, [id, period, paused, reduceMotion]);
 
   const a11y = accessibilityLabel
     ? ({ accessible: true, accessibilityRole: 'progressbar', accessibilityLabel } as const)
@@ -121,7 +297,15 @@ export const BlackHole = memo(function BlackHole({
 
   return (
     <View style={[{ width: size, height: size }, style]} {...a11y}>
-      <MarkCanvas size={size} bleed={BEAT_BLEED} color={color ?? colors.gold} pose={pose} />
+      <MarkScene
+        size={size}
+        bleed={BEAT_BLEED}
+        color={color ?? colors.gold}
+        outerA={outer}
+        inner={inner}
+        innerOpacity={innerOpacity}
+        opacity={opacity}
+      />
     </View>
   );
 });

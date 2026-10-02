@@ -2,7 +2,9 @@ import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
 import { z } from 'zod';
 
 import { api, seg } from '../client';
-import { zLinkClickPage, zShortLink, zShortLinks, type LinkClickPage, type LinkCreate, type ShortLink } from '../schemas/links';
+import { zLinkClickPage, zShortLink, zShortLinks, type LinkClickPage, type LinkCreate, type LinksMeta, type ShortLink } from '../schemas/links';
+import type { Meta } from '../schemas/meta';
+import { getMeta, sessionKeys } from './session';
 
 /**
  * Typed endpoints and query keys for the "links" domain (owner only): branded
@@ -82,5 +84,19 @@ export function linkClicksInfiniteQuery(params: LinkClicksParams) {
     queryFn: ({ pageParam, signal }) => getLinkClicks({ ...params, cursor: pageParam }, signal),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+}
+
+/**
+ * The links slice of GET /meta (reserved slugs, UTM suggestions, status labels
+ * and tones). Shares the one ['meta'] cache entry with every other domain; the
+ * values change only with a server deploy, so it stays fresh for an hour.
+ */
+export function linksMetaQuery() {
+  return queryOptions({
+    queryKey: sessionKeys.meta,
+    queryFn: ({ signal }) => getMeta(signal),
+    staleTime: 60 * 60_000,
+    select: (meta: Meta): LinksMeta => meta,
   });
 }

@@ -82,3 +82,7 @@ The contract table only describes `not_configured`, `unverified`, `probe`, `sync
 ## 5. GET /meta
 
 `crmHealth` (`{ value, label, tone }`: Not connected muted, Token rejected neutral, Verified ok, Not verified neutral), `crmAppStatuses`, `crmSurfaces` (Outbound, Inbound, Nightly reconcile), `crmJobs` (Push, Inbound, Reconcile, Backfill, Verify), `crmRunBy` (Schedule, Signup, You), `crmRunStatuses` (ok ok, running neutral, "part done" warn, error signal), `crmDirections` (To the CRM, From the CRM), `crmQueues` (Outbox, Inbox).
+
+## Added in phase 4
+
+- `GET /crm` may send `app.installUrl` (string): where "Install in the browser" opens. The app falls back to `https://www.tekmadev.com/admin/crm`.
