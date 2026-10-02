@@ -18,6 +18,8 @@ const segment = (pathname: string, value: string): AppLink => ({ pathname, param
 const TABLE: [path: string, link: AppLink, ownerOnly: boolean][] = [
   ['/admin', HOME, false],
   ['/admin/notifications', INBOX, false],
+  ['/admin/notifications?filter=action', { pathname: '/inbox', params: { filter: 'action' } }, false],
+  ['/admin/notifications?filter=bogus', INBOX, false],
   ['/admin/leads', segment('/customers', 'leads'), false],
   ['/admin/tools', segment('/customers', 'tools'), false],
   ['/admin/subscriptions', segment('/customers', 'subscriptions'), false],

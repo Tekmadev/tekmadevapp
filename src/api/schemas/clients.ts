@@ -21,6 +21,17 @@ export const zClientListStatus = z.enum(['active', 'lead', 'onboarding', 'live',
 export type ClientListStatus = z.infer<typeof zClientListStatus>;
 export const CLIENT_LIST_STATUSES: readonly ClientListStatus[] = zClientListStatus.options;
 
+/**
+ * `GET /clients?attention=`: the clients behind each Home "Needs you" card, so a
+ * card opens exactly the rows it counts (same rules as `GET /overview` attention).
+ * blocked: the current run is blocked (churned excluded); calls_to_review: CRM
+ * appointments waiting for review; intake_to_review: the latest intake is
+ * submitted; behind_pace: live, guarantee behind pace with days left.
+ */
+export const zClientAttention = z.enum(['blocked', 'calls_to_review', 'intake_to_review', 'behind_pace']);
+export type ClientAttention = z.infer<typeof zClientAttention>;
+export const CLIENT_ATTENTIONS: readonly ClientAttention[] = zClientAttention.options;
+
 /** Statuses the Account sheet can set (a lead becomes a client through checkout, not by hand). */
 export const EDITABLE_CLIENT_STATUSES: readonly ClientStatus[] = ['pending', 'onboarding', 'live', 'paused', 'churned'];
 
@@ -170,6 +181,14 @@ export const zClientRow = z.object({
   /** "live Sep 12" when liveDate is set, otherwise "8d to live" / "3d late" from targetDate (Toronto dates). */
   goLive: z.object({ liveDate: zDate.nullable(), targetDate: zDate.nullable() }),
   guarantee: zGuaranteeSummary,
+  /**
+   * CRM appointments waiting for staff review ("N calls to review"). Requested
+   * addition to the contract: optional so a server that does not send it yet
+   * still loads the list (the row then shows no review badge).
+   */
+  callsToReview: z.number().int().optional(),
+  /** The latest intake is submitted and not reviewed yet ("Intake to review"). Requested addition, optional like callsToReview. */
+  intakeToReview: z.boolean().optional(),
   /** Assigned strategist email. */
   strategist: z.string().nullable(),
   updatedAt: zInstant,

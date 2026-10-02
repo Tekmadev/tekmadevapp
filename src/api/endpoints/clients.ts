@@ -1,6 +1,7 @@
 import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
 
 import { api, seg } from '../client';
+import type { Meta } from '../schemas/meta';
 import {
   zAccessGrant,
   zActivity,
@@ -35,9 +36,11 @@ import {
   type CallSource,
   type CallStatus,
   type Client,
+  type ClientAttention,
   type ClientBundle,
   type ClientList,
   type ClientListStatus,
+  type ClientsMeta,
   type ClientStatus,
   type CreateClientResult,
   type CrmLocation,
@@ -61,6 +64,7 @@ import {
   type TaskResult,
   type TaskStatus,
 } from '../schemas/clients';
+import { getMeta, sessionKeys } from './session';
 
 /**
  * Typed endpoints and query keys for the "clients" domain: the Clients list,
@@ -87,6 +91,8 @@ export type ClientListParams = {
   q?: string;
   /** Owner only ("Test" toggle). The server ignores it for managers. */
   includeTest?: boolean;
+  /** Only the clients behind one of Home's "Needs you" cards (combines with status and q). */
+  attention?: ClientAttention | null;
   limit?: number;
 };
 
@@ -221,6 +227,7 @@ const listKeyParams = (params: ClientListParams) => ({
   status: params.status ?? 'active',
   q: params.q?.trim() ?? '',
   includeTest: params.includeTest ?? false,
+  attention: params.attention ?? null,
   limit: params.limit ?? CLIENTS_PAGE_SIZE,
 });
 
@@ -246,6 +253,7 @@ export function getClients(params: ClientListParams & { cursor?: string | null }
       status: params.status ?? undefined,
       q: params.q?.trim() || undefined,
       test: params.includeTest ? 1 : undefined,
+      attention: params.attention ?? undefined,
       // Passed back exactly as the server sent it.
       cursor: params.cursor ?? undefined,
       limit: params.limit ?? CLIENTS_PAGE_SIZE,
@@ -470,5 +478,19 @@ export function onboardingTemplatesQuery() {
   return queryOptions({
     queryKey: clientKeys.templates(),
     queryFn: ({ signal }) => getOnboardingTemplates(signal),
+  });
+}
+
+/**
+ * The clients slice of GET /meta (statuses with tones, stages, kinds, plans...).
+ * Shares the one ['meta'] cache entry with every other domain; labels change
+ * rarely, so it stays fresh for 10 minutes.
+ */
+export function clientsMetaQuery() {
+  return queryOptions({
+    queryKey: sessionKeys.meta,
+    queryFn: ({ signal }) => getMeta(signal),
+    staleTime: 10 * 60_000,
+    select: (meta: Meta): ClientsMeta => meta,
   });
 }

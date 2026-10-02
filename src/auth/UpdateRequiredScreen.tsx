@@ -1,7 +1,7 @@
 import { ArrowDownToLine } from 'lucide-react-native';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, LinearTransition, type EntryExitAnimationFunction } from 'react-native-reanimated';
+import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError, errorMessage } from '@/api/errors';
@@ -32,7 +32,7 @@ const CONTENT_MAX_WIDTH = 440;
  * enterPull, typed for `entering`. motion.ts declares a wider return type than the
  * function it actually returns, which `entering` rejects (reported to the lead).
  */
-const pull = (index: number) => enterPull(index) as EntryExitAnimationFunction;
+const pull = (index: number) => enterPull(index);
 
 const settle = LinearTransition.springify()
   .damping(springs.default.damping)

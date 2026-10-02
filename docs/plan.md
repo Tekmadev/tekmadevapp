@@ -6,8 +6,8 @@ The spec is [PROMPT.md](../PROMPT.md). This file records the phases, the folder 
 
 | # | Phase | Scope | Status |
 |---|---|---|---|
-| 1 | Foundation | Project setup, tokens, fonts, theme switching, component Kit (both themes), the black hole loader (all variants, reduced motion, settings), splash and boot, sign in and session, API client with the mock adapter and fixtures for every endpoint, module registry, tabs, deep link mapper | In progress |
-| 2 | Daily driver | Home, Inbox (full), Clients (list, new, detail with every section, templates), global search, quick actions, app shortcuts | Planned |
+| 1 | Foundation | Project setup, tokens, fonts, theme switching, component Kit (both themes), the black hole loader (all variants, reduced motion, settings), splash and boot, sign in and session, API client with the mock adapter and fixtures for every endpoint, module registry, tabs, deep link mapper | Done |
+| 2 | Daily driver | Home, Inbox (full), Clients (list, new, detail with every section, templates), global search, quick actions, app shortcuts, More | Built; on-device check by the owner |
 | 3 | Customers and insights | Leads, Free tools, Subscriptions, Analytics, Ads | Planned |
 | 4 | Marketing | Blog (incl. the editor), Email, Links, CRM sync | Planned |
 | 5 | Sales and settings | Pricing, Coupons, Loader, Test mode, Team, Profile, App settings | Planned |
@@ -15,7 +15,7 @@ The spec is [PROMPT.md](../PROMPT.md). This file records the phases, the folder 
 | 7 | Live API switch-over | Flip `EXPO_PUBLIC_API_MODE=live`, run every screen on real data, fix schema drift | Waits for the owner to say the API is live |
 | 8 | Automation foundations | Module flags, ApprovalCard, JobProgress, hidden `/assistant` route, extensible deep links | Foundations land in phase 1 and 2; finished in 8 |
 
-Each phase ends with: typecheck clean, unit tests green, every new screen checked on the Android emulator in light and dark (screenshots in `docs/screenshots/phase-N/`), and a short report.
+Each phase ends with: typecheck and lint clean, unit tests green, a static review against the brief, and a short report with a checklist the owner runs on his phone (from phase 2 on, the owner does the on-device checks to save build time).
 
 ## Folder layout
 

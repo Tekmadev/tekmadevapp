@@ -7,6 +7,7 @@ import {
   zApprovalKind,
   zCallSource,
   zCallStatus,
+  zClientAttention,
   zClientListStatus,
   zClientStatus,
   zDisqualifyReason,
@@ -45,6 +46,7 @@ import {
   metaFixture,
   planById,
   rowFor,
+  rowNeedsAttention,
   runView,
   setTaskStatus,
   signAsset,
@@ -280,6 +282,8 @@ export const routes: MockRoute[] = [
     handler: (ctx) => {
       const status = zClientListStatus.safeParse(ctx.query.status ?? 'active');
       if (!status.success) return fail(400, 'status', 'Unknown status filter.');
+      const attention = ctx.query.attention === undefined ? null : zClientAttention.safeParse(ctx.query.attention);
+      if (attention && !attention.success) return fail(400, 'attention', 'Unknown attention filter.');
       const includeTest = ctx.isOwner && (ctx.query.test === '1' || ctx.query.test === 'true');
       const filter = status.data;
       const rows = visibleClients(includeTest)
@@ -290,9 +294,12 @@ export const routes: MockRoute[] = [
         })
         .filter((c) => matches(ctx.query.q, c.businessName, c.primaryEmail))
         // Most recently touched first, so the clients being worked on sit at the top.
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.businessName.localeCompare(b.businessName));
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.businessName.localeCompare(b.businessName))
+        .map(rowFor)
+        // A Home "Needs you" card: the same rules as its count.
+        .filter((row) => !attention?.success || rowNeedsAttention(row, attention.data));
       const page = paginate(rows, ctx.query);
-      return ok({ stats: statsFor(includeTest), items: page.items.map(rowFor), nextCursor: page.nextCursor });
+      return ok({ stats: statsFor(includeTest), items: page.items, nextCursor: page.nextCursor });
     },
   },
   {

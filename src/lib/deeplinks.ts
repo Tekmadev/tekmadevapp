@@ -42,7 +42,13 @@ const tab = (pathname: string, segment?: string): AppLink => (segment ? { pathna
 
 const CORE_RULES: DeepLinkRule[] = [
   { pattern: '', to: () => ({ pathname: '/' }) },
-  { pattern: '/notifications', to: () => INBOX },
+  {
+    pattern: '/notifications',
+    to: (_p, _h, search) => {
+      const filter = search.get('filter');
+      return filter === 'action' || filter === 'unread' || filter === 'all' ? { ...INBOX, params: { filter } } : INBOX;
+    },
+  },
   { pattern: '/leads', to: () => tab('/customers', 'leads') },
   { pattern: '/leads/:id', to: ({ id }) => ({ pathname: '/leads/[id]', params: { id } }) },
   { pattern: '/tools', to: () => tab('/customers', 'tools') },

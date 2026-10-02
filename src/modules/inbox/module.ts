@@ -8,7 +8,7 @@ export const inboxModule: ModuleManifest = {
   icon: Bell,
   group: 'inbox',
   ownerOnly: false,
-  routes: ['(tabs)/inbox'],
+  routes: ['inbox'],
   href: '/inbox',
   quickActions: [
     { id: 'inbox', title: 'Inbox', icon: Bell, href: '/inbox', shortcut: { icon: 'shortcut_inbox', order: 1 } },

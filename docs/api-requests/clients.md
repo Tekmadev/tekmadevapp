@@ -45,6 +45,8 @@ Every derived value (derived stage, percent done, waiting on client, guarantee p
 - **`Approval`**: `version` increases per title; requesting a title that exists supersedes the pending version.
 - **`Activity`**: `{ id, clientId, kind: note|update|event, event, summary, subject, text, actionUrl, visibleToClient, actor: { kind: staff|client|system, name, email }, createdAt }`. `event` keys are labelled by `GET /meta` `activityEvents`.
 - **`crmLocation`** is omitted from the bundle (the key is absent, not null) for managers.
+- **`GET /clients?attention=blocked|calls_to_review|intake_to_review|behind_pace`** narrows the list to the clients behind each Home "Needs you" count, using the same rules as `GET /overview` `attention`, so the card's number and the list match. If the server ignores it, the Clients list shows every client under the filter chip.
+- **`ClientRow`** may also carry `callsToReview` and `intakeToReview` (counts). The app treats both as optional.
 - **`GET /clients/:id/activity`** accepts `limit` like every list (default 30). The bundle carries the first page.
 
 ## 3. `GET /meta` keys for this domain

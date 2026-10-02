@@ -2,7 +2,7 @@ import { CircleAlert, Info } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View, type TextInput } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import Animated, { FadeIn, LinearTransition, type EntryExitAnimationFunction } from 'react-native-reanimated';
+import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { create } from 'zustand';
 
@@ -38,7 +38,7 @@ const SHOW_MOCK_ACCOUNTS = __DEV__ && env.authMode === 'mock';
  * enterPull, typed for `entering`. motion.ts declares a wider return type than the
  * function it actually returns, which `entering` rejects (reported to the lead).
  */
-const pull = (index: number) => enterPull(index) as EntryExitAnimationFunction;
+const pull = (index: number) => enterPull(index);
 
 /** Things grow or shrink (a message appears) with the default spring rather than jumping. */
 const settle = LinearTransition.springify()

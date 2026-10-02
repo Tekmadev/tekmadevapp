@@ -21,6 +21,7 @@ import type {
   CallSource,
   CallStatus,
   Client,
+  ClientAttention,
   ClientBundle,
   ClientRow,
   ClientsMeta,
@@ -722,6 +723,8 @@ export function rowFor(c: ClientRecord): ClientRow {
     openTasks: { client: open.filter((t) => t.owner === 'client').length, us: open.filter((t) => t.owner === 'tekmadev').length },
     goLive: { liveDate: c.liveDate, targetDate: c.liveDate ? null : run?.targetLiveDate ?? null },
     guarantee: { eligible: g.eligible, counted: g.counted, target: g.target, daysIn: g.daysIn, daysLeft: g.daysLeft, windowDays: g.windowDays, status: g.status },
+    callsToReview: g.needsReview,
+    intakeToReview: latestIntake(c.id)?.status === 'submitted',
     strategist: c.assignedStrategist,
     updatedAt: c.updatedAt,
   };
@@ -739,6 +742,24 @@ export function statsFor(includeTest: boolean): ClientStats {
     blocked: rows.filter((r) => r.blocked && r.status !== 'churned').length,
     behindPace: rows.filter((r) => r.guarantee.status === 'behind' && r.guarantee.daysLeft > 0 && r.status === 'live').length,
   };
+}
+
+/**
+ * The rule behind each `GET /clients?attention=` filter, on a list row. The same
+ * rules as Home's attention counts (`clientsAttention`, `attentionClientsNow`),
+ * so a "Needs you" card and the list it opens always agree.
+ */
+export function rowNeedsAttention(row: ClientRow, attention: ClientAttention): boolean {
+  switch (attention) {
+    case 'blocked':
+      return row.blocked && row.status !== 'churned';
+    case 'calls_to_review':
+      return (row.callsToReview ?? 0) > 0;
+    case 'intake_to_review':
+      return row.intakeToReview === true;
+    case 'behind_pace':
+      return row.status === 'live' && row.guarantee.status === 'behind' && row.guarantee.daysLeft > 0;
+  }
 }
 
 /** Counts for Home's "needs attention" card (real clients only). */

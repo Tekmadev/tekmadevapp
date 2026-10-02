@@ -354,3 +354,62 @@ Recorded by the engineers who built each area. The mock API decisions describe h
 - Chart axis labels roll over to the next unit instead of printing "1000K".
 
 I need no changes in files I do not own.
+
+## Phase 2: daily driver
+
+### Navigation and shell
+
+- Links from a pushed screen (Inbox, search) to a tab route go through `openHref()` in `src/modules/inbox/navigation.ts`: `router.dismissTo` when there is a screen to go back from, `router.navigate` otherwise. A plain push to a tab route in expo-router 57 stacks a second copy of the tabs.
+- `/admin/notifications?filter=action|unread|all` opens the Inbox on that segment.
+- Every screen that can be opened with nothing cached shows the network error when offline, never an endless skeleton.
+
+### Home
+
+- Each KPI card opens its list: Leads, Leads with `view=booked`, Subscriptions, Analytics. Recent subscriptions also gets "View all"; its rows are not tappable (no subscription detail route).
+- "Needs you" order: notifications, blocked onboardings, CRM reviews, intakes, behind pace. Card size grows with font scale, and the skeleton uses the same size, so nothing jumps.
+- KPIs above 99,999 show in short form ("124.8K"). Numbers count up from zero only on a first load with nothing cached.
+- A dismissed update card stays hidden until a newer version is announced (stored on the phone). It is hidden when the build version is unknown.
+- A failed pull keeps the data and toasts the error; a failed background refetch stays silent.
+
+### Inbox
+
+- The segment control is custom (segments sized to their labels) so "Needs action (12)" stays whole at font scale 1.3. Category chips are plain chips so "Include test" can end the same scrolling row.
+- "Mark all read" is hidden when the current view has no rows (there is no watermark to send).
+- A row opens the detail sheet when its link points at the Inbox itself or at a page this role cannot open.
+- Swipe actions are hidden offline; the sheets say "You are offline".
+- Making a category quiet toasts "Leads is quiet now. It won't count toward unread." with Undo. Day headers add the year when it is not this year.
+
+### Customers and Clients list
+
+- The four Customers sections use ScrollTabs, not SegmentedControl: "Subscriptions" is cut off in four equal segments.
+- `view=blocked|review|intake|behind` sends `attention` to `GET /clients` with a removable gold chip. Leads, Live, Blocked and Behind pace stat cards also filter the list.
+- New client: when the email matched an existing client, the toast says "Existing client updated." instead of "Client created.".
+- Checklist templates save with PUT (no Idempotency-Key); a new template's key is checked against the loaded list so it never silently overwrites one. The key is suggested from the title. Empty copy: "No checklist templates yet. New onboarding runs start with an empty checklist."
+
+### Client detail
+
+- Intake answers are open while the intake waits for review and folded behind "Show answers (x of y)" otherwise.
+- The last section is at least one screen tall so any tab can bring its section under the tabs; sections keep 16dp above them.
+- While the bundle loads, the title comes from a cached Clients list. A 404 shows ErrorState even with cached data (trashed elsewhere).
+- Completing a run uses an ink (not red) hold button: "Mark onboarding complete. A completed run cannot be reopened."
+- Intake badge tones are local (draft muted, submitted gold, reviewed ok): `GET /meta` sends no intake statuses.
+- Toasts: "Moved to trash.", "Intake marked reviewed.", "Onboarding marked complete.", "Task added.", "Marked <status>." with Undo.
+
+### Client sections
+
+- Access: with no grants the button says "Request access"; the sheet title is always "Request another access". Add buttons sit under the lists.
+- Files: 2 columns on phones, 3 from 600dp. Signed URLs are treated as expired 30 seconds early and kept in memory only. The image viewer is always dark and scales images over 8 megapixels down to the screen.
+- Agreements: copying the hash copies the full SHA-256. A sent then viewed agreement reads "Sent <time> · viewed <time>".
+- Calls: 12 shown, then "Show N more". The edit sheet's Qualified control also has "Not reviewed". The log sheet leaves CRM out of the sources (the server refuses it) and an empty "Booked at" means now. Before the clock starts: "60 day window, clock not started".
+- Team: "Active" is locked for an invited person ("Once they accept the invite"); role and status save on change, without an optimistic update.
+- Activity composer hint: "Appears in the client's portal. No email is sent."
+- Empty copy where the brief has none: "No booked calls yet.", "No one has portal access yet.", "No activity yet."
+- Writes refresh what the web admin would: Calls and Account refresh the client, the Clients list and Home; CRM, Team and Activity refresh only the client.
+
+### Search, quick actions, shortcuts, More
+
+- The search field is pinned at the bottom of the sheet, above the keyboard. Records are searched from the first character; previous results stay dimmed while typing.
+- Screens rank by title, then keywords, then words in any order, then letters in order ("prcng" finds Pricing).
+- Recent searches are tied to the user id, capped at 8 of 100 characters, saved when a result opens or the search key is pressed. Results are never written to disk.
+- Launcher shortcuts follow role and feature flags, are cleared on sign-out, and a shortcut that launched the app is handled once per run.
+- Sign out: "Sign out?" with "Hold to sign out"; when drafts exist the message says they will be deleted and the hold turns red. Sign-out works offline.

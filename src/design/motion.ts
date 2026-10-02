@@ -6,8 +6,7 @@ import {
   withDelay,
   withSpring,
   withTiming,
-  type EntryAnimationsValues,
-  type LayoutAnimation,
+  type EntryExitAnimationFunction,
   type WithSpringConfig,
   type WithTimingConfig,
 } from 'react-native-reanimated';
@@ -58,7 +57,7 @@ export const staggerDelay = (index: number) => (index < STAGGER_MAX ? index * ST
  * Use as `entering={enterPull(index)}` on an Animated.View.
  * Reanimated skips layout animations itself when the system reduces motion.
  */
-export function enterPull(index = 0): LayoutAnimation | ((v: EntryAnimationsValues) => LayoutAnimation) {
+export function enterPull(index = 0): EntryExitAnimationFunction {
   const delay = staggerDelay(index);
   return () => {
     'worklet';

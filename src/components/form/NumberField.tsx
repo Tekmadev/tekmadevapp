@@ -16,7 +16,7 @@ export type { NumberMode, RangeRule } from './numberInput';
 
 export type NumberFieldProps = Omit<
   BaseInputProps,
-  'value' | 'defaultValue' | 'onChangeText' | 'keyboardType' | 'inputMode' | 'maxLength' | 'softLimit' | 'showCount'
+  'value' | 'defaultValue' | 'onChange' | 'onChangeText' | 'keyboardType' | 'inputMode' | 'maxLength' | 'softLimit' | 'showCount'
 > & {
   /** 'integer' (default) or 'money' (dollars typed, cents stored). */
   mode?: NumberMode;

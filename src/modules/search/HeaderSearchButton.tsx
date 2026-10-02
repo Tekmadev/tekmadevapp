@@ -1,13 +1,20 @@
 import { Search } from 'lucide-react-native';
 
-import { Icon } from '@/components/Icon';
-import { PressableScale } from '@/components/PressableScale';
+import { IconButton } from '@/components/IconButton';
 
-/** STUB (phase 2): opens the global SearchSheet. No required props. */
+import { searchSheet } from './searchStore';
+
+/**
+ * The search button in every tab header (via TabHeaderActions). Opens the one
+ * global SearchSheet mounted in the signed-in layout. No required props.
+ */
 export function HeaderSearchButton() {
   return (
-    <PressableScale accessibilityLabel="Search" hitSlop={8} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
-      <Icon icon={Search} size={22} />
-    </PressableScale>
+    <IconButton
+      icon={Search}
+      accessibilityLabel="Search"
+      accessibilityHint="Searches screens, clients, leads and more"
+      onPress={searchSheet.open}
+    />
   );
 }
