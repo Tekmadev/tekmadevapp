@@ -78,7 +78,9 @@
     "lint": "expo lint",
     "test": "jest",
     "icons": "node scripts/generate-icons.mjs",
-    "postinstall": "node node_modules/@shopify/react-native-skia/scripts/install-libs.js"
+    "postinstall": "node node_modules/@shopify/react-native-skia/scripts/install-libs.js",
+    "version:bump": "node scripts/bump-version.mjs",
+    "apk": "bash scripts/build-apk.sh"
   },
   "private": true,
   "jest": {

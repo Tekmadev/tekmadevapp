@@ -29,6 +29,17 @@ npx eslint .
 npx jest
 ```
 
+## Release APK
+
+Every build gets a new version (semver name, versionCode always up by one):
+
+```bash
+npm run apk -- patch    # fixes: 0.2.0 -> 0.2.1
+npm run apk -- minor    # new features: 0.2.1 -> 0.3.0
+```
+
+The APK lands in `dist/tekmadev-admin-<version>.apk` and installs on a connected phone. `google-services.json` (Firebase, not in git) must be in the project root.
+
 ## Switching to the live API
 
 Set `EXPO_PUBLIC_API_MODE=live` (and `EXPO_PUBLIC_AUTH_MODE=supabase` with the project URL and publishable key) in `.env`, then rebuild the JS bundle. Every response is validated with zod in dev builds and schema drift is logged.
