@@ -11,18 +11,21 @@ import {
   publishPost,
   renameCategory,
   renderPostMarkdown,
+  requestMediaUpload,
   setPostStatus,
   trashPost,
   updatePost,
   type PostListParams,
 } from '@/api/endpoints/blog';
 import { ApiError } from '@/api/errors';
-import { blogRevisions, metaFixture } from '@/api/mock/fixtures/blog';
+import { blogMediaSlots, blogRevisions, metaFixture } from '@/api/mock/fixtures/blog';
 import {
+  BLOG_MEDIA_MAX_BYTES,
   metaFragment,
   zAuthors,
   zBlogCategories,
   zBlogCategory,
+  zMediaUpload,
   zPostDetail,
   zPostPage,
   zRenderResult,
@@ -96,6 +99,7 @@ describe('owner only', () => {
       setPostStatus('post_aireceptn', 'draft'),
       trashPost('post_aireceptn'),
       renderPostMarkdown('## Hi'),
+      requestMediaUpload({ fileName: 'cover.webp', size: 1024, type: 'image/webp' }),
       getCategories(),
       createCategory('Nope', key()),
       renameCategory('bcat_aiauto01', 'Nope'),
@@ -374,5 +378,57 @@ describe('GET /blog/authors', () => {
     expect(authors).toHaveLength(2);
     expect(authors[0]).toMatchObject({ name: 'Shajeed I.' });
     expect(authors[0].photoUrl).toBeTruthy();
+  });
+});
+
+describe('POST /blog/media', () => {
+  it('hands out a signed upload slot in the blog-media bucket and never takes the bytes', async () => {
+    const before = blogMediaSlots.length;
+    const slot = await requestMediaUpload({ fileName: 'Cover Photo.HEIC', size: 524_288, type: 'image/webp' });
+    expect(zMediaUpload.safeParse(slot).success).toBe(true);
+    expect(slot.bucket).toBe('blog-media');
+    expect(slot.path).toMatch(/^posts\/\d{4}\/\d{2}\/[0-9a-f]{8}-cover-photo\.webp$/);
+    expect(slot.token).toBeTruthy();
+    expect(slot.publicUrl).toBe(`https://mock-project.supabase.co/storage/v1/object/public/blog-media/${slot.path}`);
+    expect(blogMediaSlots).toHaveLength(before + 1);
+    expect(blogMediaSlots[before]).toMatchObject({ path: slot.path, size: 524_288, type: 'image/webp', fileName: 'Cover Photo.HEIC' });
+  });
+
+  it('takes PNG, JPG, WebP, AVIF and GIF, with the extension from the type', async () => {
+    const cases: [string, string][] = [
+      ['image/png', 'png'],
+      ['image/jpeg', 'jpg'],
+      ['image/webp', 'webp'],
+      ['image/avif', 'avif'],
+      ['image/gif', 'gif'],
+    ];
+    for (const [type, ext] of cases) {
+      const slot = await requestMediaUpload({ fileName: 'photo.bin', size: 2048, type });
+      expect(slot.path.endsWith(`-photo.${ext}`)).toBe(true);
+    }
+    // Two uploads of the same name never share a path.
+    const a = await requestMediaUpload({ fileName: 'same.webp', size: 10, type: 'image/webp' });
+    const b = await requestMediaUpload({ fileName: 'same.webp', size: 10, type: 'image/webp' });
+    expect(a.path).not.toBe(b.path);
+    // A name with nothing usable still gets a path.
+    expect((await requestMediaUpload({ fileName: '???.png', size: 10, type: 'image/png' })).path).toMatch(/-image\.png$/);
+  });
+
+  it('refuses SVG and anything that is not an allowed image with code "type"', async () => {
+    for (const type of ['image/svg+xml', 'image/heic', 'application/pdf', '']) {
+      const error = await apiError(requestMediaUpload({ fileName: 'logo.svg', size: 1024, type }));
+      expect(error.status).toBe(400);
+      expect(error.code).toBe('type');
+      expect(error.message).toBe('Use a PNG, JPG, WebP, AVIF or GIF image.');
+    }
+  });
+
+  it('refuses an empty file and anything over 10 MB with code "size"', async () => {
+    const empty = await apiError(requestMediaUpload({ fileName: 'a.png', size: 0, type: 'image/png' }));
+    expect([empty.status, empty.code, empty.message]).toEqual([400, 'size', 'That file is empty.']);
+    const tooBig = await apiError(requestMediaUpload({ fileName: 'a.png', size: BLOG_MEDIA_MAX_BYTES + 1, type: 'image/png' }));
+    expect([tooBig.status, tooBig.code, tooBig.message]).toEqual([400, 'size', 'That image is over 10 MB. Compress it and try again.']);
+    // Exactly 10 MB is fine.
+    expect((await requestMediaUpload({ fileName: 'a.png', size: BLOG_MEDIA_MAX_BYTES, type: 'image/png' })).bucket).toBe('blog-media');
   });
 });

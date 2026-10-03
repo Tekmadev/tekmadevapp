@@ -33,7 +33,6 @@ import { notice } from '@/lib/notice';
 import { finalizeSlug, slugifyLive } from '@/lib/text';
 
 import {
-  isPreviewableUrl,
   META_DESCRIPTION_TARGET,
   META_TITLE_TARGET,
   moveRow,
@@ -43,8 +42,8 @@ import {
   type EditorForm,
   type FormErrors,
 } from './form';
-import { useDebouncedValue } from './hooks';
-import { ImagePreview } from './ImagePreview';
+import { ImageUploadField } from '../media/ImageUploadField';
+import type { ImageUpload } from '../media/useImageUpload';
 import { statusOptions } from './labels';
 
 /** Sets one form field (the editor owns the form; the sheet edits it in place). */
@@ -477,42 +476,51 @@ export function AnswersTab({ form, onChange, errors }: TabProps) {
 /* Media                                                                */
 /* ------------------------------------------------------------------ */
 
-/** Cover image URL and alt text with a live preview, and the social image. */
-export function MediaTab({ form, onChange, errors }: TabProps) {
-  const cover = useDebouncedValue(form.coverImageUrl.trim(), 500);
-  const social = useDebouncedValue(form.socialImageUrl.trim(), 500);
+/** The editor's upload slots for the Media tab (they live in the editor, so an upload survives closing the sheet). */
+export type MediaUploads = { cover: ImageUpload; social: ImageUpload };
+
+export type MediaTabProps = TabProps & { uploads: MediaUploads };
+
+export const COVER_HINT = '1200 x 630 works everywhere: the post, the blog list and social shares.';
+
+/**
+ * Cover image (upload or link, live preview with remove, the size hint) and
+ * its alt text, required whenever there is a cover; then the social image.
+ */
+export function MediaTab({ form, onChange, errors, uploads }: MediaTabProps) {
   return (
     <View style={styles.tab}>
       <FormSection title="Cover image">
-        <TextField
-          label="Cover image URL"
+        <ImageUploadField
+          noun="cover image"
           value={form.coverImageUrl}
-          onChangeText={(v) => onChange('coverImageUrl', v)}
+          onChange={(v) => onChange('coverImageUrl', v)}
+          upload={uploads.cover}
           error={errors.coverImageUrl}
-          keyboardType="url"
-          autoCapitalize="none"
-          autoCorrect={false}
+          hint={COVER_HINT}
+          alt={form.coverImageAlt.trim()}
         />
-        {isPreviewableUrl(cover) ? <ImagePreview key={cover} url={cover} alt={form.coverImageAlt.trim()} /> : null}
         <TextField
           label="Alt text"
           value={form.coverImageAlt}
           onChangeText={(v) => onChange('coverImageAlt', v)}
           error={errors.coverImageAlt}
-          help="What the image shows, for screen readers and search."
+          help={
+            form.coverImageUrl.trim()
+              ? 'Required with a cover. What the image shows, for screen readers and search.'
+              : 'What the image shows, for screen readers and search.'
+          }
         />
       </FormSection>
       <FormSection title="Social image" description="Shown when the post is shared. 1200 by 630 pixels works best.">
-        <TextField
-          label="Social image URL"
+        <ImageUploadField
+          noun="social image"
           value={form.socialImageUrl}
-          onChangeText={(v) => onChange('socialImageUrl', v)}
+          onChange={(v) => onChange('socialImageUrl', v)}
+          upload={uploads.social}
           error={errors.socialImageUrl}
-          keyboardType="url"
-          autoCapitalize="none"
-          autoCorrect={false}
+          alt="Social image"
         />
-        {isPreviewableUrl(social) ? <ImagePreview key={social} url={social} alt="Social image" aspectRatio={1.91} /> : null}
       </FormSection>
     </View>
   );

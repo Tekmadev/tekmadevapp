@@ -6,11 +6,14 @@ import {
   zAuthors,
   zBlogCategories,
   zBlogCategory,
+  zMediaUpload,
   zPostDetail,
   zPostPage,
   zRenderResult,
   type Author,
   type BlogCategory,
+  type MediaUpload,
+  type MediaUploadRequest,
   type PostDetail,
   type PostPage,
   type PostStatus,
@@ -20,7 +23,7 @@ import {
 
 /**
  * Typed endpoints and query keys for the "blog" domain (owner only): posts,
- * the Markdown renderer behind Preview, categories and authors.
+ * the Markdown renderer behind Preview, image upload slots, categories and authors.
  *
  * Every post mutation returns the full post (`PostDetail`): put it straight
  * into `blogKeys.post(id)` and invalidate `blogKeys.lists()` and
@@ -114,6 +117,18 @@ export function trashPost(id: string) {
 /** POST /blog/render: Markdown to blocks for the native Preview (debounce 400ms). */
 export function renderPostMarkdown(markdown: string, signal?: AbortSignal) {
   return api.post<RenderResult>('/blog/render', { markdown }, { schema: zRenderResult, signal });
+}
+
+/**
+ * POST /blog/media: a signed upload slot in the public "blog-media" bucket.
+ * Send what is about to be uploaded (name, size in bytes, MIME type), never the
+ * bytes: those go straight to Supabase Storage with `uploadToSignedUrl`, then
+ * the post uses `publicUrl`. Owner only.
+ * 400 `type`: not a PNG, JPG, WebP, AVIF or GIF. 400 `size`: over 10 MB, or empty.
+ * No Idempotency-Key: it creates no record, and a retry simply gets a new slot.
+ */
+export function requestMediaUpload(input: MediaUploadRequest, signal?: AbortSignal) {
+  return api.post<MediaUpload>('/blog/media', input, { schema: zMediaUpload, signal });
 }
 
 /* ------------------------------------------------------------------ */

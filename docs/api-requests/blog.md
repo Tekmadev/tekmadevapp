@@ -94,3 +94,49 @@ Contract section 11 lists the blog endpoints and the block types, but leaves the
 ## 9. GET /meta
 
 `blogStatuses` (`{ value, label, tone }`: Draft muted, In review neutral, Published gold, Archived muted), `blogBlockTypes` (`{ value, label }`), `blogCategories` (`{ id, name, slug }`, as of the meta fetch; editors read `GET /blog/categories` for fresh counts).
+
+## 10. Image uploads (brief update 2026-09-30)
+
+The website's blog editor uploads images instead of taking pasted links, and the app now does the same. Images live in the **public Supabase Storage bucket `blog-media`**: PNG, JPG, WebP, AVIF or GIF, 10 MB at most, never SVG. The image bytes never go through the admin API.
+
+### `POST /blog/media` (owner only, 403 for managers)
+
+```ts
+// request: what is about to be uploaded
+{ fileName: string; size: number; type: string }   // size in bytes, type the MIME type ("image/webp")
+// response
+{ bucket: "blog-media"; path: string; token: string; publicUrl: string }
+```
+
+| Status | code | message |
+|---|---|---|
+| 400 | `type` | Use a PNG, JPG, WebP, AVIF or GIF image. |
+| 400 | `size` | That image is over 10 MB. Compress it and try again. |
+| 400 | `size` | That file is empty. |
+| 400 | `input` | Check the highlighted fields. (`size` sent as something other than a number) |
+
+The app shows `message` exactly as given, in signal red under the field (the body's "Insert image" shows it as a toast).
+
+What the mock does, which we assume the server does too (please confirm):
+
+- `type` is checked first, then `size`. A missing `size` counts as empty. 10 MB means 10 x 1024 x 1024 bytes; exactly that is accepted.
+- The path is `posts/<yyyy>/<mm>/<8 random hex>-<slugified file name>.<extension from the type>`, so two uploads never share a path and the stored extension always matches the declared type.
+- No Idempotency-Key: the call creates no record, and a retry simply gets a new slot.
+- `publicUrl` is the bucket's public object URL (`<project>/storage/v1/object/public/blog-media/<path>`), a full `https://` URL, so it passes the existing `coverImageUrl` / `socialImageUrl` checks.
+- In the mock the token is fake. The app skips the storage step in mock API mode and previews the file still on the phone.
+
+### Upload flow in the app
+
+1. Pick from the gallery (the system photo picker, no storage permission) or take a photo.
+2. Resize to at most 2400px wide and compress to WebP (JPEG where WebP cannot be written), lowering the quality step by step (0.82, 0.7, 0.55, 0.4) until it is under 10 MB. A GIF that already fits is uploaded unchanged, so it keeps its animation.
+3. Read the file into an ArrayBuffer; its byte count is the `size` we declare.
+4. `POST /blog/media { fileName, size, type }`.
+5. `supabase.storage.from(bucket).uploadToSignedUrl(path, token, bytes, { contentType: type })` with the app's own Supabase client (publishable key only; the token authorizes the upload).
+6. Use `publicUrl`: as `coverImageUrl` / `socialImageUrl`, or in the body as `![Describe the image](publicUrl)` on its own line.
+
+The cover's alt text stays a separate field (`coverImageAlt`) and the app requires it whenever there is a cover. Pasting an image link still works everywhere.
+
+Open questions for the server:
+
+- Should the bucket set a long `Cache-Control` on uploads? Paths are unique, so a year would be safe. The app sends supabase-js's default (`max-age=3600`).
+- Uploads that are never used by a saved post stay in the bucket (the writer removed the image, or left without saving). Is there (or should there be) a cleanup job?

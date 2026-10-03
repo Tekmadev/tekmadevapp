@@ -272,6 +272,8 @@ export type FormErrors = Partial<Record<string, string>>;
 export const TITLE_REQUIRED = 'Enter a title.';
 export const FAQ_INCOMPLETE = 'Each FAQ needs a question and an answer.';
 export const EMPTY_BODY = 'Add some body text before publishing.';
+/** The cover's alt text is required in the app whenever there is a cover (brief update 2026-09-30). */
+export const COVER_ALT_REQUIRED = 'Describe the cover image in a few words.';
 
 const HTTPS_URL = /^https:\/\/[^\s/$.?#][^\s]*\.[^\s]+$/i;
 
@@ -284,6 +286,7 @@ export function validateForm(form: EditorForm): FormErrors {
   for (const key of ['coverImageUrl', 'socialImageUrl'] as const) {
     if (form[key].trim() && !HTTPS_URL.test(form[key].trim())) errors[key] = 'Enter a full https:// image URL.';
   }
+  if (form.coverImageUrl.trim() && !form.coverImageAlt.trim()) errors.coverImageAlt = COVER_ALT_REQUIRED;
   return errors;
 }
 

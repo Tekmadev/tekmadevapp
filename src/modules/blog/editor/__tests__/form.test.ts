@@ -161,7 +161,17 @@ describe('validateForm', () => {
   });
 
   it('passes a complete form', () => {
-    expect(validateForm({ ...emptyForm(), title: 'T', coverImageUrl: 'https://images.tekmadev.com/a.jpg' })).toEqual({});
+    expect(
+      validateForm({ ...emptyForm(), title: 'T', coverImageUrl: 'https://images.tekmadev.com/a.jpg', coverImageAlt: 'A van' }),
+    ).toEqual({});
+  });
+
+  it('needs the cover alt text whenever there is a cover, and opens Media for it', () => {
+    const errors = validateForm({ ...emptyForm(), title: 'T', coverImageUrl: 'https://images.tekmadev.com/a.jpg', coverImageAlt: '  ' });
+    expect(errors.coverImageAlt).toBe('Describe the cover image in a few words.');
+    expect(firstErrorTab(errors)).toBe('media');
+    // No cover, no alt needed (a social image alone needs none either).
+    expect(validateForm({ ...emptyForm(), title: 'T', socialImageUrl: 'https://images.tekmadev.com/s.png' })).toEqual({});
   });
 });
 

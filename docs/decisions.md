@@ -509,3 +509,15 @@ I need no changes in files I do not own.
 ### Team
 - The temporary password is pre-filled: 14 characters, no look-alike characters.
 - After adding, the sheet stays open with the sign-in details and a Share button.
+
+## Blog images upload to storage (brief update 2026-09-30)
+
+- Images are picked (gallery or camera), resized to at most 2400px wide (the decoded, rotated width), and saved as WebP (JPEG fallback) at falling quality until under 10 MB. A GIF that already fits uploads unchanged so it stays animated; a GIF of unknown width is re-encoded.
+- Bytes are read before `POST /blog/media`, so `size` is exact. No Idempotency-Key: it creates no record and a retry gets a new slot. If the lowest quality is still over 10 MB, the file is sent so the server's message shows.
+- Mock API mode keeps the mock's https `publicUrl` (so saving passes the https check) and previews the processed file from memory for the session.
+- The storage upload gives up after 3 minutes: "That took too long. Nothing is lost: try again in a moment." Nothing goes to the bucket once the editor has closed. Temporary files are deleted after every attempt.
+- "Insert image" replaces the old Image tool; its sheet offers Choose from gallery, Take a photo and Use an image link. An uploaded image goes after a selection, the insertion point follows edits made during the upload, and "Describe the image" is selected on arrival (the body is focused only when no sheet or Preview is open).
+- Body upload errors are a toast; cover and social errors show in signal red under the link field. Cover alt text ("Describe the cover image in a few words.") is required when a cover is set; saving without it opens Details on Media.
+- Leaving during an upload: with other unsaved changes the usual Save / Discard / Keep editing sheet adds "An image is still uploading. If you leave now, it is not added to the post."; with nothing else unsaved it asks "Leave before the image is added?".
+- Camera refused: "Camera access is off. Allow it in Settings, or choose from the gallery." Closing the picker is silent. Previews use a 1200 x 630 shape.
+

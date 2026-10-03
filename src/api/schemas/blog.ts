@@ -160,6 +160,39 @@ export const zBlogCategories = z.array(zBlogCategory);
 export const CATEGORY_NAME_MAX = 60;
 
 /* ------------------------------------------------------------------ */
+/* Image uploads (POST /blog/media, brief update 2026-09-30)            */
+/* ------------------------------------------------------------------ */
+
+/** The public Supabase Storage bucket that holds blog images. */
+export const BLOG_MEDIA_BUCKET = 'blog-media';
+
+/** Image types the bucket takes: PNG, JPG, WebP, AVIF or GIF. Never SVG. */
+export const BLOG_MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/avif', 'image/gif'] as const;
+export type BlogMediaType = (typeof BLOG_MEDIA_TYPES)[number];
+
+/** The bucket's size limit: 10 MB. */
+export const BLOG_MEDIA_MAX_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Body of POST /blog/media: what is about to be uploaded, never the bytes.
+ * `size` is in bytes, `type` the MIME type ("image/webp").
+ */
+export type MediaUploadRequest = { fileName: string; size: number; type: string };
+
+/**
+ * A signed upload slot. Upload the bytes with the app's Supabase client:
+ * `storage.from(bucket).uploadToSignedUrl(path, token, bytes, { contentType })`
+ * (the token authorizes it; the publishable key is enough), then use `publicUrl`.
+ */
+export const zMediaUpload = z.object({
+  bucket: z.string(),
+  path: z.string(),
+  token: z.string(),
+  publicUrl: z.string(),
+});
+export type MediaUpload = z.infer<typeof zMediaUpload>;
+
+/* ------------------------------------------------------------------ */
 /* Rendered blocks (POST /blog/render)                                  */
 /* ------------------------------------------------------------------ */
 

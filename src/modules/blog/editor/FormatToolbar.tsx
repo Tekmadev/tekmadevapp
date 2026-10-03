@@ -29,6 +29,7 @@ import { PressableScale } from '@/components/PressableScale';
 import { Text } from '@/components/Text';
 import { useTheme } from '@/design/theme';
 import { layout, radius, space, type Tone } from '@/design/tokens';
+import { ButtonSpinner } from '@/loader/ButtonSpinner';
 
 export type ToolbarAction =
   | 'h2'
@@ -68,7 +69,7 @@ const GROUPS: Tool[][] = [
     { action: 'cta', icon: MousePointerClick, label: 'Call to action' },
     { action: 'divider', icon: SeparatorHorizontal, label: 'Divider' },
   ],
-  [{ action: 'image', icon: ImagePlus, label: 'Image' }],
+  [{ action: 'image', icon: ImagePlus, label: 'Insert image' }],
 ];
 
 const CALLOUTS: { variant: CalloutVariant; icon: LucideIcon; label: string; tone: Tone }[] = [
@@ -85,14 +86,18 @@ export type FormatToolbarProps = {
   onAction: (action: ToolbarAction) => void;
   onCallout: (variant: CalloutVariant) => void;
   onHideKeyboard: () => void;
+  /** An image for the body is uploading: "Insert image" shows the black hole and waits. */
+  imageUploading?: boolean;
 };
 
 /**
  * The formatting bar pinned above the keyboard while the body is being
  * written. One row that scrolls sideways; "Callout" opens its three variants
  * in place, so the keyboard never closes. Taps never take focus from the body.
+ * While an inserted image uploads, its button shows the black hole and every
+ * other tool keeps working.
  */
-export function FormatToolbar({ onAction, onCallout, onHideKeyboard }: FormatToolbarProps) {
+export function FormatToolbar({ onAction, onCallout, onHideKeyboard, imageUploading = false }: FormatToolbarProps) {
   const { colors } = useTheme();
   const [callouts, setCallouts] = useState(false);
 
@@ -136,6 +141,8 @@ export function FormatToolbar({ onAction, onCallout, onHideKeyboard }: FormatToo
                   key={tool.action}
                   icon={tool.icon}
                   label={tool.label}
+                  busy={tool.action === 'image' && imageUploading}
+                  busyLabel="Uploading image"
                   onPress={() => (tool.action === 'callout' ? setCallouts(true) : onAction(tool.action))}
                 />
               ))}
@@ -149,10 +156,27 @@ export function FormatToolbar({ onAction, onCallout, onHideKeyboard }: FormatToo
   );
 }
 
-function ToolButton({ icon, label, onPress }: { icon: LucideIcon; label: string; onPress: () => void }) {
+type ToolButtonProps = {
+  icon: LucideIcon;
+  label: string;
+  onPress: () => void;
+  /** Working: the black hole in place of the icon, and taps wait. */
+  busy?: boolean;
+  busyLabel?: string;
+};
+
+function ToolButton({ icon, label, onPress, busy = false, busyLabel }: ToolButtonProps) {
+  const { colors } = useTheme();
   return (
-    <PressableScale onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={styles.tool}>
-      <Icon icon={icon} size={20} color="ink2" />
+    <PressableScale
+      onPress={onPress}
+      disabled={busy}
+      accessibilityRole="button"
+      accessibilityLabel={busy ? (busyLabel ?? label) : label}
+      accessibilityState={{ busy, disabled: busy }}
+      style={styles.tool}
+    >
+      {busy ? <ButtonSpinner size={20} color={colors.gold} /> : <Icon icon={icon} size={20} color="ink2" />}
     </PressableScale>
   );
 }

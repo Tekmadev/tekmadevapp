@@ -319,6 +319,48 @@ export function insertImage(source: string, selection: Selection, url: string, a
   return insertBlock(source, selection, imageMarkdown(url, alt, caption), 'after');
 }
 
+/** The alt text an uploaded image starts with (brief update 2026-09-30). */
+export const IMAGE_ALT_PLACEHOLDER = 'Describe the image';
+
+/**
+ * "Insert image" after an upload: `![Describe the image](url)` on its own line
+ * at the cursor (blank lines around it as needed), with "Describe the image"
+ * selected so typing replaces it with the real alt text. Selected text is never
+ * replaced (the upload finishes seconds after the tap): the image goes after it.
+ */
+export function insertUploadedImage(source: string, selection: Selection, url: string): Edit {
+  const { end } = clampSelection(source, selection);
+  const block = `![${IMAGE_ALT_PLACEHOLDER}](${cleanUrl(url)})`;
+  return insertBlock(source, { start: end, end }, block, { start: 2, end: 2 + IMAGE_ALT_PLACEHOLDER.length });
+}
+
+/**
+ * Where a selection made in `before` sits in `after`, when the text changed in
+ * the meantime (an upload that finishes after the writer kept typing still
+ * lands where the cursor was at the tap). Apply it on every change for exact
+ * results. The change is found from the common start and end of the two texts:
+ * a point before it stays, a point after it moves by the change in length, and
+ * a point inside replaced text goes to where the change starts. Typing exactly
+ * at the point leaves the point before the new text.
+ */
+export function mapSelection(before: string, after: string, selection: Selection): Selection {
+  if (before === after) return clampSelection(after, selection);
+  const max = Math.min(before.length, after.length);
+  let prefix = 0;
+  while (prefix < max && before.charCodeAt(prefix) === after.charCodeAt(prefix)) prefix++;
+  let suffix = 0;
+  while (
+    suffix < max - prefix &&
+    before.charCodeAt(before.length - 1 - suffix) === after.charCodeAt(after.length - 1 - suffix)
+  ) {
+    suffix++;
+  }
+  const changedEnd = before.length - suffix;
+  const delta = after.length - before.length;
+  const map = (point: number) => (point <= prefix ? point : point >= changedEnd ? point + delta : prefix);
+  return clampSelection(after, { start: map(selection.start), end: map(selection.end) });
+}
+
 /** Text the link sheet starts with: the selection, on one line. */
 export function selectedText(source: string, selection: Selection): string {
   const { start, end } = clampSelection(source, selection);

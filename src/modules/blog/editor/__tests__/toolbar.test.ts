@@ -2,6 +2,7 @@ import {
   ANSWER_QUESTION,
   ANSWER_TEXT,
   CTA_HEADING,
+  IMAGE_ALT_PLACEHOLDER,
   imageMarkdown,
   insertAnswer,
   insertBlock,
@@ -11,8 +12,10 @@ import {
   insertImage,
   insertLink,
   insertTable,
+  insertUploadedImage,
   lineRange,
   linkMarkdown,
+  mapSelection,
   selectedText,
   toggleInline,
   toggleLinePrefix,
@@ -269,5 +272,73 @@ describe('links and images', () => {
   it('reads the selected text on one line', () => {
     const { text, selection } = parse('a [b\nc] d');
     expect(selectedText(text, selection)).toBe('b c');
+  });
+});
+
+describe('insertUploadedImage', () => {
+  const url = 'https://mock-project.supabase.co/storage/v1/object/public/blog-media/posts/2026/10/1a2b3c4d-van.webp';
+
+  it('puts the image on its own line at the cursor and selects the alt placeholder', () => {
+    const { text, selection } = parse('First paragraph.|\n\nSecond.');
+    const edit = insertUploadedImage(text, selection, url);
+    expect(show(edit)).toBe(`First paragraph.\n\n![[Describe the image]](${url})\n\nSecond.`);
+    expect(edit.text.slice(edit.selection.start, edit.selection.end)).toBe(IMAGE_ALT_PLACEHOLDER);
+  });
+
+  it('splits a paragraph with blank lines when the cursor is inside it', () => {
+    const { text, selection } = parse('Hello |world');
+    expect(insertUploadedImage(text, selection, url).text).toBe(`Hello\n\n![Describe the image](${url})\n\nworld`);
+  });
+
+  it('starts an empty body without blank lines before the image', () => {
+    const edit = insertUploadedImage('', { start: 0, end: 0 }, url);
+    expect(edit.text).toBe(`![Describe the image](${url})\n\n`);
+    expect(edit.selection).toEqual({ start: 2, end: 2 + IMAGE_ALT_PLACEHOLDER.length });
+  });
+
+  it('never replaces selected text: the image goes after it', () => {
+    const { text, selection } = parse('Keep [these words] here');
+    expect(insertUploadedImage(text, selection, url).text).toBe(`Keep these words\n\n![Describe the image](${url})\n\nhere`);
+  });
+
+  it('encodes spaces and parentheses so the Markdown stays whole', () => {
+    expect(insertUploadedImage('', { start: 0, end: 0 }, 'https://x.com/a b(1).webp').text).toBe(
+      '![Describe the image](https://x.com/a%20b%281%29.webp)\n\n',
+    );
+  });
+});
+
+describe('mapSelection', () => {
+  const at = (n: number): Selection => ({ start: n, end: n });
+
+  it('keeps a point when the text changed after it', () => {
+    expect(mapSelection('Hello world', 'Hello world, again', at(5))).toEqual(at(5));
+  });
+
+  it('moves a point by what was typed or deleted before it', () => {
+    expect(mapSelection('Hello world', 'Oh, hello world', at(6))).toEqual(at(10));
+    expect(mapSelection('Hello big world', 'Hello world', at(10))).toEqual(at(6));
+  });
+
+  it('leaves the point before text typed exactly at it', () => {
+    expect(mapSelection('ab', 'aXYZb', at(1))).toEqual(at(1));
+  });
+
+  it('sends a point inside deleted text to where the deletion starts', () => {
+    expect(mapSelection('Hello world', 'Hello ', at(8))).toEqual(at(6));
+  });
+
+  it('follows a run of single edits exactly (the editor maps on every change)', () => {
+    let text = 'Intro.\n\nOutro.';
+    let anchor = at(6);
+    for (const next of ['Big intro.\n\nOutro.', 'Big intro.\n\nOutro, longer.', 'A big intro.\n\nOutro, longer.']) {
+      anchor = mapSelection(text, next, anchor);
+      text = next;
+    }
+    expect(text.slice(0, anchor.start)).toBe('A big intro.');
+  });
+
+  it('keeps a selection inside the text', () => {
+    expect(mapSelection('abc', 'abc', { start: 10, end: 2 })).toEqual({ start: 2, end: 3 });
   });
 });

@@ -9,7 +9,7 @@ import { Sheet } from '@/components/sheet/Sheet';
 import { useTheme } from '@/design/theme';
 import { space } from '@/design/tokens';
 
-import { AnswersTab, BasicsTab, MediaTab, SearchTab, type SetField } from './DetailsTabs';
+import { AnswersTab, BasicsTab, MediaTab, SearchTab, type MediaUploads, type SetField } from './DetailsTabs';
 import type { DetailsTab, EditorForm, FormErrors } from './form';
 
 const TABS: readonly ScrollTabItem<DetailsTab>[] = [
@@ -32,6 +32,8 @@ export type DetailsSheetProps = {
   meta: Meta | undefined;
   authors: Author[] | undefined;
   categories: BlogCategory[] | undefined;
+  /** The cover and social image uploads (kept by the editor, so closing the sheet never drops one). */
+  uploads: MediaUploads;
   /** "Save changes" or "Create post". */
   saveLabel: string;
   savePendingLabel: string;
@@ -58,6 +60,7 @@ export function DetailsSheet({
   meta,
   authors,
   categories,
+  uploads,
   saveLabel,
   savePendingLabel,
   canSave,
@@ -78,7 +81,7 @@ export function DetailsSheet({
       panel = <AnswersTab form={form} onChange={onChange} errors={errors} />;
       break;
     case 'media':
-      panel = <MediaTab form={form} onChange={onChange} errors={errors} />;
+      panel = <MediaTab form={form} onChange={onChange} errors={errors} uploads={uploads} />;
       break;
   }
 

@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, useNavigation } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
-import { Archive, ExternalLink, EyeOff, Send, SlidersHorizontal, Sparkles, Trash2 } from 'lucide-react-native';
+import { Archive, ExternalLink, EyeOff, Link2, Send, SlidersHorizontal, Sparkles, Trash2 } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Keyboard, StyleSheet, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardStickyView } from 'react-native-keyboard-controller';
@@ -46,6 +46,9 @@ import { notice } from '@/lib/notice';
 import { drafts } from '@/lib/storage';
 import { metaQuery } from '@/modules/overview/hooks';
 
+import { ImageSourceSheet } from '../media/ImageSourceSheet';
+import type { ImageSource } from '../media/pick';
+import { useImageUpload } from '../media/useImageUpload';
 import { ArticlePreview, type PreviewAuthor } from './ArticlePreview';
 import { DetailsSheet } from './DetailsSheet';
 import type { SetField } from './DetailsTabs';
@@ -81,6 +84,8 @@ import {
   insertImage,
   insertLink,
   insertTable,
+  insertUploadedImage,
+  mapSelection,
   selectedText,
   toggleInline,
   toggleLinePrefix,
@@ -172,6 +177,8 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
   const [pendingAction, setPendingAction] = useState<NavAction | null>(null);
   const [linkSheet, setLinkSheet] = useState<{ selection: Selection; text: string } | null>(null);
   const [imageSheet, setImageSheet] = useState<{ selection: Selection } | null>(null);
+  /** "Insert image" was tapped: gallery, camera or a link, for the cursor at the tap. */
+  const [imageChooser, setImageChooser] = useState<{ selection: Selection } | null>(null);
 
   const bodyRef = useRef<TextInput>(null);
   const selectionRef = useRef<Selection>({ start: 0, end: 0 });
@@ -179,6 +186,11 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
   const formRef = useRef(form);
   /** Set once leaving is decided (saved, discarded, created, trashed): the guard lets it through. */
   const leavingRef = useRef(false);
+  /**
+   * Where an uploading body image goes: the cursor at the tap, moved along with
+   * every edit made while it uploads (so typing elsewhere never shifts it).
+   */
+  const bodyAnchorRef = useRef<Selection | null>(null);
   useEffect(() => {
     formRef.current = form;
   });
@@ -209,6 +221,8 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
   /* ---------- editing ---------- */
 
   const update = (next: EditorForm) => {
+    const anchor = bodyAnchorRef.current;
+    if (anchor && next.body !== formRef.current.body) bodyAnchorRef.current = mapSelection(formRef.current.body, next.body, anchor);
     formRef.current = next;
     setForm(next);
     autosave.schedule(next);
@@ -219,11 +233,51 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
     if (errors[key]) setErrors(withoutKey(errors, key));
   };
 
-  const applyEdit = (edit: Edit) => {
+  /** A toolbar edit: the new body and selection, and the body takes the focus (unless `focus` is false). */
+  const applyEdit = (edit: Edit, focus = true) => {
     update({ ...formRef.current, body: edit.text });
     selectionRef.current = edit.selection;
     setForcedSelection(edit.selection);
-    bodyRef.current?.focus();
+    if (focus) bodyRef.current?.focus();
+  };
+
+  /* ---------- image uploads ---------- */
+
+  // Kept here, not in the Details sheet or the toolbar, so closing either never loses an upload in flight.
+  const coverUpload = useImageUpload({ onUploaded: (url) => setField('coverImageUrl', url) });
+  const socialUpload = useImageUpload({ onUploaded: (url) => setField('socialImageUrl', url) });
+  const bodyUpload = useImageUpload({
+    onUploaded: (url) => {
+      const at = bodyAnchorRef.current ?? selectionRef.current;
+      bodyAnchorRef.current = null;
+      // Behind the Preview or any open sheet the text goes in, but the body does not take
+      // the focus (it would raise the keyboard under the sheet, or steal a sheet field's focus).
+      const covered =
+        previewing ||
+        detailsOpen ||
+        leaveOpen ||
+        publishOpen ||
+        trashOpen ||
+        linkSheet !== null ||
+        imageSheet !== null ||
+        imageChooser !== null;
+      applyEdit(insertUploadedImage(formRef.current.body, at, url), !covered);
+    },
+    onError: (message) => {
+      bodyAnchorRef.current = null;
+      notice.err(message);
+    },
+    onCancel: () => {
+      bodyAnchorRef.current = null;
+    },
+  });
+  const uploading = coverUpload.uploading || socialUpload.uploading || bodyUpload.uploading;
+
+  const pickBodyImage = (source: ImageSource, at: Selection) => {
+    if (bodyUpload.uploading) return;
+    // The image goes after a selection, never in place of it.
+    bodyAnchorRef.current = { start: at.end, end: at.end };
+    bodyUpload.start(source);
   };
 
   const onToolbar = (action: ToolbarAction) => {
@@ -257,7 +311,9 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
         setLinkSheet({ selection: sel, text: selectedText(text, sel) });
         break;
       case 'image':
-        setImageSheet({ selection: sel });
+        if (bodyUpload.uploading) break;
+        Keyboard.dismiss();
+        setImageChooser({ selection: sel });
         break;
     }
   };
@@ -493,7 +549,8 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
   /* ---------- unsaved-changes guard ---------- */
 
   // Hardware back, the header back and the back gesture all remove the screen: ask first.
-  usePreventRemove(dirty, ({ data }) => {
+  // An image still uploading counts too: leaving drops it.
+  usePreventRemove(dirty || uploading, ({ data }) => {
     if (leavingRef.current) {
       navigation.dispatch(data.action);
       return;
@@ -602,7 +659,9 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
             {badgeInBar ? null : <Badge label={status.label} tone={status.tone} style={styles.metaBadge} />}
             {serverPost?.source === 'ai_draft' ? <Badge label="AI draft" tone="neutral" icon={Sparkles} style={styles.metaBadge} /> : null}
             <Text variant="small" color="ink3" numberOfLines={1} style={styles.flex}>
-              {[categoryName ?? 'No category', countLabel(words, 'word', 'words')].join(' · ')}
+              {[categoryName ?? 'No category', countLabel(words, 'word', 'words'), bodyUpload.uploading ? 'Uploading image' : null]
+                .filter(Boolean)
+                .join(' · ')}
             </Text>
           </View>
           {!online ? (
@@ -647,6 +706,7 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
                 onAction={onToolbar}
                 onCallout={(variant) => applyEdit(insertCallout(formRef.current.body, selectionRef.current, variant))}
                 onHideKeyboard={() => Keyboard.dismiss()}
+                imageUploading={bodyUpload.uploading}
               />
             </View>
           </KeyboardStickyView>
@@ -680,7 +740,7 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
         previewing={previewing}
         onTogglePreview={togglePreview}
         onBack={goBack}
-        progress={refetching || pendingId === 'status'}
+        progress={refetching || pendingId === 'status' || uploading}
         save={
           <PendingButton
             label={saveLabel}
@@ -708,6 +768,7 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
         meta={meta.data}
         authors={authors.data}
         categories={categories.data}
+        uploads={{ cover: coverUpload, social: socialUpload }}
         saveLabel={saveLabel}
         savePendingLabel={savePendingLabel}
         canSave={dirty}
@@ -747,9 +808,12 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
           setLeaveOpen(false);
           setPendingAction(null);
         }}
+        dirty={dirty}
+        uploading={uploading}
         onSave={() => save('leave')}
         onSaveError={onSaveError}
         onDiscard={discard}
+        onLeave={leave}
       />
 
       {linkSheet ? (
@@ -763,6 +827,20 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
           }}
         />
       ) : null}
+      <ImageSourceSheet
+        visible={imageChooser !== null}
+        onClose={() => setImageChooser(null)}
+        title="Insert image"
+        onPick={(source) => pickBodyImage(source, imageChooser?.selection ?? selectionRef.current)}
+        extra={[
+          {
+            label: 'Use an image link',
+            icon: Link2,
+            hint: 'Paste a link, then add the alt text and a caption.',
+            onPress: () => setImageSheet({ selection: imageChooser?.selection ?? selectionRef.current }),
+          },
+        ]}
+      />
       {imageSheet ? (
         <ImageSheet
           onClose={() => setImageSheet(null)}

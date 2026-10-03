@@ -1,20 +1,48 @@
-import { zPostStatus, CATEGORY_NAME_MAX, type Faq, type PostStatus } from '../../schemas/blog';
+import {
+  BLOG_MEDIA_BUCKET,
+  BLOG_MEDIA_MAX_BYTES,
+  BLOG_MEDIA_TYPES,
+  zPostStatus,
+  CATEGORY_NAME_MAX,
+  type BlogMediaType,
+  type Faq,
+  type MediaUpload,
+  type PostStatus,
+} from '../../schemas/blog';
 import {
   BLOG_AUTHORS,
   blogCategories,
+  blogMediaSlots,
   blogPosts,
   blogRevisions,
   findAuthor,
   findCategory,
   findLivePost,
   livePosts,
+  MOCK_STORAGE_ORIGIN,
   toCategory,
   toPostDetail,
   toPostRow,
   type PostRecord,
 } from '../fixtures/blog';
 import { renderMarkdown, slugify } from '../markdown';
-import { bool, fail, matches, mockId, notFound, nowIso, ok, paginate, str, type MockContext, type MockResult, type MockRoute } from '../router';
+import {
+  bool,
+  fail,
+  matches,
+  mockId,
+  mockUuid,
+  notFound,
+  num,
+  nowIso,
+  ok,
+  paginate,
+  str,
+  torontoDate,
+  type MockContext,
+  type MockResult,
+  type MockRoute,
+} from '../router';
 
 /**
  * Mock routes for the "blog" domain (contract section 11, Marketing > Blog).
@@ -228,6 +256,35 @@ function readCategoryName(body: Record<string, unknown>): string | MockResult {
 
 const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
+/* ------------------------------------------------------------------ */
+/* Image upload slots (POST /blog/media)                                */
+/* ------------------------------------------------------------------ */
+
+const MEDIA_TYPE_ERROR = 'Use a PNG, JPG, WebP, AVIF or GIF image.';
+const MEDIA_TOO_BIG = 'That image is over 10 MB. Compress it and try again.';
+const MEDIA_EMPTY = 'That file is empty.';
+
+const MEDIA_EXTENSION: Record<BlogMediaType, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/avif': 'avif',
+  'image/gif': 'gif',
+};
+
+const isMediaType = (value: string): value is BlogMediaType => (BLOG_MEDIA_TYPES as readonly string[]).includes(value);
+
+/**
+ * The object path for an upload: `posts/2026/10/1a2b3c4d-cover-photo.webp`.
+ * The name is slugified and the extension always follows the type, so a file
+ * called "x.svg" sent as image/png is stored as PNG.
+ */
+function mediaPath(fileName: string, type: BlogMediaType): string {
+  const base = slugify(fileName.replace(/\.[^./]*$/, ''), 60) || 'image';
+  const [year, month] = torontoDate().split('-');
+  return `posts/${year}/${month}/${mockUuid().slice(0, 8)}-${base}.${MEDIA_EXTENSION[type]}`;
+}
+
 export const routes: MockRoute[] = [
   {
     method: 'GET',
@@ -392,6 +449,33 @@ export const routes: MockRoute[] = [
       const markdown = body.markdown;
       if (typeof markdown !== 'string') return fail(400, 'markdown', 'Send the Markdown to render.', { markdown: 'Send the Markdown to render.' });
       return ok(renderMarkdown(markdown));
+    },
+  },
+  {
+    method: 'POST',
+    path: '/blog/media',
+    ownerOnly: true,
+    latency: 'fast',
+    handler: ({ body }) => {
+      // The type is checked first, then the size. The bytes never come here.
+      const type = str(body.type)?.trim().toLowerCase() ?? '';
+      if (!isMediaType(type)) return fail(400, 'type', MEDIA_TYPE_ERROR);
+      if (body.size === undefined || body.size === null) return fail(400, 'size', MEDIA_EMPTY);
+      const size = num(body.size);
+      if (size === undefined) return fail(400, 'input', 'Check the highlighted fields.', { size: 'Must be a number of bytes.' });
+      if (size <= 0) return fail(400, 'size', MEDIA_EMPTY);
+      if (size > BLOG_MEDIA_MAX_BYTES) return fail(400, 'size', MEDIA_TOO_BIG);
+      const fileName = str(body.fileName)?.trim() || 'image';
+      const path = mediaPath(fileName, type);
+      const slot: MediaUpload = {
+        bucket: BLOG_MEDIA_BUCKET,
+        path,
+        // Fake: in mock mode the app skips the storage upload.
+        token: `mock-upload.${mockUuid()}`,
+        publicUrl: `${MOCK_STORAGE_ORIGIN}/storage/v1/object/public/${BLOG_MEDIA_BUCKET}/${path}`,
+      };
+      blogMediaSlots.push({ ...slot, fileName, size, type, createdAt: nowIso() });
+      return ok(slot);
     },
   },
   {

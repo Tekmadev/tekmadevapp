@@ -810,3 +810,29 @@ This app becomes the founder's control centre for automations that do not exist 
 Quality bar for every phase: TypeScript with no `any` in app code, no warnings in the console, 60fps scrolling on long lists (FlashList), no layout jumps when data loads, every screen checked in light and dark, with font scale 1.3, with TalkBack, offline, and with reduced motion on. Unit tests for formatting (money, Toronto dates), the deep link mapper, the loader keyframe math, and the API error mapping.
 
 When you finish a phase, give the owner: what was built, screenshots (light and dark), anything that is mocked, and what you need from him next.
+
+## Update (2026-09-30): blog images upload to storage
+
+The website's blog editor no longer needs pasted image links. The app works the same way.
+
+Storage
+- Images go to the public Supabase Storage bucket "blog-media": PNG, JPG, WebP, AVIF or GIF only, 10 MB max, no SVG.
+
+API (part of the contract and the mock adapter)
+- POST /blog/media  { fileName, size, type }  ->  { bucket, path, token, publicUrl }
+- Owner only (403 for managers).
+- Errors (400, show the message as given):
+  - code "type": "Use a PNG, JPG, WebP, AVIF or GIF image."
+  - code "size": "That image is over 10 MB. Compress it and try again." or "That file is empty."
+- Upload flow: call POST /blog/media, read the picked file into an ArrayBuffer, then upload it with the app's Supabase client: supabase.storage.from(bucket).uploadToSignedUrl(path, token, data, { contentType }). The token authorizes the upload; the publishable key is enough. Then use publicUrl. Never send the image bytes through the admin API.
+
+Blog editor
+- Cover image and Social image fields:
+  - An Upload button: pick from the gallery or take a photo (expo-image-picker).
+  - Before uploading, resize to at most 2400px wide and compress to WebP or JPEG under 10 MB (expo-image-manipulator).
+  - While uploading, the button shows the black hole button spinner and the label "Uploading".
+  - After upload: a live preview thumbnail with a remove (X) button. Pasting a link still works.
+  - Hint under the cover: "1200 x 630 works everywhere: the post, the blog list and social shares."
+  - Errors show in signal red under the field.
+- Body: an "Insert image" button in the formatting toolbar. It uploads the image, inserts ![Describe the image](url) on its own line at the cursor, and selects "Describe the image" so the alt text can be typed straight away.
+- Cover alt text stays a separate field, required in the app.

@@ -646,6 +646,32 @@ export const blogRevisions: RevisionRecord[] = blogPosts
   .map((p, i) => ({ id: `rev_seed${i.toString().padStart(4, '0')}`, postId: p.id, at: p.updatedAt, by: 'Shajeed I.', title: p.title, bodyMarkdown: p.bodyMarkdown }));
 
 /* ------------------------------------------------------------------ */
+/* Image upload slots (POST /blog/media)                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Where the mock's "public" bucket lives. Nothing is stored there: in mock mode
+ * the app skips the storage upload (the token is fake) and previews the file
+ * it kept on the phone instead.
+ */
+export const MOCK_STORAGE_ORIGIN = 'https://mock-project.supabase.co';
+
+/** A signed upload slot handed out by POST /blog/media. */
+export type MediaSlotRecord = {
+  bucket: string;
+  path: string;
+  token: string;
+  publicUrl: string;
+  fileName: string;
+  size: number;
+  type: string;
+  createdAt: string;
+};
+
+/** Every slot handed out, oldest first (tests read it; nothing else does). */
+export const blogMediaSlots: MediaSlotRecord[] = [];
+
+/* ------------------------------------------------------------------ */
 /* Lookups and serializers                                              */
 /* ------------------------------------------------------------------ */
 

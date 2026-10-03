@@ -155,7 +155,15 @@
           }
         }
       ],
-      "./plugins/withLauncherLabel.js"
+      "./plugins/withLauncherLabel.js",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Tekmadev Admin uses your photos to add images to blog posts.",
+          "cameraPermission": "Tekmadev Admin uses the camera to take photos for blog posts.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

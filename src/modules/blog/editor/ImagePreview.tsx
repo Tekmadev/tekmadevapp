@@ -8,6 +8,8 @@ import { Text } from '@/components/Text';
 import { useTheme } from '@/design/theme';
 import { radius, space } from '@/design/tokens';
 
+import { displayUri } from '../media/localImages';
+
 export type ImagePreviewProps = {
   url: string;
   /** What TalkBack reads, and what shows when the image cannot load. */
@@ -21,6 +23,8 @@ export type ImagePreviewProps = {
  * A fixed-ratio frame for an image URL (cover, social card, an image block), so
  * nothing jumps while it loads. A URL that does not load shows a calm fallback
  * with the alt text. Give it `key={url}` so a new URL gets a fresh try.
+ * In mock API mode an image uploaded this run shows from the phone (see
+ * media/localImages.ts).
  */
 export function ImagePreview({ url, alt, aspectRatio = 16 / 9, style }: ImagePreviewProps) {
   const { colors } = useTheme();
@@ -36,7 +40,7 @@ export function ImagePreview({ url, alt, aspectRatio = 16 / 9, style }: ImagePre
         </View>
       ) : (
         <Image
-          source={{ uri: url }}
+          source={{ uri: displayUri(url) }}
           accessibilityLabel={alt || undefined}
           accessible={!!alt}
           contentFit="cover"
