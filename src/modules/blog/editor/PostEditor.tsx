@@ -3,7 +3,7 @@ import { router, useNavigation } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { Archive, ExternalLink, EyeOff, Link2, Send, SlidersHorizontal, Sparkles, Trash2 } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { Keyboard, StyleSheet, TextInput, View } from 'react-native';
+import { Keyboard, Platform, StyleSheet, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardStickyView } from 'react-native-keyboard-controller';
 import Animated, { FadeIn, useDerivedValue, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -326,6 +326,11 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
   const previewingSV = useSharedValue(false);
   const editScroll = useQuickReturn(hidden, hiddenTarget);
   const previewScroll = useQuickReturn(hidden, hiddenTarget);
+  // Android: the body's height comes from the EditText's own text layout (plus a
+  // spare line). Android ignores scrollEnabled={false}, and a box even a pixel
+  // shorter than its text scrolls itself, so a drag moved the caret instead of
+  // scrolling the page.
+  const [bodyContentHeight, setBodyContentHeight] = useState(0);
   // Only the shared values go into the worklet: the scroll objects also hold the
   // event handlers, which Worklets cannot copy to the UI thread (it crashes).
   const editY = editScroll.y;
@@ -692,6 +697,11 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
             placeholderTextColor={colors.ink4}
             multiline
             scrollEnabled={false}
+            onContentSizeChange={(e) => {
+              if (Platform.OS !== 'android') return;
+              const next = Math.ceil(e.nativeEvent.contentSize.height);
+              if (next !== bodyContentHeight) setBodyContentHeight(next);
+            }}
             textAlignVertical="top"
             autoCapitalize="sentences"
             maxFontSizeMultiplier={MAX_FONT_SCALE}
@@ -699,7 +709,14 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
             selectionHandleColor={colors.gold}
             cursorColor={colors.gold}
             accessibilityLabel="Post body, Markdown"
-            style={[type.editor, styles.body, { color: colors.ink }]}
+            style={[
+              type.editor,
+              styles.body,
+              { color: colors.ink },
+              Platform.OS === 'android' && bodyContentHeight > 0
+                ? { height: Math.max(BODY_MIN_HEIGHT, bodyContentHeight + type.editor.lineHeight) }
+                : null,
+            ]}
           />
         </KeyboardAwareScrollView>
 
@@ -859,6 +876,8 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
   );
 }
 
+const BODY_MIN_HEIGHT = 320;
+
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   flex: { flex: 1 },
@@ -868,5 +887,5 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: space[3], marginTop: space[3] },
   metaBadge: { alignSelf: 'center' },
   offlineNote: { marginTop: space[2] },
-  body: { minHeight: 320, marginTop: space[6], padding: 0 },
+  body: { minHeight: BODY_MIN_HEIGHT, marginTop: space[6], padding: 0 },
 });
