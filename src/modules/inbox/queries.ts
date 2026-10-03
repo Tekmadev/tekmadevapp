@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 
 import { getNotificationSummary, notificationKeys } from '@/api/endpoints/notifications';
+import { usePushState } from '@/modules/push/store';
 
 /**
  * The inbox summary feeds the tab badge and the Inbox header. It polls every 45s
@@ -13,4 +14,9 @@ export function inboxSummaryQuery(options: { pushLive?: boolean } = {}) {
     queryFn: ({ signal }) => getNotificationSummary(signal),
     refetchInterval: options.pushLive ? 120_000 : 45_000,
   });
+}
+
+/** Push is registered on this phone: the bell can poll less often (brief section 4). */
+export function usePushLive(): boolean {
+  return usePushState((state) => state.status === 'registered');
 }

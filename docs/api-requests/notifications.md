@@ -70,3 +70,68 @@ notificationCategories: { value: Category; label: string; ownerOnly: boolean }[]
 notificationSeverities: { value: Severity; label: string; tone: Tone }[]           // info neutral, success ok, warning warn, critical signal
 notificationEvents: { key: string; label: string; category: Category; severity: Severity; needsAction: boolean }[]
 ```
+
+## 7. Push delivery: what the server sends through the Expo push API
+
+The app registers each phone with `POST /devices` (an Expo push token, `ExponentPushToken[...]`) and handles everything below (`src/modules/push`). Every field below is in the Expo push API's message format (checked 2026-10-03): `tag` (Android) replaces an entry already shown with the same tag, `collapseId` coalesces messages still in transit (FCM `collapse_key`), and a `channelId` the phone does not have means the notification is not shown at all. The app (expo-notifications 57.0.21) reads `data` the same way whether the push arrives in the foreground or is tapped from the shade.
+
+**When.** For each new or bumped notification row, push to every phone of every staff member who can see the row (managers never get owner-audience rows; test rows go to owners only), when that person has **Push on** for the row's category and the category is **not Quiet** for them. A bump sends again.
+
+**How.** `POST https://exp.host/--/api/v2/push/send` (at most 100 messages per request; send the project's Expo access token if "enhanced security for push" is on). One message per device:
+
+```json
+{
+  "to": "ExponentPushToken[...]",
+  "title": "<row title>",
+  "body": "<row body, or the event label when the row has no body>",
+  "data": {
+    "notificationId": "<row id>",
+    "url": "<action_url, or null>",
+    "category": "<leads|sales|billing|clients|audience|team|system>",
+    "severity": "<info|success|warning|critical>"
+  },
+  "channelId": "<category>, or <category>-critical when severity is critical",
+  "tag": "<row id>",
+  "collapseId": "<row id>",
+  "priority": "high",
+  "sound": "default",
+  "ttl": 86400
+}
+```
+
+| Field | Rule |
+|---|---|
+| `data` | Exactly these four keys (JSON values; `url` may be null or left out). The app reads the category and severity leniently: an unknown value falls back to System and info. |
+| `channelId` | Required on Android: a push whose channel does not exist on the phone is **not shown**. The app creates these 14 channels at startup: `leads`, `sales`, `billing`, `clients`, `audience`, `team`, `system`, and `leads-critical`, `sales-critical`, `billing-critical`, `clients-critical`, `audience-critical`, `team-critical`, `system-critical` (high importance, heads-up). A category the app does not know yet must use `system` / `system-critical` until an app update adds its channel. |
+| `tag` | The row id, the same on every bump. This is what makes a bumped problem **replace** the earlier entry in the Android shade instead of piling up (brief section 9). Never send a random tag. |
+| `collapseId` | Also the row id: if the phone was offline, only the newest bump is delivered (FCM `collapse_key`), and on iPhone it replaces the shown entry (`apns-collapse-id`). |
+| `priority` | `high` for every push (each one shows a notification; normal priority can wait for Doze). Heads-up on Android comes from the `-critical` channel, not from priority. |
+| `title`, `body` | Always set. Data-only messages are not shown by the app while it is in the background. Keep the whole payload under 4 KiB (trim the body). |
+| `sound` | iPhone only (Android sound comes from the channel). Harmless on Android. |
+
+Optional for the iPhone build: `threadId: "<category>"` groups a category's entries.
+
+**Test push** (`POST /notifications/test-push`): same shape, no Inbox row behind it:
+
+```json
+{
+  "title": "Test notification",
+  "body": "Push works on this phone.",
+  "data": { "notificationId": "test", "url": "/admin/notifications", "category": "system", "severity": "info" },
+  "channelId": "system",
+  "tag": "test",
+  "priority": "high"
+}
+```
+
+**Tickets and receipts.** Read the push tickets, then the receipts (they expire after 24 hours). On `DeviceNotRegistered`, delete that `/devices` row and stop sending to the token until the phone registers again. On `MessageTooBig`, trim the body and resend.
+
+**What the app does with it.**
+- Tap (app closed or in the background): marks the row read (`POST /notifications/read`), then opens `url` mapped for the person's role (brief section 7). No `url`, an unknown one, or one the role cannot open: the Inbox, with the row's detail sheet (`GET /notifications/:id`). A tap while signed out or locked waits until the person is signed in and unlocked.
+- App open: no system banner; an in-app toast (with "Open" when there is a `url`) and a refresh of `GET /notifications/summary` and the Inbox lists.
+
+## 8. Devices: requests for the iPhone build and sign-out
+
+- `POST /devices` must accept `platform: "ios"` as well (the app sends `Platform.OS`). Today the contract and the mock answer 400 `platform` "Only Android phones can register for notifications.".
+- The app registers again (same token, same row) when the app version changes, when the person changes, when the push token changes, and at least once a week, so `lastSeenAt` stays fresh. Treat a repeat as an update, as section "POST /devices" in session.md says.
+- Sign-out sends `DELETE /devices/:id` first, with a 3 second limit, and skips it offline. A phone that signed out offline keeps its row: please prune rows whose pushes come back `DeviceNotRegistered`, and consider pruning rows not seen for 60 days.

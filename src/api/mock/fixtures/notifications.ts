@@ -1139,7 +1139,7 @@ export type MockDevice = {
   id: string;
   userId: string;
   token: string;
-  platform: 'android';
+  platform: 'android' | 'ios';
   appVersion: string;
   deviceName: string;
   createdAt: string;

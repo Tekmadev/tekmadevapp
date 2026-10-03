@@ -10,7 +10,7 @@ import { Text } from '@/components/Text';
 import { useTheme } from '@/design/theme';
 import { radius } from '@/design/tokens';
 
-import { inboxSummaryQuery } from './queries';
+import { inboxSummaryQuery, usePushLive } from './queries';
 
 /**
  * The bell in the top right of every tab header (owner decision: the Inbox is
@@ -19,7 +19,7 @@ import { inboxSummaryQuery } from './queries';
  */
 export function InboxBellButton() {
   const { colors } = useTheme();
-  const summary = useQuery(inboxSummaryQuery());
+  const summary = useQuery(inboxSummaryQuery({ pushLive: usePushLive() }));
   const unread = summary.data?.unread ?? 0;
   const critical = (summary.data?.criticalUnread ?? 0) > 0;
   const label = badgeCountLabel(unread);

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { BellRing } from 'lucide-react-native';
-import { Fragment, useState, type ReactNode } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { AlertTriangle, BellOff, BellRing, type LucideIcon } from 'lucide-react-native';
+import { Fragment, useCallback, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
@@ -24,11 +25,21 @@ import { durations, enterPull } from '@/design/motion';
 import { useTheme } from '@/design/theme';
 import { space } from '@/design/tokens';
 import { connectivity, useIsOnline } from '@/lib/connectivity';
+import { isMockApi } from '@/lib/env';
 import { useRefreshOnFocus } from '@/modules/customers/useRefreshOnFocus';
 import { metaQuery } from '@/modules/overview/hooks';
+import {
+  forgetRegistration,
+  permissionAction,
+  presentLocalTest,
+  PUSH_COPY,
+  registerThisPhone,
+  turnOnPush,
+  usePushState,
+} from '@/modules/push';
 
 import { PREFS_COPY, prefRows, testPushMessage, type PrefField } from './logic';
-import { pushDeviceId } from './push';
+import { usePushDeviceId } from './push';
 import { usePrefMutation } from './usePrefMutation';
 
 /** Each switch column: wide enough for the 52dp switch and the "QUIET" heading at font scale 1.3. */
@@ -49,6 +60,12 @@ export function NotificationPrefsScreen() {
   const meta = useQuery(metaQuery());
   const save = usePrefMutation();
   useRefreshOnFocus([notificationKeys.prefs(), sessionKeys.meta]);
+  // Back from the system settings, or a first visit: read the permission and register if needed.
+  useFocusEffect(
+    useCallback(() => {
+      void registerThisPhone();
+    }, []),
+  );
 
   const data = query.data;
   const rows = data ? prefRows(data, meta.data?.notificationCategories, isOwner) : [];
@@ -100,6 +117,9 @@ export function NotificationPrefsScreen() {
       ) : null}
       {body}
       <Animated.View entering={enterPull(1)} style={styles.test}>
+        <PhonePushCard />
+      </Animated.View>
+      <Animated.View entering={enterPull(2)} style={styles.testCard}>
         <TestPushCard />
       </Animated.View>
     </Screen>
@@ -197,20 +217,25 @@ type TestResult = { tone: 'ok' | 'signal'; message: string };
 
 /**
  * "Send a test notification" (POST /notifications/test-push). The server's
- * answer is shown under the button. Until push is set up on this phone (brief
- * section 9, needs the owner's Firebase file) the card says so plainly; the
- * test can still reach the person's other phones.
+ * answer is shown under the button. Until push is set up on this phone the
+ * card says so plainly; the test can still reach the person's other phones.
+ * In mock API mode the mock cannot reach Expo, so after its answer this phone
+ * shows a local test notification (Leads channel, same payload shape).
  */
 function TestPushCard() {
   const { colors } = useTheme();
   const [result, setResult] = useState<TestResult | null>(null);
-  const deviceId = pushDeviceId();
+  const deviceId = usePushDeviceId();
+  const permission = usePushState((s) => s.permission);
 
   const send = async () => {
     setResult(null);
     const { sent } = await sendTestPush(deviceId);
     haptics.success();
-    setResult({ tone: 'ok', message: testPushMessage(sent, deviceId !== null) });
+    const message = testPushMessage(sent, deviceId !== null);
+    const local = isMockApi && deviceId !== null && permission?.status === 'granted';
+    if (local) await presentLocalTest().catch(() => undefined);
+    setResult({ tone: 'ok', message: local ? `${message} ${PUSH_COPY.mockLocalTest}` : message });
   };
 
   const onError = (error: unknown) => {
@@ -218,6 +243,11 @@ function TestPushCard() {
     if (error instanceof ApiError && (error.status === 401 || error.status === 403 || error.status === 426 || error.kind === 'aborted')) return;
     haptics.error();
     setResult({ tone: 'signal', message: errorMessage(error) });
+    // The server no longer knows this phone: set it up again (the card shows how that goes).
+    if (error instanceof ApiError && error.code === 'no_devices' && deviceId !== null) {
+      forgetRegistration();
+      void registerThisPhone({ force: true });
+    }
   };
 
   return (
@@ -250,6 +280,100 @@ function TestPushCard() {
   );
 }
 
+/**
+ * Push on this phone (brief section 9): off (with "Turn on", which asks, or
+ * opens the system settings when the system will not ask again), being set
+ * up, set up, or failed with the reason in plain words and "Try again".
+ */
+function PhonePushCard() {
+  const { colors, tones } = useTheme();
+  const permission = usePushState((s) => s.permission);
+  const status = usePushState((s) => s.status);
+  const error = usePushState((s) => s.error);
+
+  const action = permission ? permissionAction(permission) : 'none';
+
+  const turnOn = async () => {
+    const next = await turnOnPush();
+    if (next.status === 'granted') await registerThisPhone();
+  };
+
+  let icon: LucideIcon = BellRing;
+  let iconColor: 'gold' | 'ink3' | 'signal' = 'gold';
+  let title: string;
+  let help: string | null;
+  let button: ReactNode = null;
+  if (permission === null) {
+    title = PUSH_COPY.settingUp;
+    help = PUSH_COPY.settingUpHelp;
+  } else if (action !== 'none') {
+    icon = BellOff;
+    iconColor = 'ink3';
+    title = PUSH_COPY.off;
+    help = PUSH_COPY.offHelp;
+    button = (
+      <PendingButton
+        label={PUSH_COPY.turnOn}
+        pendingLabel={PUSH_COPY.turningOn}
+        requiresNetwork={false}
+        fullWidth
+        onPress={turnOn}
+        accessibilityHint={action === 'ask' ? PUSH_COPY.askHint : PUSH_COPY.settingsHint}
+        style={styles.testButton}
+      />
+    );
+  } else if (status === 'failed') {
+    icon = AlertTriangle;
+    iconColor = 'signal';
+    title = PUSH_COPY.failed;
+    help = error?.message ?? null;
+    button = (
+      <PendingButton
+        label={PUSH_COPY.tryAgain}
+        pendingLabel={PUSH_COPY.retrying}
+        variant="secondary"
+        fullWidth
+        onPress={() => registerThisPhone({ force: true })}
+        style={styles.testButton}
+      />
+    );
+  } else if (status === 'registered') {
+    title = PUSH_COPY.on;
+    help = PUSH_COPY.onHelp;
+  } else {
+    title = PUSH_COPY.settingUp;
+    help = PUSH_COPY.settingUpHelp;
+  }
+
+  const tint = iconColor === 'signal' ? tones.signal.bg : iconColor === 'gold' ? colors.goldTint : colors.bg3;
+
+  return (
+    <Card>
+      <View style={styles.testHead} accessible accessibilityLiveRegion="polite">
+        <View style={[styles.testIcon, { backgroundColor: tint }]}>
+          <Icon icon={icon} size={20} color={iconColor} />
+        </View>
+        <View style={styles.flex}>
+          <Text variant="bodyStrong" color={iconColor === 'signal' ? 'signal' : 'ink'}>
+            {title}
+          </Text>
+          {help ? (
+            <Text variant="small" color="ink3">
+              {help}
+            </Text>
+          ) : null}
+          {status === 'failed' && action === 'none' && error?.detail ? (
+            <Text variant="small" color="ink4" selectable>
+              {`${PUSH_COPY.details}: ${error.detail}`}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+      {button}
+    </Card>
+  );
+}
+
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
@@ -267,6 +391,7 @@ const styles = StyleSheet.create({
   legend: { marginTop: space[3], paddingHorizontal: space[1] },
   refetchError: { marginBottom: space[4] },
   test: { marginTop: space[7] },
+  testCard: { marginTop: space[4] },
   testHead: { flexDirection: 'row', alignItems: 'center', gap: space[3] },
   testIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   testButton: { marginTop: space[4] },

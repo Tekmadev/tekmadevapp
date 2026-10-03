@@ -18,6 +18,20 @@ export function isAuthenticating(): boolean {
   return authenticating > 0;
 }
 
+/**
+ * Run another system prompt (e.g. the notification permission dialog) that
+ * briefly sends the app to the background, without the lock counting it as
+ * leaving the app.
+ */
+export async function duringSystemPrompt<T>(run: () => Promise<T>): Promise<T> {
+  authenticating += 1;
+  try {
+    return await run();
+  } finally {
+    authenticating -= 1;
+  }
+}
+
 /** What this phone can unlock with right now. Never throws; a failed check reads as nothing set up. */
 export async function getUnlockSupport(): Promise<UnlockSupport> {
   try {

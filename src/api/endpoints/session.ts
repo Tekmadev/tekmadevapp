@@ -40,3 +40,31 @@ export function unregisterDevice(id: string) {
 export function updateProfile(body: { name: string | null }) {
   return api.patch<{ name: string | null }>('/profile', body, { schema: zProfileUpdate });
 }
+
+/* ------------------------------------------------------------------ */
+/* Push devices (src/modules/push)                                     */
+/* ------------------------------------------------------------------ */
+
+export type PushDeviceBody = {
+  /** The Expo push token (ExponentPushToken[...]). */
+  token: string;
+  /** Platform.OS: "android" now, "ios" with the iPhone build. */
+  platform: string;
+  appVersion: string;
+  /** May be empty: the server stores a generic name. */
+  deviceName: string;
+};
+
+/** POST /devices from any platform. One row per token: the same token answers with its existing id. */
+export function registerPushDevice(body: PushDeviceBody, idempotencyKey: string) {
+  return api.post<{ id: string }>('/devices', body, { schema: zDeviceRegistration, idempotencyKey });
+}
+
+/**
+ * DELETE /devices/:id while signing out: a short timeout so sign-out never
+ * waits long, and a 401 or 403 is left to the caller (it never ends the
+ * session a second time or toasts "owner only").
+ */
+export function unregisterDeviceOnSignOut(id: string, timeoutMs: number) {
+  return api.delete<null>(`/devices/${seg(id)}`, { timeout: timeoutMs, rawAuthErrors: true });
+}

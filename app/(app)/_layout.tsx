@@ -5,6 +5,7 @@ import { BiometricOfferSheet } from '@/auth/BiometricOfferSheet';
 import { LockGate } from '@/auth/lock/LockGate';
 import { useSecureScreen } from '@/auth/lock/useSecureScreen';
 import { useTheme } from '@/design/theme';
+import { PushHost } from '@/modules/push/PushHost';
 import { onQuickAction, useAppShortcuts } from '@/modules/quickActions/shortcuts';
 import { SearchSheet } from '@/modules/search/SearchSheet';
 
@@ -13,7 +14,8 @@ import { SearchSheet } from '@/modules/search/SearchSheet';
  * app-level pieces that live as long as someone is signed in: the global
  * search sheet, the biometric offer, the Android launcher shortcuts
  * (registered here, routed here, cleared when this unmounts on sign-out),
- * the app lock and "Hide content in the recent apps screen" (brief 8.18).
+ * the app lock and "Hide content in the recent apps screen" (brief 8.18),
+ * and push notifications (brief section 9).
  */
 export default function AppLayout() {
   const { colors } = useTheme();
@@ -43,6 +45,8 @@ export default function AppLayout() {
       <SearchSheet />
       {/* The one-time "Unlock with your fingerprint next time?" offer after the first sign-in (brief 8.2). */}
       <BiometricOfferSheet />
+      {/* Push (brief section 9): channels, registration, foreground toasts, tap routing, the one-time offer. */}
+      <PushHost />
       {/* Biometric unlock: above everything, including sheets and toasts, until unlocked. */}
       <LockGate />
     </>

@@ -65,6 +65,8 @@ export const StorageKeys = {
   lastMe: 'me.last.v1',
   draftPrefix: 'draft.',
   biometricOffered: 'auth.biometricOffered',
+  /** The id POST /devices returned for this phone (push). Removed on sign-out. */
+  pushDeviceId: 'push.deviceId.v1',
 } as const;
 
 export function readJSON<T>(store: MMKV, key: string): T | undefined {

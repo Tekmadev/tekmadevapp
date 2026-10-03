@@ -14,6 +14,7 @@ You are building **Tekmadev Admin**, a native Android app (React Native, shipped
 4. Work in the phases in section 13. Finish each phase completely (working, typed, tested on an Android emulator or device, screenshots taken) before starting the next. Show the owner the screenshots at the end of each phase.
 5. The server API the app talks to (section 4) is being built separately in the website repo. You cannot see that repo. Build against the contract in section 11 with a **mock adapter** (realistic fixtures, same types, same error codes), switchable to the live API with one env flag. If the contract is missing something you need, do not invent a server behaviour: add it to `docs/api-requests.md` with the exact shape you want, and keep going with the mock.
 6. Ask the owner before anything that costs money, publishes anything, or needs his accounts (Expo account, Firebase project, signing keys).
+7. The website admin keeps changing. The owner will paste **update prompts** titled "Prompt for the Tekmadev Admin app". Apply each one fully (screens, copy, API contract, mock fixtures), and log it in `docs/decisions.md`. Every update is also listed in the change log (section 14) of the newest copy of this brief.
 
 ## 1. What Tekmadev is, and who uses this app
 
@@ -511,7 +512,7 @@ The Marketing tab has a segmented control at the top: Blog, Email, Links, CRM.
 
 **Blog: editor** (the most important writing surface in the app; make it a joy)
 - Full-screen editor with a collapsing top bar: status badge, Preview, Save, overflow (Publish / Unpublish, Archive, Move to trash, View live).
-- Title (large display field), then the body as **Markdown** in a monospace-free, comfortable writing field (Geist 17sp, 28sp line height) with a formatting toolbar above the keyboard: H2, H3, bold, italic, link, bullet list, numbered list, quote, callout (tip / info / warning), Q&A answer block, table template, CTA template, divider, image (URL + alt + caption). The toolbar inserts the exact syntax below.
+- Title (large display field), then the body as **Markdown** in a monospace-free, comfortable writing field (Geist 17sp, 28sp line height) with a formatting toolbar above the keyboard: H2, H3, bold, italic, link, bullet list, numbered list, quote, callout (tip / info / warning), Q&A answer block, table template, CTA template, divider, image (upload from the phone or paste a URL, then alt + caption). The toolbar inserts the exact syntax below; an uploaded image is inserted as `![Describe the image](url)` with the placeholder selected so the alt text can be typed at once.
 - **Supported Markdown** (the server converts it into blocks; anything else becomes a paragraph):
   - `##`, `###`, `####` headings (a single `#` becomes `##`)
   - paragraphs separated by a blank line; inline `**bold**`, `*italic*`, `` `code` ``, `[text](url)`
@@ -529,7 +530,7 @@ The Marketing tab has a segmented control at the top: Blog, Email, Links, CRM.
   - Basics: slug (hint "Leave blank to auto-generate."; the server slugifies; warn when changing the slug of a published post: "The old link will stop working."), status (Draft, In review, Published, Archived), author, category (with "+ New category" inline), excerpt, featured.
   - Search: target query, meta title (with a live character count, aim for 60 or fewer), meta description (aim for 155 or fewer), keywords (chips), tags (chips), canonical URL, noindex switch. Show a live Google-style result preview.
   - Answer engine: key takeaways (one per row, reorderable), FAQs (question and answer pairs, reorderable).
-  - Media: cover image URL and alt text (with a live image preview), social image URL.
+  - Media: cover image (alt text required) and social image. Each has **Upload** (pick from the gallery or take a photo with `expo-image-picker`, then resize to at most 2400px wide and compress to WebP or JPEG under 10 MB with `expo-image-manipulator`) or paste a link, with a live preview and a remove button. 1200 x 630 is the recommended size.
 - Saving: PendingButton "Save changes" / "Create post". Toasts: "Saved. A version snapshot was recorded." / "Post created. Keep editing, then publish when ready." / "Published and live on the site." Publishing asks HoldToConfirm ("Publish this post to tekmadev.com?").
 - Autosave a local draft every 3 seconds while typing; on open, if a local draft is newer than the server copy, offer "Restore your unsaved changes?".
 - Unsaved-changes guard on back (sheet: Save, Discard, Keep editing).
@@ -715,6 +716,7 @@ Marketing (owner)
   - `POST /blog/posts` (Idempotency-Key) and `PATCH /blog/posts/:id` (partial; send `bodyMarkdown` for the body) → the full post. The server slugifies, checks uniqueness (409 `slug_taken`), records a revision, and refreshes the public site.
   - `POST /blog/posts/:id/publish`; `POST /blog/posts/:id/status` `{ status: "draft"|"in_review"|"published"|"archived" }`; `DELETE /blog/posts/:id` (trash)
   - `POST /blog/render` `{ markdown }` → `{ blocks: BlogBlock[], readingTimeMinutes }`
+  - `POST /blog/media` `{ fileName, size, type }` → `{ bucket, path, token, publicUrl }`: a one-time signed upload URL for the public `blog-media` Storage bucket (PNG, JPG, WebP, AVIF, GIF; 10 MB max; errors `type`, `size`). The app then uploads the bytes itself with supabase-js `storage.from(bucket).uploadToSignedUrl(path, token, data, { contentType })` (read the picked file into an ArrayBuffer first) and uses `publicUrl`. The website's blog editor works the same way.
   - `GET /blog/categories` (with post counts); `POST /blog/categories` `{ name }` (409 `category_dup`); `PATCH /blog/categories/:id` `{ name }`; `DELETE /blog/categories/:id`
   - `GET /blog/authors`
   - Block types: `heading {level 2|3|4, text}`, `paragraph {text}`, `list {ordered?, items}`, `quote {text, cite?}`, `callout {variant? info|tip|warning, text}`, `answer {question?, text}`, `image {url, alt, caption?}`, `table {caption?, headers, rows}`, `code {language?, code}`, `cta {heading, body?, buttonLabel, href}`, `divider`. Inline text inside blocks may contain `**bold**`, `*italic*`, `` `code` `` and `[text](url)`.
@@ -811,28 +813,9 @@ Quality bar for every phase: TypeScript with no `any` in app code, no warnings i
 
 When you finish a phase, give the owner: what was built, screenshots (light and dark), anything that is mocked, and what you need from him next.
 
-## Update (2026-09-30): blog images upload to storage
+## 14. Change log
 
-The website's blog editor no longer needs pasted image links. The app works the same way.
+Newest last. Each entry matches an update prompt the owner may already have pasted.
 
-Storage
-- Images go to the public Supabase Storage bucket "blog-media": PNG, JPG, WebP, AVIF or GIF only, 10 MB max, no SVG.
-
-API (part of the contract and the mock adapter)
-- POST /blog/media  { fileName, size, type }  ->  { bucket, path, token, publicUrl }
-- Owner only (403 for managers).
-- Errors (400, show the message as given):
-  - code "type": "Use a PNG, JPG, WebP, AVIF or GIF image."
-  - code "size": "That image is over 10 MB. Compress it and try again." or "That file is empty."
-- Upload flow: call POST /blog/media, read the picked file into an ArrayBuffer, then upload it with the app's Supabase client: supabase.storage.from(bucket).uploadToSignedUrl(path, token, data, { contentType }). The token authorizes the upload; the publishable key is enough. Then use publicUrl. Never send the image bytes through the admin API.
-
-Blog editor
-- Cover image and Social image fields:
-  - An Upload button: pick from the gallery or take a photo (expo-image-picker).
-  - Before uploading, resize to at most 2400px wide and compress to WebP or JPEG under 10 MB (expo-image-manipulator).
-  - While uploading, the button shows the black hole button spinner and the label "Uploading".
-  - After upload: a live preview thumbnail with a remove (X) button. Pasting a link still works.
-  - Hint under the cover: "1200 x 630 works everywhere: the post, the blog list and social shares."
-  - Errors show in signal red under the field.
-- Body: an "Insert image" button in the formatting toolbar. It uploads the image, inserts ![Describe the image](url) on its own line at the cursor, and selects "Describe the image" so the alt text can be typed straight away.
-- Cover alt text stays a separate field, required in the app.
+- **2026-09-30**: Brief written.
+- **2026-09-30**: Blog images upload to Supabase Storage instead of pasted links. New endpoint `POST /blog/media` (section 11). Blog editor: Upload on the cover and social image fields, "Insert image" in the body toolbar (section 8.11).

@@ -453,7 +453,7 @@ I need no changes in files I do not own.
 ## Phases 4 and 5: marketing, sales and settings
 
 - The app ships on Android first and on iPhone right after, from the same code: Android-only APIs sit behind Platform checks with an iOS path.
-- Settings was built first at the owner's request. Push delivery waits for the Firebase file; the Notifications screen says so.
+- Settings was built first at the owner's request. Push delivery was added right after (see Push notifications below).
 - The black hole loader now runs every instance off one shared frame loop (same poses, pause and reduced-motion behaviour).
 
 ### App settings and lock
@@ -520,4 +520,23 @@ I need no changes in files I do not own.
 - Body upload errors are a toast; cover and social errors show in signal red under the link field. Cover alt text ("Describe the cover image in a few words.") is required when a cover is set; saving without it opens Details on Media.
 - Leaving during an upload: with other unsaved changes the usual Save / Discard / Keep editing sheet adds "An image is still uploading. If you leave now, it is not added to the post."; with nothing else unsaved it asks "Leave before the image is added?".
 - Camera refused: "Camera access is off. Allow it in Settings, or choose from the gallery." Closing the picker is silent. Previews use a 1200 x 630 shape.
+
+## Push notifications (brief section 9)
+
+- Firebase project `tekmadev-admin`; `google-services.json` lives in the project root and stays out of git. Expo project `@tekmadev/tekmadev-admin`; the FCM V1 service account key is uploaded to Expo, never to the app.
+- Channel ids are `<category>` and `<category>-critical` (high importance), with gold light and private lock-screen visibility.
+- The push offer appears only after a password sign-in, once per install, after the biometric offer and with no other sheet open. Phones already signed in turn push on in Settings, Notifications.
+- Re-register when the person, app version, platform or token changes, and weekly (in mock mode also once per launch).
+- Foreground pushes show a toast. While the app is locked, the system shows the push instead.
+- A tap opens once per phone (the last 30 tap keys are kept on disk), only when the app is in front and unlocked. Taps waiting at sign-out are dropped.
+- Sign-out waits up to 1.5s for a registration on its way, then sends DELETE with a 3s limit, skipped offline. A `POST /devices` that fails offline retries when the connection comes back.
+- The notification permission dialog does not trigger the app lock (it briefly sends the app to the background).
+- Once push is registered, the bell polls every 120s instead of 45s.
+- What the server must send through the Expo push API is in docs/api-requests/notifications.md sections 7 and 8.
+
+## Sign-in and versions
+
+- Real Supabase sign-in is on. With the mock API, tekmadev@gmail.com and shajeed@tekmadev.com are owners (EXPO_PUBLIC_MOCK_OWNER_EMAILS), and the @tekmadev.test fixture accounts keep working so other roles can be checked.
+- Every APK build bumps the version: semver name (patch for fixes, minor for features) and versionCode +1 (`npm run apk -- patch|minor|major`).
+- The brief is kept in sync with the website's copy (tekmadev3/docs/mobile-admin/PROMPT.md); update prompts are applied and logged here.
 

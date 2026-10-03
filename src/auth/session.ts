@@ -44,8 +44,17 @@ export const useSession = create<SessionState>()(() => ({
 
 const isSupabaseAuth = () => env.authMode === 'supabase' && isSupabaseConfigured();
 
+/**
+ * With the mock API, the fixture test accounts (@tekmadev.test) keep working even
+ * when real Supabase sign-in is on, so the owner can sign in with his own account
+ * and still check what a manager or staff member sees.
+ */
+const isTestAccount = (email: string) => env.apiMode === 'mock' && email.trim().toLowerCase().endsWith('@tekmadev.test');
+/** A fixture test account is signed in (its session lives in mockAuth, not Supabase). */
+const usingMockSession = () => !isSupabaseAuth() || mockAuth.getSession() !== null;
+
 async function currentAccessToken(): Promise<string | null> {
-  if (isSupabaseAuth()) {
+  if (!usingMockSession()) {
     const { data } = await getSupabase().auth.getSession();
     return data.session?.access_token ?? null;
   }
@@ -53,7 +62,7 @@ async function currentAccessToken(): Promise<string | null> {
 }
 
 async function refreshAccessToken(): Promise<string | null> {
-  if (isSupabaseAuth()) {
+  if (!usingMockSession()) {
     const { data, error } = await getSupabase().auth.refreshSession();
     if (error) return null;
     return data.session?.access_token ?? null;
@@ -84,6 +93,35 @@ async function clearAuthSession() {
       .catch(() => undefined);
   }
   mockAuth.signOut();
+}
+
+/**
+ * Work that must reach the server while the session is still valid, such as
+ * push unregistering this phone (DELETE /devices/:id, src/modules/push).
+ * Best effort: capped at a few seconds, and a failure never stops sign-out.
+ */
+type BeforeSignOut = () => Promise<void>;
+let beforeSignOut: BeforeSignOut | null = null;
+const BEFORE_SIGN_OUT_MAX_MS = 5000;
+
+export function setBeforeSignOut(hook: BeforeSignOut | null) {
+  beforeSignOut = hook;
+}
+
+async function runBeforeSignOut() {
+  const hook = beforeSignOut;
+  if (!hook) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const cap = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, BEFORE_SIGN_OUT_MAX_MS);
+  });
+  try {
+    await Promise.race([Promise.resolve().then(hook), cap]);
+  } catch {
+    // Best effort: sign-out goes ahead.
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export type SignInResult = { ok: true } | { ok: false; message: string };
@@ -134,7 +172,7 @@ export const session = {
 
   async signIn(email: string, password: string): Promise<SignInResult> {
     const trimmed = email.trim();
-    if (isSupabaseAuth()) {
+    if (isSupabaseAuth() && !isTestAccount(trimmed)) {
       const { error } = await getSupabase().auth.signInWithPassword({ email: trimmed, password });
       if (error) {
         const status = (error as { status?: number }).status ?? 0;
@@ -166,7 +204,7 @@ export const session = {
   },
 
   async sendPasswordReset(email: string): Promise<void> {
-    if (isSupabaseAuth()) {
+    if (isSupabaseAuth() && !isTestAccount(email)) {
       await getSupabase()
         .auth.resetPasswordForEmail(email.trim(), { redirectTo: env.resetRedirectUrl })
         .catch(() => undefined);
@@ -176,7 +214,7 @@ export const session = {
   },
 
   async updatePassword(password: string): Promise<{ ok: true } | { ok: false; message: string }> {
-    if (isSupabaseAuth()) {
+    if (!usingMockSession()) {
       const { error } = await getSupabase().auth.updateUser({ password });
       if (error) return { ok: false, message: error.message || 'Could not change the password.' };
       return { ok: true };
@@ -190,6 +228,7 @@ export const session = {
    * the caller after confirming (a forced sign-out keeps them so no work is lost).
    */
   async signOut(message?: string): Promise<void> {
+    await runBeforeSignOut();
     await clearAuthSession();
     storage.remove(StorageKeys.lastMe);
     await clearQueryCache();

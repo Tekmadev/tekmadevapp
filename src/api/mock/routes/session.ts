@@ -5,6 +5,7 @@ import { searchFixtures } from '../fixtures/overview';
 import { loaderState } from '../fixtures/settings';
 import { MOCK_ACCOUNTS } from '../fixtures/staff';
 import { fail, mockId, notFound, nowIso, ok, str, type MockRoute, type MockStaff } from '../router';
+import { env } from '@/lib/env';
 
 /**
  * Mock routes for the "session" domain: who am I, the enums and labels, global
@@ -48,7 +49,7 @@ export const routes: MockRoute[] = [
         timezone: 'America/Toronto',
         loader: { ...loaderState.current },
         testModeConfigured: true,
-        app: { latestVersion: '0.1.0', minVersion: '0.1.0', apkUrl: null },
+        app: { latestVersion: env.appVersion === '0.0.0' ? '0.1.0' : env.appVersion, minVersion: '0.1.0', apkUrl: null },
       };
       return ok(me);
     },
@@ -80,8 +81,8 @@ export const routes: MockRoute[] = [
       if (!token || !EXPO_PUSH_TOKEN.test(token)) {
         return fail(400, 'token', 'That push token is not valid.', { token: 'Send the Expo push token for this phone.' });
       }
-      if (platform !== 'android') {
-        return fail(400, 'platform', 'Only Android phones can register for notifications.', { platform: 'Use "android".' });
+      if (platform !== 'android' && platform !== 'ios') {
+        return fail(400, 'platform', 'Only Android phones and iPhones can register for notifications.', { platform: 'Use "android" or "ios".' });
       }
       if (!appVersion) {
         return fail(400, 'app_version', 'Send the app version.', { appVersion: 'Send the app version, e.g. 0.1.0.' });
@@ -101,7 +102,7 @@ export const routes: MockRoute[] = [
         id: mockId('dev'),
         userId: user.id,
         token,
-        platform: 'android' as const,
+        platform: platform as 'android' | 'ios',
         appVersion,
         deviceName: deviceName || 'Android phone',
         createdAt: now,

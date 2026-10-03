@@ -28,7 +28,7 @@ import { destinationOf, openLink } from './navigation';
 import { NotificationActionsSheet } from './NotificationActionsSheet';
 import { NotificationDetailSheet } from './NotificationDetailSheet';
 import { NotificationRow } from './NotificationRow';
-import { inboxSummaryQuery } from './queries';
+import { inboxSummaryQuery, usePushLive } from './queries';
 import { resolveMutationKey, useInboxActions } from './useInboxActions';
 import { useInboxList, useLiveInboxSync, useRefetchOnFocus } from './useInboxList';
 
@@ -64,7 +64,7 @@ export function InboxScreen() {
   const category = chosenCategory && !isOwner && (chosenCategory === 'audience' || chosenCategory === 'team') ? null : chosenCategory;
 
   const { query, items, entries, sticky, summary: listSummary, queryKey } = useInboxList({ filter, category, includeTest });
-  const badgeQuery = useQuery(inboxSummaryQuery());
+  const badgeQuery = useQuery(inboxSummaryQuery({ pushLive: usePushLive() }));
   // With "Include test" the list's own summary counts test rows, like the rows on screen; otherwise the live badge.
   const summary = includeTest ? listSummary : (badgeQuery.data ?? listSummary);
   const actions = useInboxActions();

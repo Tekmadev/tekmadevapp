@@ -147,10 +147,11 @@ describe('POST /devices and DELETE /devices/:id', () => {
     expect([badToken.status, badToken.code]).toEqual([400, 'token']);
     expect(badToken.fields?.token).toEqual(expect.any(String));
 
-    const ios = await apiError(
-      api.post('/devices', { token: pushToken('iphone'), platform: 'ios', appVersion: '0.1.0', deviceName: 'iPhone' }, { idempotencyKey: newIdempotencyKey() }),
+    // iPhones register too (the iOS build comes after Android); anything else is refused.
+    const web = await apiError(
+      api.post('/devices', { token: pushToken('browser'), platform: 'web', appVersion: '0.1.0', deviceName: 'Browser' }, { idempotencyKey: newIdempotencyKey() }),
     );
-    expect([ios.status, ios.code]).toEqual([400, 'platform']);
+    expect([web.status, web.code]).toEqual([400, 'platform']);
 
     const noVersion = await apiError(
       api.post('/devices', { token: pushToken('pixel-x'), platform: 'android', deviceName: 'Pixel' }, { idempotencyKey: newIdempotencyKey() }),
