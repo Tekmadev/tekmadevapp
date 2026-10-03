@@ -31,11 +31,12 @@ npx jest
 
 ## Release APK
 
-Every build gets a new version (semver name, versionCode always up by one):
+Every build gets a new version (versionCode always up by one). Small updates bump the last digit, big updates the middle one, and the first digit is for the official launch:
 
 ```bash
-npm run apk -- patch    # fixes: 0.2.0 -> 0.2.1
-npm run apk -- minor    # new features: 0.2.1 -> 0.3.0
+npm run apk -- minor    # small update: 0.2.0 -> 0.2.1
+npm run apk -- major    # big update: 0.2.1 -> 0.3.0
+npm run apk -- launch   # official launch: 0.3.0 -> 1.0.0
 ```
 
 The APK lands in `dist/tekmadev-admin-<version>.apk` and installs on a connected phone. `google-services.json` (Firebase, not in git) must be in the project root.

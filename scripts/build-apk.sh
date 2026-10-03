@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Build a release APK with a new version (every build gets one).
-#   scripts/build-apk.sh patch|minor|major
+#   scripts/build-apk.sh minor|major|launch   (minor: 0.2.0 -> 0.2.1, major: 0.2.1 -> 0.3.0)
 # Needs Node, the Android SDK and JDK 17 on PATH. Output: dist/tekmadev-admin-<version>.apk
 # Installs it on a connected phone when adb sees one.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION_LINE=$(node scripts/bump-version.mjs "${1:-patch}")
+VERSION_LINE=$(node scripts/bump-version.mjs "${1:-minor}")
 VERSION=${VERSION_LINE%% *}
 echo "Building Tekmadev Admin $VERSION_LINE"
 
