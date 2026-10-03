@@ -52,3 +52,6 @@ example
 *.apk
 *.aab
 *.keystore
+
+# Firebase client config (not a secret, but kept out of the repo; see README)
+google-services.json
