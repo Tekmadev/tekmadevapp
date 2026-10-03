@@ -326,8 +326,12 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
   const previewingSV = useSharedValue(false);
   const editScroll = useQuickReturn(hidden, hiddenTarget);
   const previewScroll = useQuickReturn(hidden, hiddenTarget);
+  // Only the shared values go into the worklet: the scroll objects also hold the
+  // event handlers, which Worklets cannot copy to the UI thread (it crashes).
+  const editY = editScroll.y;
+  const previewY = previewScroll.y;
   const collapse = useDerivedValue(() => {
-    const y = previewingSV.get() ? previewScroll.y.get() : editScroll.y.get();
+    const y = previewingSV.get() ? previewY.get() : editY.get();
     const h = Math.max(titleHeight.get(), 48);
     return Math.min(1, Math.max(0, (y - h * 0.5) / (h * 0.5)));
   });
