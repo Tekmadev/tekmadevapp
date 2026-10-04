@@ -5,6 +5,7 @@ import { StyleSheet, View, type TextInput } from 'react-native';
 
 import { newIdempotencyKey } from '@/api/client';
 import { clientKeys, clientsMetaQuery, createClient, type NewClientInput } from '@/api/endpoints/clients';
+import { leadKeys } from '@/api/endpoints/leads';
 import { ApiError, fieldErrors } from '@/api/errors';
 import type { CreateClientResult, PlanId } from '@/api/schemas/clients';
 import { RequireCapability } from '@/auth/RequireCapability';
@@ -24,14 +25,19 @@ import { planSelectOptions } from './list/labels';
 
 const REQUIRED = 'Business name and a valid email are required.';
 const REUSE_NOTE = 'If a client with this email already exists, it is reused and updated instead of duplicated.';
+const FROM_LEAD_NOTE = 'Linked to the lead, so the people who found it and booked the call get credit for this client.';
 const NO_PLAN = 'none';
 
 type PlanChoice = PlanId | typeof NO_PLAN;
 type Field = 'businessName' | 'email' | 'name' | 'phone' | 'planId' | 'assignedStrategist';
 type Errors = Partial<Record<Field, string>>;
 
-/** Route params a lead passes in ("Create client from this lead", brief 8.6). */
-type Prefill = { businessName?: string; email?: string; name?: string; phone?: string };
+/**
+ * Route params a lead passes in ("Create client from this lead", brief 8.6).
+ * `leadId` links the new client to that lead, which copies the lead's finder
+ * and booker to the client's credits (commission credit).
+ */
+type Prefill = { businessName?: string; email?: string; name?: string; phone?: string; leadId?: string };
 
 const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value) ?? '';
 
@@ -69,6 +75,8 @@ export function NewClientScreen() {
 
 function NewClientForm() {
   const prefill = useLocalSearchParams<Prefill>();
+  // Read once: the lead this form was opened from ("Create client from this lead").
+  const [leadId] = useState(() => first(prefill.leadId) || null);
   const queryClient = useQueryClient();
   const meta = useQuery(clientsMetaQuery());
 
@@ -89,10 +97,15 @@ function NewClientForm() {
 
   const create = useMutation({
     mutationFn: ({ input, key }: { input: NewClientInput; key: string }) => createClient(input, key),
-    onSuccess: (result) => {
+    onSuccess: (result, { input }) => {
       // The list (and a reused client's detail) changed; the new client's detail loads on open.
       void queryClient.invalidateQueries({ queryKey: clientKeys.lists() });
       if (result.reused) void queryClient.invalidateQueries({ queryKey: clientKeys.detail(result.client.id) });
+      // The lead now points at its client ("Open client" instead of "Create client").
+      if (input.leadId) {
+        void queryClient.invalidateQueries({ queryKey: leadKeys.detail(input.leadId) });
+        void queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
+      }
     },
   });
 
@@ -120,6 +133,7 @@ function NewClientForm() {
       planId: plan === NO_PLAN ? null : plan,
       assignedStrategist: strategist.trim().toLowerCase() || null,
       sendInvite,
+      ...(leadId ? { leadId } : {}),
     };
     const local = validate(input);
     if (Object.keys(local).length > 0) {
@@ -234,7 +248,7 @@ function NewClientForm() {
       </View>
 
       <Text variant="small" color="ink3" style={styles.note}>
-        {REUSE_NOTE}
+        {leadId ? `${FROM_LEAD_NOTE} ${REUSE_NOTE}` : REUSE_NOTE}
       </Text>
 
       {formError ? (

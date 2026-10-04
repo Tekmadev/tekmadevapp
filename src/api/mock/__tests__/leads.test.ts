@@ -80,7 +80,7 @@ describe('GET /leads', () => {
     // Instants carry microseconds, like the server.
     expect(items[0].createdAt).toMatch(/\.\d{6}Z$/);
     // Every source is there, plus the edge cases screens must handle.
-    expect(new Set(items.map((l) => l.source))).toEqual(new Set(['cal_booking', 'grow', 'lead_magnet', 'portal_signup']));
+    expect(new Set(items.map((l) => l.source))).toEqual(new Set(['cal_booking', 'grow', 'lead_magnet', 'portal_signup', 'outreach']));
     expect(items.some((l) => l.name === null)).toBe(true);
     expect(items.some((l) => l.phone === null)).toBe(true);
     expect(items.some((l) => (l.business ?? '').length > 50)).toBe(true);

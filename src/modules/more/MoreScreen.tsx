@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from 'expo-router';
-import { ChartLine, ChevronRight, LogOut, SlidersHorizontal, Smartphone, Wallet, type LucideIcon } from 'lucide-react-native';
+import { ChartLine, ChevronRight, LogOut, SlidersHorizontal, Smartphone, Trophy, Wallet, type LucideIcon } from 'lucide-react-native';
 import { Fragment, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -8,7 +8,7 @@ import { sessionKeys } from '@/api/endpoints/session';
 import { ApiError, errorMessage } from '@/api/errors';
 import { queryClient } from '@/api/query';
 import type { Me } from '@/api/schemas/session';
-import { roleCopy } from '@/auth/permissions';
+import { roleCopy, useCan } from '@/auth/permissions';
 import { session, useMe } from '@/auth/session';
 import { Avatar } from '@/components/Avatar';
 import { Badge } from '@/components/Badge';
@@ -28,6 +28,7 @@ import { notice } from '@/lib/notice';
 import { drafts } from '@/lib/storage';
 import { clearAppShortcuts } from '@/modules/quickActions/shortcuts';
 import { moreMenu, useVisibility, type MoreMenuSection } from '@/modules/registry';
+import { STAFF_COPY } from '@/modules/team/staff';
 import { searchSheet } from '@/modules/search/searchStore';
 import { TabHeaderActions } from '@/modules/shell/TabHeaderActions';
 import type { MoreSection } from '@/modules/types';
@@ -111,6 +112,7 @@ export function MoreScreen() {
         {me ? (
           <Animated.View entering={enterPull(0)} style={styles.block}>
             <ProfileCard me={me} />
+            <ActivityRow />
           </Animated.View>
         ) : null}
 
@@ -186,6 +188,27 @@ function ProfileCard({ me }: { me: Me }) {
   );
 }
 
+/**
+ * Under the profile card: "Team activity" for people who see everyone's
+ * scoreboard (`team.activity`), else "My activity" (`activity.own`, staff).
+ */
+function ActivityRow() {
+  const seesTeam = useCan('team.activity');
+  const seesOwn = useCan('activity.own');
+  if (!seesTeam && !seesOwn) return null;
+  return (
+    <Card padded={false} style={styles.activity}>
+      <ListRow
+        title={seesTeam ? STAFF_COPY.teamActivity : STAFF_COPY.myActivity}
+        subtitle={seesTeam ? STAFF_COPY.teamActivityHint : STAFF_COPY.myActivityHint}
+        icon={Trophy}
+        iconTone="gold"
+        onPress={() => router.push(seesTeam ? '/team-activity' : '/my-activity')}
+      />
+    </Card>
+  );
+}
+
 function MenuSection({ section }: { section: MoreMenuSection }) {
   return (
     <View>
@@ -210,6 +233,7 @@ const styles = StyleSheet.create({
   profile: { flexDirection: 'row', alignItems: 'center', gap: space[4] },
   profileText: { flex: 1, gap: 2 },
   role: { marginTop: space[1] },
+  activity: { marginTop: space[3] },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',

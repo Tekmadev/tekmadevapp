@@ -17,5 +17,13 @@ export type { LoaderSettings };
 export const zLoaderReset = z.object({ reset: z.literal(true) });
 export type LoaderReset = z.infer<typeof zLoaderReset>;
 
+/**
+ * GET and PUT /settings/commission: the default credit split for a client
+ * created from a lead (the website's docs/admin-api/staff.md). Each 0 to 100
+ * with two decimals at most, adding up to 100. 50 / 50 until the owner changes it.
+ */
+export const zCommissionSplit = z.object({ finder: z.number(), booker: z.number() });
+export type CommissionSplit = z.infer<typeof zCommissionSplit>;
+
 /** This domain's slice of GET /meta (composed in schemas/meta.ts). Ranges and defaults live in src/loader/settings.ts. */
 export const metaFragment = z.object({});

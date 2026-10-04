@@ -537,7 +537,7 @@ I need no changes in files I do not own.
 ## Sign-in and versions
 
 - Real Supabase sign-in is on. With the mock API, tekmadev@gmail.com and shajeed@tekmadev.com are owners (EXPO_PUBLIC_MOCK_OWNER_EMAILS), and the @tekmadev.test fixture accounts keep working so other roles can be checked.
-- Every APK build bumps the version: semver name (patch for fixes, minor for features) and versionCode +1 (`npm run apk -- patch|minor|major`).
+- Every APK build bumps the version and versionCode +1. Owner's numbering: a small update bumps the last digit (`npm run apk -- minor`, 0.3.0 to 0.3.1), a big one the middle digit (`npm run apk -- major`, 0.3.1 to 0.4.0), and the official launch is 1.0.0 (`launch`).
 - The brief is kept in sync with the website's copy (tekmadev3/docs/mobile-admin/PROMPT.md); update prompts are applied and logged here.
 
 ## Roles and capabilities (owner decision 2026-10-03)
@@ -554,3 +554,24 @@ I need no changes in files I do not own.
 - Inbox chips, notification settings rows and Android channels follow `inbox.<category>`; channels a person cannot read are deleted. Staff get "Get pushes for new leads?".
 - Search: screens follow the registry; records are filtered by the server before the top 20 are cut, so staff get a full page.
 - Deep links also map the web's /admin/blog/new (`blog.write`), /admin/blog/:id/preview, /admin/clients/templates and /admin/email/templates. Anything a person cannot open lands in the Inbox; the Inbox itself, when not allowed, sends them Home.
+
+## Staff management and commission credit (owner decisions 2026-10-03)
+
+Contract: the website's docs/admin-api/staff.md. Seven capabilities after `team.owners`: `team.role`, `team.pause`, `team.activity` (owners and managers), `activity.own` (everyone), `clients.credits.view`, `clients.credits.edit` (owners and managers), `commission.settings` (owners).
+
+- A 403 `paused` from any call, a cached-session restore or sign-in signs the person out with "Your access is paused. Ask an owner or manager." The mock answers it on every route for a paused account.
+- Change role opens its own sheet over the member sheet, narrowest role first, each with its help line. Owner is offered only with `team.owners`.
+- Pause uses an ink hold (it can be undone); Resume needs no hold. Paused rows show the role badge and a Paused badge (warn); the member sheet says when and by whom.
+- Where an action is not offered, a lock note says why: env owner, yourself, or (for managers) an owner.
+- Team activity opens from a card at the top of Team and from More (a row under the profile card); staff get "My activity" there and on Profile. Both are in search.
+- The board sorts by clients won, then touches, calls booked, leads found and name. The range defaults to 7 days and is not remembered.
+- The team board lists 3 credit rows per person, then "and N more"; My activity lists them all.
+- Lead detail shows Found by and Booked by once known (Found by falls back to "added by" on older servers). A booked lead with no booker offers "I booked this call".
+- Booked can be picked by hand in the status sheet, except on a calendar lead that does not already show booked (the server's rule).
+- New client from a lead sends `leadId`, says the lead's finder and booker get credit, and refreshes the lead.
+- Credit renders under Account on the client's Account tab. Staff see only "Your credit" with "Credit is private: you see only your own share."; the section is hidden when the server sends no `credits`.
+- The credit editor shows the total live, requires 100 (or nobody: "Nobody gets credit for this client.") and a note; Save stays off until something changes.
+- Commission split lives in App settings: owners edit (typing one share fills the other so they total 100), managers read only, staff never see it.
+- The web admin has no "create client from this lead" flow, so automatic credit from a lead happens only from the app.
+- A lead that books through the public booking link gets no automatic booker: the person who got the booking marks it Booked (the website's booking webhook is unchanged).
+

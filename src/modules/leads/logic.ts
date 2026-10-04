@@ -249,11 +249,16 @@ export function leadClientAction(convertedClientId: string | null, can: (cap: Ca
   return can('leads.convert') && can('clients.create') ? 'create' : null;
 }
 
-export type NewClientPrefill = { businessName?: string; email?: string; name?: string; phone?: string };
+export type NewClientPrefill = { businessName?: string; email?: string; name?: string; phone?: string; leadId?: string };
 
-/** New client's route params from a lead (the fields New client reads). Empty values are left out. */
-export function newClientParams(lead: Pick<Lead, 'business' | 'email' | 'name' | 'phone'>): NewClientPrefill {
+/**
+ * New client's route params from a lead (the fields New client reads). Empty
+ * values are left out. `leadId` links the client to the lead, which copies the
+ * lead's finder and booker to the client's credits (commission credit).
+ */
+export function newClientParams(lead: Pick<Lead, 'id' | 'business' | 'email' | 'name' | 'phone'>): NewClientPrefill {
   const out: NewClientPrefill = {};
+  if (lead.id) out.leadId = lead.id;
   const set = (key: keyof NewClientPrefill, value: string | null) => {
     const v = value?.trim();
     if (v) out[key] = v;

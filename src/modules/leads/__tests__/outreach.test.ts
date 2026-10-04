@@ -4,10 +4,13 @@ import type { LeadsMeta, LeadStatus } from '@/api/schemas/leads';
 import {
   addLeadErrors,
   addLeadInput,
+  CALENDAR_STATUS_HINT,
+  canClaimBooking,
   CONTACT_PROMPTS,
   dueByToday,
   EMPTY_ADD_LEAD,
   emptyLogTouch,
+  finderOf,
   firstName,
   followUpBadge,
   followUpPatch,
@@ -25,6 +28,7 @@ import {
   logTouchInput,
   sameInstant,
   staffName,
+  statusChoiceBlock,
   touchKindLabel,
   touchKindOptions,
 } from '../outreach';
@@ -207,10 +211,9 @@ describe('labels and people', () => {
     expect(touchKindLabel(renamed, 'call')).toBe('Call');
   });
 
-  it('lets people set every status but booked and cancelled', () => {
-    const settable: LeadStatus[] = ['new', 'contacted', 'qualified', 'won', 'lost'];
+  it('lets people set every status but cancelled', () => {
+    const settable: LeadStatus[] = ['new', 'booked', 'contacted', 'qualified', 'won', 'lost'];
     expect(settable.every(isSettableStatus)).toBe(true);
-    expect(isSettableStatus('booked')).toBe(false);
     expect(isSettableStatus('cancelled')).toBe(false);
   });
 
@@ -234,5 +237,34 @@ describe('"Log this call" after a one-tap contact', () => {
   it('uses the first name, else the title', () => {
     expect(firstName({ name: 'Olivia Martin' }, 'Olivia Martin')).toBe('Olivia');
     expect(firstName({ name: null }, 'Capital Window Cleaning')).toBe('Capital Window Cleaning');
+  });
+});
+
+describe('commission credit on leads', () => {
+  const NOAH = { email: 'staff@tekmadev.test', name: 'Noah Lavoie' };
+
+  it('lets booked be picked by hand, except on a calendar lead that does not show booked', () => {
+    const outreach = { source: 'outreach' as const, bookingAt: null, status: 'contacted' as const };
+    expect(statusChoiceBlock(outreach, 'booked')).toBeNull();
+    expect(statusChoiceBlock(outreach, 'cancelled')).toBe(CALENDAR_STATUS_HINT);
+    const calendar = { source: 'cal_booking' as const, bookingAt: '2026-10-05T14:00:00Z', status: 'contacted' as const };
+    expect(statusChoiceBlock(calendar, 'booked')).toBe(CALENDAR_STATUS_HINT);
+    expect(statusChoiceBlock({ ...calendar, status: 'booked' }, 'booked')).toBeNull();
+    // A form lead a booking was attached to belongs to the calendar too.
+    expect(statusChoiceBlock({ source: 'grow', bookingAt: '2026-10-05T14:00:00Z', status: 'new' }, 'booked')).toBe(CALENDAR_STATUS_HINT);
+    expect(statusChoiceBlock(calendar, 'qualified')).toBeNull();
+  });
+
+  it('reads the finder, falling back to who added an outreach lead on older servers', () => {
+    expect(finderOf({ source: 'outreach', foundBy: NOAH, addedBy: null })).toEqual(NOAH);
+    expect(finderOf({ source: 'outreach', foundBy: undefined, addedBy: NOAH })).toEqual(NOAH);
+    expect(finderOf({ source: 'grow', foundBy: null, addedBy: undefined })).toBeNull();
+  });
+
+  it('offers "I booked this call" only on a booked lead the server says nobody booked', () => {
+    expect(canClaimBooking({ status: 'booked', bookedBy: null })).toBe(true);
+    expect(canClaimBooking({ status: 'booked', bookedBy: NOAH })).toBe(false);
+    expect(canClaimBooking({ status: 'booked', bookedBy: undefined })).toBe(false);
+    expect(canClaimBooking({ status: 'qualified', bookedBy: null })).toBe(false);
   });
 });

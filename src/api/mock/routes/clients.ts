@@ -21,13 +21,16 @@ import {
   zTaskOwner,
   zTaskStatus,
   type Activity,
+  type ClientCredits,
   type ClientStatus,
+  type CreditRole,
   type Member,
   type OnboardingStage,
   type OnboardingTask,
   type OnboardingTemplate,
   type PlanId,
 } from '../../schemas/clients';
+import type { Lead } from '../../schemas/leads';
 import {
   activityOf,
   addActivity,
@@ -58,7 +61,22 @@ import {
   type ClientRecord,
   type RunRecord,
 } from '../fixtures/clients';
-import { mockCan, requireCap } from '../permissions';
+import {
+  checkCredits,
+  CREDIT_MESSAGES,
+  CREDIT_ROLES,
+  creditClientFromLead,
+  creditTeam,
+  creditView,
+  isCreditActivity,
+  MAX_CREDITS,
+  newestCredit,
+  saveCredits,
+  visibleCredits,
+  type CreditInput,
+} from '../fixtures/credits';
+import { findLead, leadsDb } from '../fixtures/leads';
+import { mockCan, requireAnyCap, requireCap } from '../permissions';
 import { bool, fail, isEmail, matches, mockId, notFound, nowIso, num, ok, paginate, str, torontoDate, type MockContext, type MockResult, type MockRoute } from '../router';
 
 /**
@@ -74,6 +92,12 @@ import { bool, fail, isEmail, matches, mockId, notFound, nowIso, num, ok, pagina
  * need `testdata.view` (404 otherwise, exactly like the rest of test mode). The
  * bundle leaves out what the caller may not see: `billing` is null without
  * `clients.billing`, and the `crmLocation` key is absent without `clients.crm`.
+ *
+ * Commission credit (docs/admin-api/staff.md section 4): POST /clients takes
+ * `leadId` (links the lead and copies its finder and booker to the client's
+ * credits), the bundle's `credits` are every row with `clients.credits.view`
+ * and only the caller's own otherwise, `credits.*` activity is left out
+ * without `clients.credits.view`, and GET / PUT /clients/:id/credits.
  */
 
 const REQUIRED = 'Business name and a valid email are required.';
@@ -276,6 +300,58 @@ function completeRun(run: RunRecord, c: ClientRecord, ctx: MockContext) {
   touch(c);
 }
 
+/* ---------- commission credit ---------- */
+
+const LEAD_GONE = 'That lead no longer exists.';
+const LEAD_CONVERTED = 'That lead is already a client. Open it from the lead.';
+
+/** The lead a client was created from (the server's `clients.lead_id`). */
+const leadOf = (clientId: string) => leadsDb.find((l) => l.convertedClientId === clientId) ?? null;
+
+/** A client's activity as this caller may read it: credit entries name everyone's shares. */
+function activityFor(ctx: MockContext, clientId: string): Activity[] {
+  const all = activityOf(clientId);
+  return mockCan(ctx.user, 'clients.credits.view') ? all : all.filter((a) => !isCreditActivity(a));
+}
+
+function creditsView(ctx: MockContext, c: ClientRecord): ClientCredits {
+  const team = creditTeam();
+  const visible = visibleCredits(c.id, ctx.user);
+  return {
+    clientId: c.id,
+    scope: visible.scope,
+    leadId: leadOf(c.id)?.id ?? null,
+    credits: visible.rows.map((r) => creditView(r, team)),
+    updatedAt: newestCredit(visible.rows),
+  };
+}
+
+/**
+ * PUT /clients/:id/credits body, in the server's zod order: the list and each
+ * row's shape, then the note. Null when it is fine (the team, duplicate and
+ * total rules run afterwards).
+ */
+function creditsBody(body: Record<string, unknown>): { credits: CreditInput[]; note: string } | MockResult {
+  const bad = (message: string) => fail(400, 'credits', message, { credits: message });
+  const raw = body.credits;
+  if (!Array.isArray(raw)) return bad(CREDIT_MESSAGES.list);
+  const credits: CreditInput[] = [];
+  for (const item of raw as unknown[]) {
+    const row = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+    const email = typeof row.email === 'string' ? row.email.trim().toLowerCase() : '';
+    if (!isEmail(email)) return bad(CREDIT_MESSAGES.email);
+    const role = CREDIT_ROLES.find((r) => r === row.role);
+    if (!role) return bad(CREDIT_MESSAGES.role);
+    if (typeof row.share !== 'number' || !Number.isFinite(row.share)) return bad(CREDIT_MESSAGES.share);
+    credits.push({ email, role: role as CreditRole, share: row.share });
+  }
+  if (credits.length > MAX_CREDITS) return bad(CREDIT_MESSAGES.tooMany);
+  const note = typeof body.note === 'string' ? body.note.trim() : '';
+  if (!note) return fail(400, 'note', CREDIT_MESSAGES.note, { note: CREDIT_MESSAGES.note });
+  if (note.length > 500) return fail(400, 'note', CREDIT_MESSAGES.noteLong, { note: CREDIT_MESSAGES.noteLong });
+  return { credits, note };
+}
+
 /* ---------- calls ---------- */
 
 const callResult = (call: CallRecord, c: ClientRecord, status = 200) => ok({ call: callView(call, c), guarantee: guaranteeFor(c) }, status);
@@ -333,6 +409,7 @@ export const routes: MockRoute[] = [
       const strategist = check.text(body, 'assignedStrategist', 200);
       if (strategist && !isEmail(strategist)) check.add('assignedStrategist', 'input', INPUT, EMAIL);
       const sendInvite = check.flag(body, 'sendInvite');
+      const leadId = check.text(body, 'leadId', 64);
       if (check.failed) return check.result();
 
       const at = nowIso();
@@ -342,6 +419,17 @@ export const routes: MockRoute[] = [
       if (existing && existing.isTest && !seesTest(ctx)) {
         // Never reveal or touch a test client for someone without test data: treat the email as taken.
         return fail(409, 'email_taken', 'Another client already uses that email.', { email: 'Another client already uses that email.' });
+      }
+
+      // "Create client from this lead": needs leads.convert too; one lead, one client.
+      let sourceLead: Lead | null = null;
+      if (leadId) {
+        const notConvert = requireCap(ctx.user, 'leads.convert');
+        if (notConvert) return notConvert;
+        sourceLead = findLead(leadId) ?? null;
+        if (!sourceLead) return fail(400, 'lead_id', LEAD_GONE, { leadId: LEAD_GONE });
+        const other = sourceLead.convertedClientId ? clientById(sourceLead.convertedClientId) : undefined;
+        if (other && other.primaryEmail.toLowerCase() !== email) return fail(409, 'lead_converted', LEAD_CONVERTED, { leadId: LEAD_CONVERTED });
       }
 
       let c: ClientRecord;
@@ -409,6 +497,11 @@ export const routes: MockRoute[] = [
           addActivity(c, { event: 'member.invited', summary: `Portal invite sent to ${email}.`, actor, at });
         }
       }
+      // Link the lead (when this client has none yet) and give it the lead's default credits.
+      if (sourceLead) {
+        if (!leadOf(c.id)) sourceLead.convertedClientId = c.id;
+        creditClientFromLead(c, sourceLead, ctx.user.email.toLowerCase());
+      }
       touch(c);
       return ok({ client: clientView(c), reused: !!existing, invite }, existing ? 200 : 201);
     },
@@ -425,8 +518,14 @@ export const routes: MockRoute[] = [
       const c = findClient(ctx, ctx.params.id);
       if (!c) return clientMissing();
       const bundle = bundleFor(c, mockCan(ctx.user, 'clients.crm'));
+      const withCredits = {
+        ...bundle,
+        // Credit entries name everyone's shares: only for clients.credits.view.
+        activity: paginate(activityFor(ctx, c.id), {}),
+        credits: creditsView(ctx, c).credits,
+      };
       // Money stays on the server for anyone without clients.billing (staff): null, never a made-up record.
-      return ok(mockCan(ctx.user, 'clients.billing') ? bundle : { ...bundle, billing: null });
+      return ok(mockCan(ctx.user, 'clients.billing') ? withCredits : { ...withCredits, billing: null });
     },
   },
   {
@@ -1268,7 +1367,38 @@ export const routes: MockRoute[] = [
       const denied = requireCap(ctx.user, 'clients.view');
       if (denied) return denied;
       const c = findClient(ctx, ctx.params.id);
-      return c ? ok(paginate(activityOf(c.id), ctx.query)) : clientMissing();
+      return c ? ok(paginate(activityFor(ctx, c.id), ctx.query)) : clientMissing();
+    },
+  },
+
+  /* ----- commission credit ----- */
+  {
+    method: 'GET',
+    path: '/clients/:id/credits',
+    latency: 'fast',
+    handler: (ctx) => {
+      // Every row with clients.credits.view, your own with activity.own.
+      const denied = requireAnyCap(ctx.user, 'clients.credits.view', 'activity.own');
+      if (denied) return denied;
+      const c = findClient(ctx, ctx.params.id);
+      return c ? ok<ClientCredits>(creditsView(ctx, c)) : clientMissing();
+    },
+  },
+  {
+    method: 'PUT',
+    path: '/clients/:id/credits',
+    latency: 'normal',
+    handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.credits.edit');
+      if (denied) return denied;
+      const c = findClient(ctx, ctx.params.id);
+      if (!c) return clientMissing();
+      const body = creditsBody(ctx.body);
+      if ('status' in body) return body;
+      const problem = checkCredits(body.credits, creditTeam());
+      if (problem) return fail(400, problem.code, problem.message, { credits: problem.message });
+      if (saveCredits(c, body.credits, body.note, ctx.user.email.toLowerCase())) touch(c);
+      return ok<ClientCredits>(creditsView(ctx, c));
     },
   },
   {

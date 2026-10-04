@@ -106,6 +106,13 @@ export const PERMISSIONS = {
   'team.write': OM,
   'team.remove': O,
   'team.owners': O,
+  'team.role': OM,
+  'team.pause': OM,
+  'team.activity': OM,
+  'activity.own': OMS,
+  'clients.credits.view': OM,
+  'clients.credits.edit': OM,
+  'commission.settings': O,
 } as const satisfies Record<Capability, readonly Role[]>;
 
 type Who = Pick<MockStaff, 'role'> | Role;

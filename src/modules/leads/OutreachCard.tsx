@@ -22,9 +22,9 @@ import { layout, space } from '@/design/tokens';
 import { useIsOnline } from '@/lib/connectivity';
 
 import { FollowUpSheet } from './FollowUpSheet';
-import { AssigneeSheet, LeadStatusSheet } from './LeadFieldSheets';
+import { AssigneeSheet, ClaimBookingSheet, LeadStatusSheet } from './LeadFieldSheets';
 import { statusBadge } from './logic';
-import { followUpBadge, staffName } from './outreach';
+import { canClaimBooking, finderOf, followUpBadge, staffName } from './outreach';
 import { TouchTimeline } from './TouchTimeline';
 
 /** The touches query as the detail screen holds it (it also refetches it on pull and focus). */
@@ -76,7 +76,7 @@ function Row({ label, spoken, children, onPress, hint }: RowProps) {
   );
 }
 
-type Editor = 'status' | 'followUp' | 'assignee' | null;
+type Editor = 'status' | 'followUp' | 'assignee' | 'claim' | null;
 
 export type OutreachCardProps = {
   lead: Lead;
@@ -89,9 +89,11 @@ export type OutreachCardProps = {
 
 /**
  * Outreach on the lead detail: the status, the next follow-up (overdue in
- * signal, today in gold), who owns the lead and who added it, each opening its
- * editor for people with `leads.update`; "Log outreach" for `leads.outreach`;
- * then the touches timeline with its own loading, failure and empty states.
+ * signal, today in gold) and who owns the lead, each opening its editor for
+ * people with `leads.update`; who found it and who booked it (commission
+ * credit, read only; a booked lead nobody has the booking credit for offers
+ * "I booked this call"); "Log outreach" for `leads.outreach`; then the
+ * touches timeline with its own loading, failure and empty states.
  */
 export function OutreachCard({ lead, meta, now, touches, onLog }: OutreachCardProps) {
   const canUpdate = useCan('leads.update');
@@ -130,12 +132,38 @@ export function OutreachCard({ lead, meta, now, touches, onLog }: OutreachCardPr
       </Text>
     </Row>,
   ];
-  if (lead.addedBy) {
-    const by = staffName(lead.addedBy);
+  // Commission credit: who found it (added it by hand) and who booked the call. Shown once known.
+  const finder = finderOf(lead);
+  if (finder) {
+    const by = staffName(finder);
     rows.push(
-      <Row key="addedBy" label="Added by" spoken={by}>
+      <Row key="foundBy" label="Found by" spoken={by}>
         <Text variant="body" align="right" numberOfLines={2}>
           {by}
+        </Text>
+      </Row>,
+    );
+  }
+  if (lead.bookedBy) {
+    const by = staffName(lead.bookedBy);
+    rows.push(
+      <Row key="bookedBy" label="Booked by" spoken={by}>
+        <Text variant="body" align="right" numberOfLines={2}>
+          {by}
+        </Text>
+      </Row>,
+    );
+  } else if (canClaimBooking(lead)) {
+    rows.push(
+      <Row
+        key="bookedBy"
+        label="Booked by"
+        spoken="nobody yet"
+        onPress={canUpdate ? () => setEditor('claim') : undefined}
+        hint="Records that you booked this call"
+      >
+        <Text variant="body" color="ink4" align="right">
+          Nobody yet
         </Text>
       </Row>,
     );
@@ -196,6 +224,7 @@ export function OutreachCard({ lead, meta, now, touches, onLog }: OutreachCardPr
       {editor === 'status' ? <LeadStatusSheet lead={lead} meta={meta} onClose={close} /> : null}
       {editor === 'followUp' ? <FollowUpSheet lead={lead} onClose={close} /> : null}
       {editor === 'assignee' ? <AssigneeSheet lead={lead} onClose={close} /> : null}
+      {editor === 'claim' ? <ClaimBookingSheet lead={lead} onClose={close} /> : null}
     </Section>
   );
 }

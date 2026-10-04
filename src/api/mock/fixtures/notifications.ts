@@ -80,6 +80,11 @@ export const NOTIFICATION_EVENTS = {
   'audience.complained': { label: 'Marked as spam', category: 'audience', severity: 'warning', needsAction: false },
   'team.member_added': { label: 'Team member added', category: 'team', severity: 'info', needsAction: false },
   'team.member_removed': { label: 'Team member removed', category: 'team', severity: 'warning', needsAction: false },
+  // Staff management (docs/admin-api/staff.md): owner-audience rows in Team.
+  'team.admin_role_changed': { label: 'Team role changed', category: 'team', severity: 'info', needsAction: false, ownerOnly: true },
+  'team.admin_paused': { label: 'Team member paused', category: 'team', severity: 'warning', needsAction: false, ownerOnly: true },
+  'team.admin_resumed': { label: 'Team member resumed', category: 'team', severity: 'info', needsAction: false, ownerOnly: true },
+  'settings.commission_changed': { label: 'Commission split changed', category: 'team', severity: 'info', needsAction: false, ownerOnly: true },
   'system.stripe_webhook_failing': { label: 'Stripe webhook failing', category: 'system', severity: 'critical', needsAction: true, ownerOnly: true },
   'system.meta_pull_failed': { label: 'Meta pull failed', category: 'system', severity: 'critical', needsAction: false, ownerOnly: true },
   'system.meta_token_expiring': { label: 'Meta token expires soon', category: 'system', severity: 'warning', needsAction: false, ownerOnly: true },

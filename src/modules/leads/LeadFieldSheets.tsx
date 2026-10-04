@@ -19,7 +19,7 @@ import { notice } from '@/lib/notice';
 
 import { applyLead, refreshAfterLeadWrite } from './cache';
 import { leadTitle, statusOptions } from './logic';
-import { CALENDAR_STATUS_HINT, isMe, isSettableStatus, staffName } from './outreach';
+import { BOOKED_BY_HAND_HINT, isMe, isSettableStatus, staffName, statusChoiceBlock } from './outreach';
 
 /** The "Nobody" choice (no email is empty). */
 const NOBODY = '';
@@ -34,21 +34,25 @@ export type LeadStatusSheetProps = {
 
 /**
  * The lead's status (PATCH /leads/:id `status`, `leads.update`): the statuses
- * from meta in the server's order. Booked and Cancelled come from the booking
- * calendar, so they are shown but cannot be picked. Saving waits for the
- * server; Home refreshes too (booked calls and recent leads show statuses).
- * Mounted only while open.
+ * from meta in the server's order. Booked can be picked for a call booked by
+ * phone, DM or email (the person saving it gets the booking credit when
+ * nobody has it yet); on a lead the booking calendar owns it cannot, and
+ * Cancelled never can. Saving waits for the server, so a refusal shows the
+ * server's message; Home refreshes too (booked calls and recent leads show
+ * statuses). Mounted only while open.
  */
 export function LeadStatusSheet({ lead, meta, onClose }: LeadStatusSheetProps) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<LeadStatus>(lead.status);
-  const options: SelectOption<LeadStatus>[] = statusOptions(meta).map((o) =>
-    isSettableStatus(o.value) ? o : { ...o, disabled: true, hint: CALENDAR_STATUS_HINT },
-  );
+  const options: SelectOption<LeadStatus>[] = statusOptions(meta).map((o) => {
+    const blocked = statusChoiceBlock(lead, o.value);
+    if (blocked) return { ...o, disabled: true, hint: blocked };
+    return o.value === 'booked' && lead.status !== 'booked' ? { ...o, hint: BOOKED_BY_HAND_HINT } : o;
+  });
   const label = options.find((o) => o.value === draft)?.label ?? draft;
 
   const save = async () => {
-    if (!isSettableStatus(draft) || draft === lead.status) {
+    if (!isSettableStatus(draft) || draft === lead.status || statusChoiceBlock(lead, draft)) {
       onClose();
       return;
     }
@@ -72,7 +76,7 @@ export function LeadStatusSheet({ lead, meta, onClose }: LeadStatusSheetProps) {
           label="Save status"
           pendingLabel="Saving"
           fullWidth
-          disabled={draft === lead.status || !isSettableStatus(draft)}
+          disabled={draft === lead.status || statusChoiceBlock(lead, draft) !== null}
           onPress={save}
         />
       }
@@ -157,6 +161,57 @@ export function AssigneeSheet({ lead, onClose }: AssigneeSheetProps) {
       footer={<PendingButton label="Save" pendingLabel="Saving" fullWidth disabled={draft === current || !team.data} onPress={save} />}
     >
       <View style={styles.body}>{body}</View>
+    </Sheet>
+  );
+}
+
+/* ---------- booked by (commission credit) ---------- */
+
+export type ClaimBookingSheetProps = {
+  lead: Lead;
+  onClose: () => void;
+};
+
+/**
+ * "I booked this call" (PATCH /leads/:id `status: booked`, `leads.update`):
+ * on a lead that shows booked with nobody holding the booking credit (a
+ * calendar booking that came from outreach, or a call booked by phone before
+ * credit existed), it records the signed-in person as the booker. The first
+ * person to book a lead keeps the credit, so the toast says who has it.
+ * Mounted only while open.
+ */
+export function ClaimBookingSheet({ lead, onClose }: ClaimBookingSheetProps) {
+  const queryClient = useQueryClient();
+  const me = useMe();
+
+  const claim = async () => {
+    const updated = await updateLead(lead.id, { status: 'booked' });
+    applyLead(queryClient, updated);
+    refreshAfterLeadWrite(queryClient);
+    const booker = updated.bookedBy ?? null;
+    if (booker && !isMe(booker, me?.user.email)) {
+      notice.err(`${staffName(booker)} already has the booking credit.`);
+    } else {
+      haptics.success();
+      notice.ok('Booking recorded. The booking credit is yours.');
+    }
+    onClose();
+  };
+
+  return (
+    <Sheet
+      visible
+      onClose={onClose}
+      title="Booked by"
+      subtitle={leadTitle(lead)}
+      footer={<PendingButton label="I booked this call" pendingLabel="Saving" fullWidth onPress={claim} />}
+    >
+      <View style={styles.body}>
+        <Text variant="body">Nobody has the booking credit for this call yet.</Text>
+        <Text variant="small" color="ink3">
+          If you booked it by phone, DM or email, record it here. The first person to book a lead keeps the credit.
+        </Text>
+      </View>
     </Sheet>
   );
 }

@@ -124,6 +124,24 @@ export const CAPABILITY_ROLES = {
   'team.remove': O,
   /** Create or promote owners. */
   'team.owners': O,
+  /**
+   * Change a member's role. Managers switch people between manager and staff;
+   * making or changing an owner also needs `team.owners`. Env owners are
+   * locked and nobody changes their own role.
+   */
+  'team.role': OM,
+  /** Pause or resume a member's access. Managers pause managers and staff, never owners. */
+  'team.pause': OM,
+  /** Everyone's activity scoreboard and credits. */
+  'team.activity': OM,
+  /** Your own activity and your own credit rows ("My activity"). */
+  'activity.own': OMS,
+  /** Every credit row on a client, and the default split (read). */
+  'clients.credits.view': OM,
+  /** Edit a client's credits. */
+  'clients.credits.edit': OM,
+  /** Set the default finder / booker split. */
+  'commission.settings': O,
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Capability = keyof typeof CAPABILITY_ROLES;

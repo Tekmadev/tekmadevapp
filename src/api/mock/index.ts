@@ -1,7 +1,7 @@
 import type { ApiResponse, Transport } from '../types';
 
 import { mockControls } from './controls';
-import { findStaffByEmail, findStaffById, MOCK_PORTAL_USER } from './fixtures/staff';
+import { findStaffByEmail, findStaffById, isPausedStaff, MOCK_PORTAL_USER } from './fixtures/staff';
 import { fail, type Latency, type MockContext, type MockRoute, type MockStaff } from './router';
 import { allRoutes } from './routes';
 
@@ -76,7 +76,7 @@ function decodeJwtPayload(token: string): Record<string, unknown> | undefined {
   }
 }
 
-type Resolved = { staff: MockStaff } | { status: 401 | 403 };
+type Resolved = { staff: MockStaff } | { status: 401 | 403; paused?: true };
 
 /**
  * Who is calling: a mock token "mock.<userId>.<expiresAtMs>" or a real Supabase
@@ -91,7 +91,8 @@ function resolveCaller(authorization: string | undefined): Resolved {
     if (mockControls.state.expireTokens || Number(expires) < Date.now()) return { status: 401 };
     if (userId === MOCK_PORTAL_USER.id) return { status: 403 };
     const staff = findStaffById(userId);
-    return staff ? { staff } : { status: 401 };
+    if (!staff) return { status: 401 };
+    return isPausedStaff(staff) ? { status: 403, paused: true } : { staff };
   }
   const payload = decodeJwtPayload(token);
   if (!payload) return { status: 401 };
@@ -100,7 +101,8 @@ function resolveCaller(authorization: string | undefined): Resolved {
   const email = typeof payload.email === 'string' ? payload.email : '';
   const staff = findStaffByEmail(email);
   // A valid Supabase session is not enough: client portal users share the pool.
-  return staff ? { staff } : { status: 403 };
+  if (!staff) return { status: 403 };
+  return isPausedStaff(staff) ? { status: 403, paused: true } : { staff };
 }
 
 const idempotent = new Map<string, ApiResponse>();
@@ -142,9 +144,10 @@ export const mockTransport: Transport = async (request) => {
   if (r.auth !== false) {
     const caller = resolveCaller(request.headers.Authorization);
     if ('status' in caller) {
-      return caller.status === 401
-        ? fail(401, 'unauthorized', 'Sign in again.')
-        : fail(403, 'not_staff', 'That account is not allowed here.');
+      if (caller.status === 401) return fail(401, 'unauthorized', 'Sign in again.');
+      // Paused (staff management): from auth, before any capability, on every route (GET /me too).
+      if (caller.paused) return fail(403, 'paused', 'Your access is paused. Ask an owner or manager.');
+      return fail(403, 'not_staff', 'That account is not allowed here.');
     }
     staff = caller.staff;
   }

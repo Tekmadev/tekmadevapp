@@ -131,6 +131,8 @@ export const SIGN_IN_MESSAGES = {
   network: 'Could not sign in. Check your connection.',
   generic: 'Could not sign in.',
   notAllowed: 'That account is not allowed here.',
+  /** 403 `paused` from GET /me: an owner or manager paused this person's access. */
+  paused: MESSAGES.paused,
 } as const;
 
 export const session = {
@@ -156,7 +158,8 @@ export const session = {
     } catch (e) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
         await clearAuthSession();
-        useSession.setState({ status: 'signedOut' });
+        // A paused person is told why (staff management); anyone else simply lands on sign in.
+        useSession.setState({ status: 'signedOut', signOutMessage: e.isPaused ? MESSAGES.paused : null });
         return;
       }
       // Offline with no cached profile: we cannot show anything useful yet.
@@ -196,6 +199,8 @@ export const session = {
     } catch (e) {
       await clearAuthSession();
       if (e instanceof ApiError) {
+        // Paused at the admin API: the password was right, so say why they cannot get in.
+        if (e.isPaused) return { ok: false, message: SIGN_IN_MESSAGES.paused };
         if (e.status === 401 || e.status === 403) return { ok: false, message: SIGN_IN_MESSAGES.notAllowed };
         if (e.isNetwork) return { ok: false, message: SIGN_IN_MESSAGES.network };
       }
@@ -242,19 +247,27 @@ export const session = {
 
 let sessionEnding = false;
 
+/** A forced sign-out (session ended, access paused): once, with the message for the sign-in screen. */
+function endSession(message: string) {
+  if (sessionEnding || useSession.getState().status !== 'signedIn') return;
+  sessionEnding = true;
+  session.signOut(message).finally(() => {
+    sessionEnding = false;
+  });
+}
+
 /** Install the API client bridge (once, at startup). */
 export function installAuthBridge(handlers: { onOwnerOnly: () => void }) {
   setAuthBridge({
     getAccessToken: () => currentAccessToken().catch(() => null),
     refresh: () => refreshAccessToken().catch(() => null),
-    sessionEnded: (message) => {
-      if (sessionEnding || useSession.getState().status !== 'signedIn') return;
-      sessionEnding = true;
-      session.signOut(message).finally(() => {
-        sessionEnding = false;
-      });
-    },
+    sessionEnded: endSession,
     ownerOnly: (code) => {
+      // Access paused (staff management): every call answers 403 `paused`. Sign out and say why.
+      if (code === 'paused') {
+        endSession(MESSAGES.paused);
+        return;
+      }
       // A role limit on one action stays on the screen; the caller shows the message.
       if (code === 'forbidden') return;
       notice.err(MESSAGES.ownerOnly);

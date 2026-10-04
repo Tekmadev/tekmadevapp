@@ -12,7 +12,17 @@ import { daysAgo, type MockStaff } from '../router';
  *   Staff:   staff@tekmadev.test   / tekmadev-staff
  *   Not staff (portal client): client@acmeplumbing.test / tekmadev-client
  */
-export type MockAccount = MockStaff & { password: string; lastSignInAt: string | null; addedAt: string };
+export type MockAccount = MockStaff & {
+  password: string;
+  lastSignInAt: string | null;
+  addedAt: string;
+  /**
+   * Staff management: when an owner or manager paused this person's access
+   * (every request answers 403 `paused`), and who did. Absent or null: not paused.
+   */
+  pausedAt?: string | null;
+  pausedBy?: string | null;
+};
 
 export const MOCK_ACCOUNTS: MockAccount[] = [
   {
@@ -78,4 +88,10 @@ export function findStaffByEmail(email: string): MockStaff | undefined {
 
 export function findStaffById(id: string): MockStaff | undefined {
   return MOCK_ACCOUNTS.find((a) => a.id === id);
+}
+
+/** Whether this staff member's access is paused (env owners never are). */
+export function isPausedStaff(staff: Pick<MockStaff, 'email'>): boolean {
+  const needle = staff.email.trim().toLowerCase();
+  return !!MOCK_ACCOUNTS.find((a) => a.email === needle)?.pausedAt;
 }

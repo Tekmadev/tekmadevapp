@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import { Trophy } from 'lucide-react-native';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -10,12 +11,13 @@ import { ApiError, errorMessage, fieldErrors } from '@/api/errors';
 import { queryClient as appQueryClient } from '@/api/query';
 import type { Me } from '@/api/schemas/session';
 import { changePassword, hasPasswordErrors, PASSWORD_COPY, validateNewPassword, type PasswordErrors } from '@/auth/password';
-import { roleCopy } from '@/auth/permissions';
+import { roleCopy, useCan } from '@/auth/permissions';
 import { session, useMe, useSession } from '@/auth/session';
 import { Avatar } from '@/components/Avatar';
 import { Badge } from '@/components/Badge';
 import { Card } from '@/components/Card';
 import { ErrorState } from '@/components/ErrorState';
+import { ListRow } from '@/components/ListRow';
 import { PasswordField } from '@/components/form/PasswordField';
 import { TextField } from '@/components/form/TextField';
 import { PendingButton } from '@/components/PendingButton';
@@ -28,6 +30,7 @@ import { enterPull, useReduceMotion } from '@/design/motion';
 import { space } from '@/design/tokens';
 import { connectivity } from '@/lib/connectivity';
 import { notice } from '@/lib/notice';
+import { STAFF_COPY } from '@/modules/team/staff';
 
 import { DISPLAY_NAME_MAX, isNameChanged, nameSavedMessage, nameToSave, PROFILE_COPY } from './logic';
 
@@ -82,6 +85,7 @@ function ProfileBody({ me }: { me: Me }) {
     <View>
       <Animated.View entering={enter(0)} style={styles.block}>
         <IdentityCard me={me} />
+        <MyActivityRow />
       </Animated.View>
       <Animated.View entering={enter(1)}>
         <Section title="Account">
@@ -95,6 +99,23 @@ function ProfileBody({ me }: { me: Me }) {
         <PasswordForm />
       </Animated.View>
     </View>
+  );
+}
+
+/** "My activity" (`activity.own`): your own scoreboard and credit. */
+function MyActivityRow() {
+  const seesOwn = useCan('activity.own');
+  if (!seesOwn) return null;
+  return (
+    <Card padded={false} style={styles.activity}>
+      <ListRow
+        title={STAFF_COPY.myActivity}
+        subtitle={STAFF_COPY.myActivityHint}
+        icon={Trophy}
+        iconTone="gold"
+        onPress={() => router.push('/my-activity')}
+      />
+    </Card>
   );
 }
 
@@ -271,6 +292,7 @@ function PasswordForm() {
 }
 
 const styles = StyleSheet.create({
+  activity: { marginTop: space[3] },
   block: { marginBottom: space[6] },
   identity: { flexDirection: 'row', alignItems: 'center', gap: space[4] },
   identityText: { flex: 1, gap: 2 },

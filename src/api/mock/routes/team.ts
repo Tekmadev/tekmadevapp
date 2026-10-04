@@ -1,11 +1,14 @@
 import { env } from '@/lib/env';
 
-import type { Team, TeamMember, TeamRemoveResult } from '../../schemas/team';
+import type { ActivityRange, StaffActivity, Team, TeamMember, TeamRemoveResult } from '../../schemas/team';
 import type { Role } from '../../types';
+import { recordNotificationEvent } from '../fixtures/notifications';
 import { MOCK_ACCOUNTS, type MockAccount } from '../fixtures/staff';
+import { ACTIVITY_RANGES, RANGE_MESSAGE, staffActivity } from '../fixtures/staffActivity';
 import { ENV_OWNER_ADDED_AT, SEEDED_SIGN_INS } from '../fixtures/team';
-import { requireCap } from '../permissions';
-import { fail, isEmail, mockId, notFound, nowIso, ok, str, type MockRoute } from '../router';
+import { forbidden, mockCan, requireAnyCap, requireCap } from '../permissions';
+import { fail, isEmail, mockId, notFound, nowIso, ok, str, type MockContext, type MockResult, type MockRoute } from '../router';
+import { staffName } from './session';
 
 /**
  * Mock routes for the "team" domain (owner decision 2026-10-03): the list
@@ -15,6 +18,13 @@ import { fail, isEmail, mockId, notFound, nowIso, ok, str, type MockRoute } from
  * `owner`, like the server). The team is the mock staff list itself, so a
  * member added here can sign in with the temporary password, and a removed
  * member's next request answers 401.
+ *
+ * Staff management (the website's docs/admin-api/staff.md): PATCH
+ * /team/:email changes a role (`team.role`) or pauses and resumes access
+ * (`team.pause`) by the server's rules, in the server's order; a paused
+ * member's every request answers 403 `paused` (src/api/mock/index.ts). GET
+ * /team/activity (`team.activity`) and GET /me/activity (`activity.own`) are
+ * the activity board (fixtures/staffActivity.ts).
  */
 
 const NAME_MAX = 80;
@@ -28,6 +38,8 @@ const RANK: Record<Role, number> = { owner: 1, manager: 2, staff: 3 };
 const isEnvOwner = (account: MockAccount) => account.role === 'owner' && account.locked;
 
 function present(account: MockAccount): TeamMember {
+  const paused = !!account.pausedAt;
+  const pausedBy = paused && account.pausedBy ? MOCK_ACCOUNTS.find((a) => a.email === account.pausedBy) : undefined;
   return {
     email: account.email,
     name: account.name,
@@ -35,6 +47,9 @@ function present(account: MockAccount): TeamMember {
     lastSignInAt: account.lastSignInAt ?? SEEDED_SIGN_INS[account.id] ?? null,
     addedAt: account.addedAt,
     envOwner: isEnvOwner(account),
+    paused,
+    pausedAt: paused ? (account.pausedAt ?? null) : null,
+    pausedBy: paused && account.pausedBy ? { email: account.pausedBy, name: pausedBy?.name ?? null } : null,
   };
 }
 
@@ -42,7 +57,17 @@ function present(account: MockAccount): TeamMember {
 function extraEnvOwners(): TeamMember[] {
   return env.mockOwnerEmails
     .filter((email) => !MOCK_ACCOUNTS.some((a) => a.email === email))
-    .map((email) => ({ email, name: null, role: 'owner', lastSignInAt: null, addedAt: ENV_OWNER_ADDED_AT, envOwner: true }));
+    .map((email) => ({
+      email,
+      name: null,
+      role: 'owner',
+      lastSignInAt: null,
+      addedAt: ENV_OWNER_ADDED_AT,
+      envOwner: true,
+      paused: false,
+      pausedAt: null,
+      pausedBy: null,
+    }));
 }
 
 /** Env owners, then other owners, managers, then staff; oldest first inside each group. */
@@ -54,6 +79,99 @@ function teamList(): Team {
 }
 
 type FieldError = { code: string; message: string; field: string };
+
+/** The server's copy for PATCH /team/:email (lib/admin-users.ts TEAM_MESSAGES and the route). */
+const PATCH_MESSAGES = {
+  role: 'Pick Owner, Manager or Staff.',
+  paused: 'Send paused as true or false.',
+  locked: 'This owner is locked. Nobody can change their role or pause them.',
+  selfRole: 'You cannot change your own role.',
+  selfPause: 'You cannot pause yourself.',
+  ownerOnly: 'That section is owner only.',
+} as const;
+
+const ROLE_LABEL: Record<Role, string> = { owner: 'Owner', manager: 'Manager', staff: 'Staff' };
+
+/**
+ * PATCH /team/:email, first match wins (docs/admin-api/staff.md section 2):
+ * the body, the caller's capabilities, making an owner, a locked env owner,
+ * not on the team, yourself, then an owner target without `team.owners`.
+ */
+function patchMember(ctx: MockContext): MockResult {
+  const { body, params, user } = ctx;
+  const sendsRole = body.role !== undefined;
+  const sendsPaused = body.paused !== undefined;
+  if (sendsRole && !isRole(body.role)) return fail(400, 'role', PATCH_MESSAGES.role, { role: PATCH_MESSAGES.role });
+  if (sendsPaused && typeof body.paused !== 'boolean') return fail(400, 'paused', PATCH_MESSAGES.paused, { paused: PATCH_MESSAGES.paused });
+  const role = isRole(body.role) ? body.role : undefined;
+  const paused = typeof body.paused === 'boolean' ? body.paused : undefined;
+
+  const email = params.email.trim().toLowerCase();
+  const account = MOCK_ACCOUNTS.find((a) => a.email === email);
+  const missing = () => notFound('That team member');
+  // A body with neither key changes nothing and answers the member.
+  if (role === undefined && paused === undefined) {
+    if (env.mockOwnerEmails.includes(email) && !account) return ok<TeamMember>(teamList().find((m) => m.email === email) as TeamMember);
+    return account ? ok<TeamMember>(present(account)) : missing();
+  }
+
+  if (role !== undefined && !mockCan(user, 'team.role')) return forbidden('team.role');
+  if (paused !== undefined && !mockCan(user, 'team.pause')) return forbidden('team.pause');
+  if (role === 'owner' && !mockCan(user, 'team.owners')) return fail(403, 'owner_only', PATCH_MESSAGES.ownerOnly);
+  if (env.mockOwnerEmails.includes(email) || (account && isEnvOwner(account))) return fail(422, 'locked', PATCH_MESSAGES.locked);
+  if (!account) return missing();
+  if (account.id === user.id || email === user.email.toLowerCase()) {
+    return fail(422, 'self', role !== undefined ? PATCH_MESSAGES.selfRole : PATCH_MESSAGES.selfPause);
+  }
+  if (account.role === 'owner' && !mockCan(user, 'team.owners')) return fail(403, 'owner_only', PATCH_MESSAGES.ownerOnly);
+
+  const actor = staffName(user) ?? user.email;
+  const target = account.email;
+  if (role !== undefined && role !== account.role) {
+    const from = account.role;
+    account.role = role;
+    recordNotificationEvent({
+      event_key: 'team.admin_role_changed',
+      title: `${target} is now ${ROLE_LABEL[role]}`,
+      body: `Was ${ROLE_LABEL[from]}. Changed by ${user.email}`,
+      action_url: '/admin/team',
+      entity_type: 'admin',
+      entity_id: `${target}:role:${nowIso()}`,
+      actor_type: 'staff',
+      actor_label: actor,
+      data: { email: target, from, to: role },
+    });
+  }
+  // Pausing again keeps the first pausedAt; resuming someone not paused changes nothing.
+  if (paused === true && !account.pausedAt) {
+    account.pausedAt = nowIso();
+    account.pausedBy = user.email.toLowerCase();
+  } else if (paused === false && account.pausedAt) {
+    account.pausedAt = null;
+    account.pausedBy = null;
+  } else {
+    return ok<TeamMember>(present(account));
+  }
+  recordNotificationEvent({
+    event_key: account.pausedAt ? 'team.admin_paused' : 'team.admin_resumed',
+    title: account.pausedAt ? `${target}'s access is paused` : `${target}'s access is back`,
+    body: account.pausedAt ? `Paused by ${user.email}` : `Resumed by ${user.email}`,
+    action_url: '/admin/team',
+    entity_type: 'admin',
+    entity_id: `${target}:pause:${nowIso()}`,
+    actor_type: 'staff',
+    actor_label: actor,
+    data: { email: target, paused: !!account.pausedAt },
+  });
+  return ok<TeamMember>(present(account));
+}
+
+/** `?range=7d|30d|all`, 7d when absent or empty; 400 `range` otherwise. */
+function rangeOf(query: Record<string, string>): ActivityRange | MockResult {
+  const raw = query.range === undefined || query.range === '' ? '7d' : query.range;
+  const range = ACTIVITY_RANGES.find((r) => r === raw);
+  return range ?? fail(400, 'range', RANGE_MESSAGE, { range: RANGE_MESSAGE });
+}
 
 export const routes: MockRoute[] = [
   {
@@ -127,6 +245,43 @@ export const routes: MockRoute[] = [
       };
       MOCK_ACCOUNTS.push(account);
       return ok<TeamMember>(present(account), 201);
+    },
+  },
+  {
+    // Before /team/:email: the first matching pattern wins.
+    method: 'GET',
+    path: '/team/activity',
+    latency: 'normal',
+    handler: ({ query, user }) => {
+      const denied = requireCap(user, 'team.activity');
+      if (denied) return denied;
+      const range = rangeOf(query);
+      if (typeof range !== 'string') return range;
+      const people = teamList().map((m) => ({ email: m.email, name: m.name, role: m.role, paused: m.paused ?? false }));
+      return ok<StaffActivity>(staffActivity(people, range));
+    },
+  },
+  {
+    method: 'GET',
+    path: '/me/activity',
+    latency: 'normal',
+    handler: ({ query, user }) => {
+      const denied = requireCap(user, 'activity.own');
+      if (denied) return denied;
+      const range = rangeOf(query);
+      if (typeof range !== 'string') return range;
+      return ok<StaffActivity>(staffActivity([{ email: user.email, name: staffName(user), role: user.role, paused: false }], range));
+    },
+  },
+  {
+    method: 'PATCH',
+    path: '/team/:email',
+    latency: 'normal',
+    handler: (ctx) => {
+      // Staff hold neither: 403 `forbidden`.
+      const denied = requireAnyCap(ctx.user, 'team.role', 'team.pause');
+      if (denied) return denied;
+      return patchMember(ctx);
     },
   },
   {

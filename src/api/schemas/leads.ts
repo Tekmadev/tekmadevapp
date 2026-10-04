@@ -24,8 +24,13 @@ export type LeadSource = z.infer<typeof zLeadSource>;
 export const zLeadStatus = z.enum(['new', 'booked', 'contacted', 'qualified', 'won', 'lost', 'cancelled']);
 export type LeadStatus = z.infer<typeof zLeadStatus>;
 
-/** Statuses a person may set. Booked and cancelled mirror the booking calendar (the server refuses them). */
-export const zSettableLeadStatus = z.enum(['new', 'contacted', 'qualified', 'won', 'lost']);
+/**
+ * Statuses a person may set. Booked is settable by hand on a lead with no
+ * calendar booking (a call booked by phone, DM or email); on a lead the
+ * booking calendar owns, the server refuses it unless it already shows booked.
+ * Cancelled always comes from the booking calendar.
+ */
+export const zSettableLeadStatus = z.enum(['new', 'booked', 'contacted', 'qualified', 'won', 'lost']);
 export type SettableLeadStatus = z.infer<typeof zSettableLeadStatus>;
 
 /** What the lead says they need (booking and lead forms). */
@@ -83,6 +88,14 @@ export const zLead = z.object({
   assignedTo: zStaffRef.nullable().optional(),
   /** Who added it by hand (source outreach only). */
   addedBy: zStaffRef.nullable().optional(),
+  /*
+   * Commission credit (optional: servers and caches from before staff
+   * management do not send them; read undefined as null).
+   */
+  /** Who found it and added it by hand: credit role "finder". Null for calendar, form, free tool and portal leads. */
+  foundBy: zStaffRef.nullable().optional(),
+  /** Who first moved it to booked or logged the booking: credit role "booker". */
+  bookedBy: zStaffRef.nullable().optional(),
 });
 export type Lead = z.infer<typeof zLead>;
 

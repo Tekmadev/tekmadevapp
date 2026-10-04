@@ -563,6 +563,36 @@ export type Activity = z.infer<typeof zActivity>;
 export const zActivityPage = zPage(zActivity);
 export type ActivityPage = z.infer<typeof zActivityPage>;
 
+/* ---------- commission credit (the website's docs/admin-api/staff.md) ---------- */
+
+/** Who found the lead, who booked the call, anyone else who helped win the client. */
+export const zCreditRole = z.enum(['finder', 'booker', 'other']);
+export type CreditRole = z.infer<typeof zCreditRole>;
+
+/** One credit on a client: a team member, their role and their share of 100 (two decimals at most). */
+export const zClientCredit = z.object({
+  email: z.string(),
+  name: z.string().nullable(),
+  role: zCreditRole,
+  /** 0.01 to 100. */
+  share: z.number(),
+});
+export type ClientCredit = z.infer<typeof zClientCredit>;
+
+/** GET and PUT /clients/:id/credits. */
+export const zClientCredits = z.object({
+  clientId: z.string(),
+  /** "all": every row (`clients.credits.view`); "own": only the caller's rows (`activity.own`). */
+  scope: z.enum(['all', 'own']),
+  /** The lead this client was created from. */
+  leadId: z.string().nullable(),
+  /** Finder, then booker, then other; biggest share first; then email. */
+  credits: z.array(zClientCredit),
+  /** The newest change among the rows shown. */
+  updatedAt: zInstant.nullable(),
+});
+export type ClientCredits = z.infer<typeof zClientCredits>;
+
 /* ---------- the detail bundle ---------- */
 
 export const zClientBundle = z.object({
@@ -582,6 +612,12 @@ export const zClientBundle = z.object({
   members: z.array(zMember),
   /** First page, newest first; more with GET /clients/:id/activity. */
   activity: zActivityPage,
+  /**
+   * Commission credit: every row for `clients.credits.view`, only the caller's
+   * own rows otherwise (often none). Optional: servers and caches from before
+   * staff management do not send it.
+   */
+  credits: z.array(zClientCredit).optional(),
 });
 export type ClientBundle = z.infer<typeof zClientBundle>;
 

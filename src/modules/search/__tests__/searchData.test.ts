@@ -37,7 +37,9 @@ const EVERY_SCREEN = [
   'Loader',
   'Test mode',
   'Team',
+  'Team activity',
   'Profile',
+  'My activity',
   'App settings',
   'Notification settings',
 ];
@@ -54,6 +56,7 @@ const NOT_FOR_STAFF = [
   'Loader',
   'Test mode',
   'Team',
+  'Team activity',
 ];
 
 describe('searchScreensFor', () => {

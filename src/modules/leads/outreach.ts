@@ -39,14 +39,54 @@ export function loggedMessage(kind: TouchKind, meta: LeadsMeta | undefined): str
 
 /* ---------- statuses a person may set ---------- */
 
-/** Booked and cancelled mirror the booking calendar: the server refuses them (400 `status`). */
-export const SETTABLE_STATUSES: readonly SettableLeadStatus[] = ['new', 'contacted', 'qualified', 'won', 'lost'];
+/**
+ * Statuses a person may set (staff management, docs/admin-api/staff.md):
+ * booked is settable by hand for a call booked by phone, DM or email.
+ * Cancelled always mirrors the booking calendar (the server refuses it).
+ */
+export const SETTABLE_STATUSES: readonly SettableLeadStatus[] = ['new', 'booked', 'contacted', 'qualified', 'won', 'lost'];
 
 export const isSettableStatus = (status: LeadStatus): status is SettableLeadStatus =>
   (SETTABLE_STATUSES as readonly LeadStatus[]).includes(status);
 
-/** Shown under Booked and Cancelled in the status choices (they cannot be picked). */
+/** Shown under a status the booking calendar sets (it cannot be picked). */
 export const CALENDAR_STATUS_HINT = 'Set by the booking calendar';
+
+/** Shown under Booked when picking it books the call by hand (and gives the booking credit). */
+export const BOOKED_BY_HAND_HINT = 'Booked by phone, DM or email';
+
+/**
+ * A lead the booking calendar owns: a Cal booking, or a lead a booking was
+ * attached to. Its status drives the CRM's booked-call reminders, so the
+ * calendar sets booked on it.
+ */
+export const isCalendarLead = (lead: Pick<Lead, 'source' | 'bookingAt'>) => lead.source === 'cal_booking' || lead.bookingAt !== null;
+
+/**
+ * Why a status cannot be picked for this lead, or null when it can:
+ * cancelled never; booked not on a calendar lead that does not already show
+ * booked (the server refuses it with the calendar message).
+ */
+export function statusChoiceBlock(lead: Pick<Lead, 'source' | 'bookingAt' | 'status'>, status: LeadStatus): string | null {
+  if (!isSettableStatus(status)) return CALENDAR_STATUS_HINT;
+  if (status === 'booked' && isCalendarLead(lead) && lead.status !== 'booked') return CALENDAR_STATUS_HINT;
+  return null;
+}
+
+/** Who found the lead: `foundBy`, else (an older server) who added it by hand. */
+export function finderOf(lead: Pick<Lead, 'source' | 'foundBy' | 'addedBy'>): StaffRef | null {
+  if (lead.foundBy) return lead.foundBy;
+  return lead.source === 'outreach' ? (lead.addedBy ?? null) : null;
+}
+
+/**
+ * Whether "I booked this call" is offered: the lead shows booked and nobody
+ * has the booking credit yet (a calendar booking from an outreach lead, or a
+ * call booked before the credit existed). Sending booked records the caller.
+ * Only when the server says nobody (null): an older server sends no
+ * `bookedBy` at all and would refuse the status.
+ */
+export const canClaimBooking = (lead: Pick<Lead, 'status' | 'bookedBy'>) => lead.status === 'booked' && lead.bookedBy === null;
 
 /* ---------- people ---------- */
 

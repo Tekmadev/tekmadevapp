@@ -25,6 +25,7 @@ import { drafts } from '@/lib/storage';
 
 import { AboutCard } from './AboutCard';
 import { clearCachedData } from './clearCache';
+import { CommissionCard } from './CommissionCard';
 import { SETTINGS_COPY, THEME_OPTIONS } from './logic';
 import { SecurityCard } from './SecurityCard';
 import { SettingsGroup } from './SettingsGroup';
@@ -62,9 +63,10 @@ async function clearCache() {
 /**
  * More, App settings (brief 8.18): Appearance (System / Light / Dark with a
  * cross-fade), Notifications, Security (biometric unlock, lock after, hide in
- * recents), Data ("Clear cached data"), About (version, build, API mode,
- * updates, the Kit easter egg) and Sign out. Everything but the update check
- * is local to the phone, so it all works offline.
+ * recents), Commission split (owners edit, managers read), Data ("Clear
+ * cached data"), About (version, build, API mode, updates, the Kit easter
+ * egg) and Sign out. Everything but the update check and the commission
+ * split is local to the phone, so it works offline.
  */
 export function AppSettingsScreen() {
   const { colors } = useTheme();
@@ -107,6 +109,9 @@ export function AppSettingsScreen() {
         ) : null}
 
         <SecurityCard index={2} />
+
+        {/* Owners edit it; managers read it; staff never see it. */}
+        <CommissionCard index={3} />
 
         <SettingsGroup title={SETTINGS_COPY.data} icon={Database} index={3}>
           <ListRow

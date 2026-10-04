@@ -9,12 +9,18 @@ export const teamModule: ModuleManifest = {
   group: 'more',
   moreSection: 'settings',
   capability: 'team.view',
-  routes: ['team'],
+  routes: ['team', 'team-activity'],
   href: '/team',
   summary: 'Owners, managers and staff',
   searchable: {
     screens: [
-      { title: 'Team', keywords: ['staff', 'members', 'managers', 'roles'], href: '/team' },
+      { title: 'Team', keywords: ['staff', 'members', 'managers', 'roles', 'pause'], href: '/team' },
+      {
+        title: 'Team activity',
+        keywords: ['scoreboard', 'activity', 'credit', 'commission', 'outreach'],
+        href: '/team-activity',
+        capability: 'team.activity',
+      },
     ],
   },
 };

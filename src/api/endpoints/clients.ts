@@ -11,6 +11,7 @@ import {
   zCallResult,
   zClient,
   zClientBundle,
+  zClientCredits,
   zClientList,
   zCreateClientResult,
   zCrmLocation,
@@ -38,7 +39,9 @@ import {
   type Client,
   type ClientAttention,
   type ClientBundle,
+  type ClientCredits,
   type ClientList,
+  type CreditRole,
   type ClientListStatus,
   type ClientsMeta,
   type ClientStatus,
@@ -106,6 +109,19 @@ export type NewClientInput = {
   planId?: PlanId | null;
   assignedStrategist?: string | null;
   sendInvite: boolean;
+  /**
+   * "Create client from this lead": links the client to the lead and copies
+   * its finder and booker to the client's credits with the default split.
+   * Needs `leads.convert` too. 400 `lead_id` (gone), 409 `lead_converted`.
+   */
+  leadId?: string | null;
+};
+
+/** PUT /clients/:id/credits: replaces every row. Shares add up to exactly 100, or the list is empty. */
+export type ClientCreditsInput = {
+  credits: { email: string; role: CreditRole; share: number }[];
+  /** Required, 1 to 500 characters: why it changed. */
+  note: string;
 };
 
 /** PATCH /clients/:id: send only what changed; null clears a nullable field. */
@@ -239,6 +255,8 @@ export const clientKeys = {
   /** The whole bundle: invalidate it after any write on a client's sections. */
   detail: (id: string) => ['clients', 'detail', id] as const,
   activity: (id: string) => ['clients', 'activity', id] as const,
+  /** GET /clients/:id/credits. The bundle carries the same rows as `credits`. */
+  credits: (id: string) => ['clients', 'credits', id] as const,
   templates: () => ['clients', 'templates'] as const,
 };
 
@@ -292,6 +310,23 @@ export function getOnboardingTemplates(signal?: AbortSignal) {
  */
 export function createClient(input: NewClientInput, idempotencyKey: string) {
   return api.post<CreateClientResult>('/clients', input, { schema: zCreateClientResult, idempotencyKey });
+}
+
+/**
+ * GET /clients/:id/credits: every row with `clients.credits.view` (scope
+ * "all"), only the caller's own rows with `activity.own` (scope "own").
+ */
+export function getClientCredits(id: string, signal?: AbortSignal) {
+  return api.get<ClientCredits>(`/clients/${seg(id)}/credits`, { schema: zClientCredits, signal });
+}
+
+/**
+ * PUT /clients/:id/credits (`clients.credits.edit`): replaces every row and
+ * logs the change with the note. No Idempotency-Key: sending the same credits
+ * again changes nothing. 400 `credits`, `total` or `note` with `fields`.
+ */
+export function saveClientCredits(id: string, input: ClientCreditsInput) {
+  return api.put<ClientCredits>(`/clients/${seg(id)}/credits`, input, { schema: zClientCredits });
 }
 
 /** PATCH /clients/:id (account fields and guarantee terms) → the full client. */

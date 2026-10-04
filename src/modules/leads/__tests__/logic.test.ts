@@ -164,12 +164,13 @@ describe('detail', () => {
 
   it('pre-fills New client with what the lead has', () => {
     expect(newClientParams(lead())).toEqual({
+      leadId: 'ld_1',
       businessName: 'Chen Plumbing',
       email: 'maya@chenplumbing.test',
       name: 'Maya Chen',
       phone: '+16135550171',
     });
-    expect(newClientParams(lead({ business: null, name: ' ', phone: null }))).toEqual({ email: 'maya@chenplumbing.test' });
+    expect(newClientParams(lead({ business: null, name: ' ', phone: null }))).toEqual({ leadId: 'ld_1', email: 'maya@chenplumbing.test' });
   });
 
   it('tells upcoming calls from past ones', () => {

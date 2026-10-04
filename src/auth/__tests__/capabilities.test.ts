@@ -44,18 +44,19 @@ const STAFF: Capability[] = [
   'pricing.view',
   'coupons.view',
   'coupons.share',
+  'activity.own',
 ];
 
-/** What only owners may do: remove team members, create or promote owners. */
-const OWNER_ONLY: Capability[] = ['team.remove', 'team.owners'];
+/** What only owners may do: remove team members, create or promote owners, set the default commission split. */
+const OWNER_ONLY: Capability[] = ['team.remove', 'team.owners', 'commission.settings'];
 
 /** Money never reaches staff. */
 const MONEY: Capability[] = ['overview.revenue', 'billing.view', 'clients.billing', 'inbox.billing', 'inbox.sales', 'pricing.write', 'coupons.write'];
 
 describe('the table', () => {
-  it('has the 65 capability names the server uses, each once', () => {
-    expect(CAPABILITIES).toHaveLength(65);
-    expect(new Set(CAPABILITIES).size).toBe(65);
+  it('has the 72 capability names the server uses, each once', () => {
+    expect(CAPABILITIES).toHaveLength(72);
+    expect(new Set(CAPABILITIES).size).toBe(72);
     for (const cap of CAPABILITIES) expect(cap).toMatch(/^[a-z]+(\.[a-z_]+)+$/);
   });
 
@@ -63,7 +64,7 @@ describe('the table', () => {
     expect(ROLE_CAPABILITIES.owner).toEqual(CAPABILITIES);
   });
 
-  it('gives managers everything except removing members and making owners', () => {
+  it('gives managers everything except removing members, making owners and setting the commission split', () => {
     expect(ROLE_CAPABILITIES.manager).toEqual(CAPABILITIES.filter((c) => !OWNER_ONLY.includes(c)));
   });
 
@@ -72,7 +73,7 @@ describe('the table', () => {
   });
 
   it('never gives staff money, writes to marketing or sales, settings, or test data', () => {
-    for (const cap of [...MONEY, 'blog.write', 'email.campaigns.write', 'links.write', 'crm.view', 'loader.view', 'testmode.view', 'team.view', 'testdata.view'] as Capability[]) {
+    for (const cap of [...MONEY, 'blog.write', 'email.campaigns.write', 'links.write', 'crm.view', 'loader.view', 'testmode.view', 'team.view', 'testdata.view', 'team.role', 'team.pause', 'team.activity', 'clients.credits.view', 'clients.credits.edit'] as Capability[]) {
       expect(can('staff', cap)).toBe(false);
     }
   });

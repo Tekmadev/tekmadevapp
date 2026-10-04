@@ -1,5 +1,5 @@
 import { zLeadNeed, zLeadRevenue, zLeadSource, zLeadStatus, zTouchKind, type Lead, type LeadStatus, type StaffRef, type Touch, type TouchKind } from '../../schemas/leads';
-import { findLead, leadAssignees, leadsDb, leadTouchesDb } from '../fixtures/leads';
+import { findLead, leadAssignees, leadsDb, leadTouchesDb, recordBooking } from '../fixtures/leads';
 import { requireAnyCap, requireCap } from '../permissions';
 import { byNewest, fail, matches, mockId, nowIso, ok, paginate, type MockContext, type MockResult, type MockRoute } from '../router';
 
@@ -9,6 +9,10 @@ import { byNewest, fail, matches, mockId, nowIso, ok, paginate, type MockContext
  * lib/admin-api/leads): POST /leads, PATCH /leads/:id, GET and POST
  * /leads/:id/touches, GET /leads/assignees, and the `assigned` and `followUp`
  * filters. Same capabilities, rules, codes and messages as the server.
+ * Commission credit (docs/admin-api/staff.md section 3): a lead added by hand
+ * records who found it; the first person to book a lead (by hand, or logging
+ * a calendar booking) is its booker. Booked is settable on a lead with no
+ * calendar booking.
  * Search and filters run here, like on the server. Unknown filter values are a
  * 400 rather than a silent empty list.
  */
@@ -16,7 +20,8 @@ import { byNewest, fail, matches, mockId, nowIso, ok, paginate, type MockContext
 /** The server's copy (lib/admin-api/leads/input.ts MESSAGES). */
 const M = {
   status: 'Unknown lead status.',
-  statusFromCalendar: 'Booked and cancelled come from the booking calendar. Pick another status.',
+  statusFromCalendar: 'Cancelled comes from the booking calendar. Pick another status.',
+  bookedByCalendar: 'This lead booked through the calendar, so the calendar sets booked. Pick another status.',
   followUpAt: 'Enter a valid follow-up time.',
   assignedTo: 'Pick someone on the team.',
   need: 'Unknown lead need.',
@@ -42,7 +47,7 @@ const M = {
   notFound: 'That lead no longer exists.',
 } as const;
 
-const SETTABLE: readonly LeadStatus[] = ['new', 'contacted', 'qualified', 'won', 'lost'];
+const SETTABLE: readonly LeadStatus[] = ['new', 'booked', 'contacted', 'qualified', 'won', 'lost'];
 /** Logging one of these on a "new" lead makes it "contacted" (server rule). */
 const CONTACT_KINDS: readonly TouchKind[] = ['call', 'email', 'dm', 'meeting'];
 const FOLLOW_UP_FILTERS = ['due', 'upcoming', 'any'] as const;
@@ -144,7 +149,7 @@ function settableStatus(body: Record<string, unknown>, issues: Issues): LeadStat
   if (!('status' in body) || body.status === undefined) return undefined;
   const v = body.status;
   if (typeof v === 'string' && SETTABLE.includes(v as LeadStatus)) return v as LeadStatus;
-  issues.add('status', v === 'booked' || v === 'cancelled' ? M.statusFromCalendar : M.status, true);
+  issues.add('status', v === 'cancelled' ? M.statusFromCalendar : M.status, true);
   return undefined;
 }
 
@@ -183,6 +188,20 @@ function touchAt(body: Record<string, unknown>, issues: Issues): string | undefi
   else if (ms < Date.now() - 366 * DAY_MS) issues.add('at', M.atOld);
   else return v;
   return undefined;
+}
+
+/* ---------- booked (commission credit) ---------- */
+
+/** A lead the booking calendar owns: a Cal booking, or a lead a booking was attached to. */
+const isCalendarLead = (lead: Lead) => lead.source === 'cal_booking' || lead.bookingAt !== null;
+
+/**
+ * 400 `status` for "booked" on a calendar lead that does not show booked
+ * (its status drives the CRM's booked-call reminders). Null: go ahead.
+ */
+function refuseBooked(lead: Lead, status: LeadStatus | undefined): MockResult | null {
+  if (status !== 'booked' || !isCalendarLead(lead) || lead.status === 'booked') return null;
+  return fail(400, 'status', M.bookedByCalendar, { status: M.bookedByCalendar });
 }
 
 /* ---------- people ---------- */
@@ -325,7 +344,11 @@ export const routes: MockRoute[] = [
         followUpAt: followUp ?? null,
         assignedTo: owner,
         addedBy: callerRef(ctx),
+        // The caller found it (their finder credit), and booked it too when it is added as booked.
+        foundBy: callerRef(ctx),
+        bookedBy: null,
       };
+      if (lead.status === 'booked') recordBooking(lead, callerRef(ctx), lead.createdAt);
       leadsDb.unshift(lead);
       return ok(lead, 201);
     },
@@ -356,7 +379,8 @@ export const routes: MockRoute[] = [
     method: 'PATCH',
     path: '/leads/:id',
     latency: 'fast',
-    handler: ({ params, user, body }) => {
+    handler: (ctx) => {
+      const { params, user, body } = ctx;
       const denied = requireCap(user, 'leads.update');
       if (denied) return denied;
       const issues = new Issues();
@@ -366,14 +390,17 @@ export const routes: MockRoute[] = [
       if (issues.found) return issues.result();
       const lead = findLead(params.id);
       if (!lead) return notFound();
+      const refused = refuseBooked(lead, status);
+      if (refused) return refused;
       let owner: StaffRef | null | undefined = assignedTo === null ? null : undefined;
       if (assignedTo) {
         const member = teamMember(assignedTo);
         if (isResult(member)) return member;
         owner = member;
       }
-      // Setting the status it already shows writes nothing.
+      // Setting the status it already shows writes nothing, but "booked" still records the first booker.
       if (status !== undefined && status !== lead.status) lead.status = status;
+      if (status === 'booked') recordBooking(lead, callerRef(ctx), nowIso());
       if (followUp !== undefined) lead.followUpAt = followUp;
       if (owner !== undefined) lead.assignedTo = owner;
       return ok(lead);
@@ -409,6 +436,9 @@ export const routes: MockRoute[] = [
       if (issues.found || !kind?.success) return issues.result();
       const lead = findLead(params.id);
       if (!lead) return notFound();
+      // Refused before the touch is written.
+      const refused = refuseBooked(lead, status);
+      if (refused) return refused;
 
       const touch: Touch = {
         id: mockId('tc'),
@@ -427,6 +457,8 @@ export const routes: MockRoute[] = [
       // The server's rule: reaching out to a "new" lead makes it "contacted", unless a status is sent.
       const nextStatus = status ?? (CONTACT_KINDS.includes(touch.kind) && lead.status === 'new' ? 'contacted' : undefined);
       if (nextStatus !== undefined && nextStatus !== lead.status) lead.status = nextStatus;
+      // The touch that books it: its author is the booker when nobody is yet.
+      if (status === 'booked') recordBooking(lead, touch.by, touch.at);
       if (followUp !== undefined) lead.followUpAt = followUp;
       return ok({ touch, lead }, 201);
     },

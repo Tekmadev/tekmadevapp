@@ -37,4 +37,15 @@ export const metaFixture: TeamMeta = {
     { value: 'manager', label: 'Manager', help: 'Everything except removing team members or making owners.', tone: 'neutral' },
     { value: 'owner', label: 'Owner', help: 'Full access, can manage the team.', tone: 'gold' },
   ],
+  // Staff management (docs/admin-api/staff.md section 7): the credits editor and the activity board.
+  creditRoles: [
+    { value: 'finder', label: 'Finder', help: 'Found the lead and added it.' },
+    { value: 'booker', label: 'Booker', help: 'Booked the call.' },
+    { value: 'other', label: 'Other', help: 'Helped win the client another way.' },
+  ],
+  activityRanges: [
+    { value: '7d', label: '7 days' },
+    { value: '30d', label: '30 days' },
+    { value: 'all', label: 'All time' },
+  ],
 };

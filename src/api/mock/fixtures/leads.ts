@@ -95,6 +95,8 @@ function lead(spec: Spec, i: number): Lead {
     followUpAt: null,
     assignedTo: null,
     addedBy: null,
+    foundBy: null,
+    bookedBy: null,
   };
 }
 
@@ -272,6 +274,8 @@ function toolLeads(): Lead[] {
       followUpAt: null,
       assignedTo: null,
       addedBy: null,
+      foundBy: null,
+      bookedBy: null,
     };
   });
 }
@@ -411,6 +415,208 @@ for (const seed of OUTREACH) {
   });
 }
 leadTouchesDb.sort(byNewest((t) => t.at));
+
+/* ---------- commission credit: who found and who booked (docs/admin-api/staff.md) ---------- */
+
+/**
+ * When someone on the team first booked each lead (the server's
+ * `leads.booked_at`): the activity board counts calls booked in its range.
+ * Not part of the API's lead, so it lives beside the table.
+ */
+export const leadBookedAt = new Map<string, string>();
+
+/** Mark a lead booked by someone (the first booker keeps the credit). */
+export function recordBooking(lead: Lead, by: StaffRef, at: string) {
+  if (lead.bookedBy) return;
+  lead.bookedBy = by;
+  leadBookedAt.set(lead.id, at);
+}
+
+type FoundSeed = {
+  n: number;
+  daysAgo: number;
+  /** Who found it and added it by hand. */
+  by: string;
+  name: string;
+  business: string;
+  email: string;
+  phone: string | null;
+  status: LeadStatus;
+  note?: string;
+  website?: string;
+  /** Booked by this person this many days ago (a call booked by phone or DM: no calendar booking). */
+  booked?: [by: string, daysAgo: number];
+  followUp?: [dayOffset: number, hour: number];
+  touches?: TouchSeed[];
+};
+
+/**
+ * Leads the team found and added by hand (source outreach): Noah (staff) does
+ * cold outreach every day, Maya (manager) adds a few of her own. Booked ones
+ * have moved on since (the call happened), so every lead still showing booked
+ * is a calendar booking.
+ */
+const FOUND: FoundSeed[] = [
+  {
+    n: 0,
+    daysAgo: 0.3,
+    by: STAFF,
+    name: 'Tomasz Kowalski',
+    business: 'Kowalski Paving',
+    email: 'tomasz@kowalskipaving.test',
+    phone: '+19055550301',
+    status: 'new',
+    note: 'Saw three of their trucks on Upper James. No website, only a Facebook page.',
+    followUp: [0, 15],
+  },
+  {
+    n: 1,
+    daysAgo: 1.4,
+    by: STAFF,
+    name: 'Andre Fontaine',
+    business: 'Barton Street Barbers',
+    email: '',
+    phone: '+19055550302',
+    status: 'contacted',
+    website: 'instagram.com/bartonstbarbers',
+    followUp: [1, 11],
+    touches: [
+      ['dm', 1.3 * 1440, STAFF, 'Sent a DM on Instagram', 'Asked how they take bookings now.'],
+      ['call', 0.8 * 1440, STAFF, 'No answer', null],
+    ],
+  },
+  {
+    n: 2,
+    daysAgo: 3.2,
+    by: STAFF,
+    name: 'Grace Okonkwo',
+    business: 'Crown Point Auto Glass',
+    email: 'grace@crownpointglass.test',
+    phone: '+19055550303',
+    status: 'qualified',
+    booked: [STAFF, 2.1],
+    touches: [
+      ['call', 3.1 * 1440, STAFF, 'Interested, booked a call with Shajeed', null],
+      ['meeting', 1.0 * 1440, OWNER, 'Discovery call done', 'Two locations. Wants the missed-call text back first.'],
+    ],
+  },
+  {
+    n: 3,
+    daysAgo: 5.5,
+    by: STAFF,
+    name: 'Pat Reilly',
+    business: 'Mountain Brow Movers',
+    email: 'pat@mountainbrowmovers.test',
+    phone: '+19055550304',
+    status: 'contacted',
+    followUp: [-1, 10],
+    touches: [
+      ['email', 5.4 * 1440, STAFF, 'Sent the intro email', null],
+      ['call', 3.0 * 1440, STAFF, 'Left a voicemail', null],
+    ],
+  },
+  {
+    n: 4,
+    daysAgo: 11,
+    by: STAFF,
+    name: 'Lena Fischer',
+    business: 'Locke St. Florist',
+    email: 'lena@lockestflorist.test',
+    phone: '+19055550305',
+    status: 'lost',
+    touches: [['call', 10.8 * 1440, STAFF, 'Not a fit right now', 'Only two staff, no budget until spring.']],
+  },
+  {
+    n: 5,
+    daysAgo: 22,
+    by: STAFF,
+    name: 'Rohan Mehra',
+    business: 'Westdale Yoga Loft',
+    email: 'rohan@westdaleyoga.test',
+    phone: '+19055550306',
+    status: 'qualified',
+    booked: [STAFF, 19],
+    touches: [
+      ['email', 21.5 * 1440, STAFF, 'Sent the free audit link', null],
+      ['call', 19.2 * 1440, STAFF, 'Booked a call', null],
+    ],
+  },
+  {
+    n: 6,
+    daysAgo: 4,
+    by: MANAGER,
+    name: 'Claire Bouchard',
+    business: 'Stoney Creek Roofing Pros',
+    email: 'claire@stoneycreekroofing.test',
+    phone: '+19055550307',
+    status: 'qualified',
+    booked: [MANAGER, 3.2],
+    touches: [['call', 3.9 * 1440, MANAGER, 'Booked a discovery call', null]],
+  },
+  {
+    n: 7,
+    daysAgo: 16,
+    by: MANAGER,
+    name: 'Victor Lam',
+    business: 'Ottawa South Plumbing',
+    email: 'victor@ottawasouthplumbing.test',
+    phone: '+16135550308',
+    status: 'contacted',
+    followUp: [2, 14],
+    touches: [['email', 15.5 * 1440, MANAGER, 'Sent pricing', null]],
+  },
+];
+
+for (const seed of FOUND) {
+  const by = staffRef(seed.by);
+  const row: Lead = {
+    id: hexId('ld', 800 + seed.n),
+    name: seed.name,
+    email: seed.email,
+    phone: seed.phone,
+    business: seed.business,
+    status: seed.status,
+    source: 'outreach',
+    need: null,
+    revenue: null,
+    message: seed.note ?? null,
+    bookingAt: null,
+    createdAt: minutesAgo(Math.round(seed.daysAgo * 1440)),
+    utm: { source: null, medium: null, campaign: null },
+    referrer: null,
+    convertedClientId: null,
+    website: seed.website ?? null,
+    followUpAt: seed.followUp ? torontoAt(seed.followUp[0], seed.followUp[1]) : null,
+    assignedTo: by,
+    addedBy: by,
+    foundBy: by,
+    bookedBy: null,
+  };
+  if (seed.booked) recordBooking(row, staffRef(seed.booked[0]), minutesAgo(Math.round(seed.booked[1] * 1440)));
+  leadsDb.push(row);
+  (seed.touches ?? []).forEach(([kind, ago, touchBy, outcome, note], i) => {
+    leadTouchesDb.push({ id: `tc_${row.id.slice(3)}${i}`, leadId: row.id, kind, outcome, note, by: staffRef(touchBy), at: minutesAgo(Math.round(ago)) });
+  });
+}
+leadsDb.sort(byNewest((l) => l.createdAt));
+leadTouchesDb.sort(byNewest((t) => t.at));
+
+/**
+ * Who booked the leads that became clients (the person who logged the
+ * booking): their booker credit was copied to the client (fixtures/credits.ts).
+ */
+const WON_BOOKERS: [clientId: string, by: string][] = [
+  ['cl_acmeplumb01', MANAGER],
+  ['cl_bytownroof', OWNER],
+  ['cl_rideaulawn', OWNER],
+  ['cl_steeltownph', STAFF],
+  ['cl_dundaselec', MANAGER],
+  ['cl_nepeanortho', STAFF],
+];
+for (const [clientId, by] of WON_BOOKERS) {
+  const row = leadsDb.find((l) => l.convertedClientId === clientId && l.status === 'won');
+  if (row) recordBooking(row, staffRef(by), row.createdAt);
+}
 
 export const findLead = (id: string) => leadsDb.find((l) => l.id === id);
 

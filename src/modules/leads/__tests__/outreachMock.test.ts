@@ -80,8 +80,12 @@ describe('POST /leads', () => {
 describe('PATCH /leads/:id and touches', () => {
   it('sets a follow-up and an owner, and refuses calendar statuses', async () => {
     const lead = await createLead({ name: 'Patch Me', email: 'patch.me@example.test' }, newIdempotencyKey());
-    const booked = await apiError(api.patch(`/leads/${lead.id}`, { status: 'booked' }));
-    expect([booked.code, booked.message]).toEqual(['status', 'Booked and cancelled come from the booking calendar. Pick another status.']);
+    const cancelled = await apiError(api.patch(`/leads/${lead.id}`, { status: 'cancelled' }));
+    expect([cancelled.code, cancelled.message]).toEqual(['status', 'Cancelled comes from the booking calendar. Pick another status.']);
+    // A calendar lead that does not show booked: the calendar sets booked.
+    const calendar = leadsDb.find((l) => l.source === 'cal_booking' && l.status !== 'booked');
+    const refused = await apiError(api.patch(`/leads/${calendar?.id}`, { status: 'booked' }));
+    expect([refused.code, refused.message]).toEqual(['status', 'This lead booked through the calendar, so the calendar sets booked. Pick another status.']);
     const nobody = await apiError(updateLead(lead.id, { assignedTo: 'stranger@example.test' }));
     expect([nobody.code, nobody.fields]).toEqual(['assigned_to', { assignedTo: 'Pick someone on the team.' }]);
     const at = new Date(Date.now() + 86_400_000).toISOString();

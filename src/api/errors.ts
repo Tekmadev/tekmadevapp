@@ -24,7 +24,11 @@ export class ApiError extends Error {
 
   /** 403 for an owner-only section (code `owner_only`); `isForbidden` covers every 403. */
   get isOwnerOnly() {
-    return this.status === 403 && this.code !== 'forbidden';
+    return this.status === 403 && this.code !== 'forbidden' && this.code !== 'paused';
+  }
+  /** 403 `paused`: an owner or manager paused this person's access. The app signs out with the message. */
+  get isPaused() {
+    return this.status === 403 && this.code === 'paused';
   }
   get isForbidden() {
     return this.status === 403;
@@ -44,6 +48,8 @@ export const MESSAGES = {
   sessionEnded: 'Your session ended. Sign in again.',
   ownerOnly: 'That section is owner only.',
   forbidden: 'Your role cannot do that.',
+  /** 403 `paused` (staff management): sign out and show this on the sign-in screen. */
+  paused: 'Your access is paused. Ask an owner or manager.',
   offline: 'You are offline',
   network: 'Could not reach the server. Check your connection.',
   timeout: 'That took too long. Nothing is lost: try again in a moment.',
@@ -104,7 +110,9 @@ function stringFields(value: unknown): Record<string, string> | undefined {
  * envelope `{ ok:false, error:{ code, message, fields? } }` and falls back to
  * status-based copy for anything else (HTML error pages, empty bodies).
  * 403: `forbidden` (a role limit on one action) shows "Your role cannot do that.";
- * every other 403 (`owner_only`, `not_staff`) uses the owner-only copy.
+ * `paused` (access paused by an owner or manager) shows "Your access is paused.
+ * Ask an owner or manager."; every other 403 (`owner_only`, `not_staff`) uses
+ * the owner-only copy.
  */
 export function toApiError(status: number, body: unknown): ApiError {
   const envelope = body && typeof body === 'object' ? (body as { ok?: unknown; error?: unknown }) : undefined;
@@ -112,7 +120,8 @@ export function toApiError(status: number, body: unknown): ApiError {
   const fallback = fallbackMessage(status);
   if (status === 403) {
     const code = error?.code ?? fallback.code;
-    return new ApiError({ status, code, message: code === 'forbidden' ? MESSAGES.forbidden : MESSAGES.ownerOnly });
+    const message = code === 'forbidden' ? MESSAGES.forbidden : code === 'paused' ? MESSAGES.paused : MESSAGES.ownerOnly;
+    return new ApiError({ status, code, message });
   }
   return new ApiError({
     status,

@@ -32,6 +32,7 @@ import { ActivitySection } from './sections/ActivitySection';
 import { AgreementsSection } from './sections/AgreementsSection';
 import { ApprovalsSection } from './sections/ApprovalsSection';
 import { CallsSection } from './sections/CallsSection';
+import { CreditSection } from './sections/CreditSection';
 import { CrmSection } from './sections/CrmSection';
 import { FilesSection } from './sections/FilesSection';
 import { IntakeSection } from './sections/IntakeSection';
@@ -87,6 +88,7 @@ function cachedBusinessName(queryClient: QueryClient, id: string): string | unde
  *
  * What shows follows the person's capabilities: the CRM tab and section need
  * `clients.crm`, and each section hides the actions this person cannot take.
+ * Credit (commission credit) follows Account, inside the Account tab.
  */
 export function ClientDetailScreen() {
   return (
@@ -273,6 +275,8 @@ function ClientDetail() {
             style={[styles.section, section === lastSection ? { minHeight: lastMinHeight } : null]}
           >
             <Body clientId={id} bundle={bundle} action={action} onActionHandled={() => setAction(undefined)} />
+            {/* Commission credit sits under Account, inside its tab (it has no tab of its own). */}
+            {section === 'account' ? <CreditSection clientId={id} bundle={bundle} /> : null}
           </View>
         );
       }),

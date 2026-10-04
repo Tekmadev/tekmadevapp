@@ -427,6 +427,9 @@ export const metaFixture: ClientsMeta = {
     { value: 'member.reset', label: 'Reset link sent' },
     { value: 'note', label: 'Internal note' },
     { value: 'update', label: 'Update to client' },
+    // Commission credit (docs/admin-api/staff.md): internal, only for clients.credits.view.
+    { value: 'credits.created', label: 'Credits set from the lead' },
+    { value: 'credits.updated', label: 'Credits changed' },
   ],
 };
 
