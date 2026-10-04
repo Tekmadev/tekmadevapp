@@ -8,7 +8,7 @@ import { emailKeys, emailMetaQuery, subscribersInfiniteQuery, type SubscriberLis
 import { sessionKeys } from '@/api/endpoints/session';
 import { MESSAGES } from '@/api/errors';
 import { SUBSCRIBER_STATUSES, type Subscriber, type SubscriberStatus } from '@/api/schemas/email';
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { Divider } from '@/components/Divider';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
@@ -46,9 +46,9 @@ const openSubscriber = (s: Subscriber) => router.push({ pathname: '/email/subscr
  */
 export function SubscribersScreen() {
   return (
-    <OwnerOnly>
+    <RequireCapability cap="email.subscribers.view">
       <SubscribersBody />
-    </OwnerOnly>
+    </RequireCapability>
   );
 }
 

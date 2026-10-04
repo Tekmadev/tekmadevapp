@@ -8,7 +8,7 @@ export const testModeModule: ModuleManifest = {
   icon: FlaskConical,
   group: 'more',
   moreSection: 'settings',
-  ownerOnly: true,
+  capability: 'testmode.view',
   routes: ['test-mode'],
   href: '/test-mode',
   summary: 'Stripe sandbox purchases',

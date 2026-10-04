@@ -9,7 +9,7 @@ import { linkClicksInfiniteQuery, linkKeys, linksMetaQuery, linksQuery } from '@
 import { sessionKeys } from '@/api/endpoints/session';
 import { MESSAGES } from '@/api/errors';
 import type { LinkClick, ShortLink } from '@/api/schemas/links';
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import { useCan } from '@/auth/permissions';
 import { Button } from '@/components/Button';
 import { Divider } from '@/components/Divider';
 import { EmptyState } from '@/components/EmptyState';
@@ -53,23 +53,17 @@ const openLink = (id: string) => router.push({ pathname: '/links/[id]', params: 
 const openLinkRow = (link: ShortLink) => openLink(link.id);
 
 /**
- * The Links section of the Marketing tab (brief 8.11, owner only): a "New
+ * The Links section of the Marketing tab (brief 8.11, `links.view`): a "New
  * link" button, every branded short link as a card (GET /links), then the
  * latest visits across all links (GET /links/clicks, infinite scroll). A card
  * opens its own click history; Copy, Share and QR code sit on the card, and
  * Disable / Enable and Delete in its menu. The quick action "New link" lands
- * here with `action=new` and opens the form once.
+ * here with `action=new` and opens the form once. New link, Disable / Enable
+ * and Delete need `links.write` (staff: Copy, Share and QR code only).
  */
-export function LinksSegment(props: MarketingSegmentProps) {
-  return (
-    <OwnerOnly>
-      <LinksBody {...props} />
-    </OwnerOnly>
-  );
-}
-
-function LinksBody({ chrome, params }: MarketingSegmentProps) {
+export function LinksSegment({ chrome, params }: MarketingSegmentProps) {
   const online = useIsOnline();
+  const canWrite = useCan('links.write');
   const reduceMotion = useReduceMotion();
   const now = useMinuteClock();
 
@@ -83,7 +77,7 @@ function LinksBody({ chrome, params }: MarketingSegmentProps) {
 
   // The quick action opens the form once; closing it clears the param, so coming back does not reopen it.
   const fromQuickAction = params.action === 'new';
-  const newOpen = creating || fromQuickAction;
+  const newOpen = canWrite && (creating || fromQuickAction);
   const closeNew = () => {
     setCreating(false);
     if (fromQuickAction) router.setParams({ action: undefined });
@@ -121,7 +115,7 @@ function LinksBody({ chrome, params }: MarketingSegmentProps) {
     <ErrorState error={links.error} onRetry={() => links.refetch()} />
   ) : (
     <View style={styles.gutter}>
-      <EmptyState compact message={LINK_COPY.emptyLinks} />
+      <EmptyState compact message={canWrite ? LINK_COPY.emptyLinks : LINK_COPY.emptyLinksReadOnly} />
     </View>
   );
 
@@ -186,7 +180,11 @@ function LinksBody({ chrome, params }: MarketingSegmentProps) {
         <Section
           title="Links"
           spacing={space[3]}
-          right={<Button label="New link" icon={Plus} size="sm" onPress={() => setCreating(true)} accessibilityHint="Opens the new link form" />}
+          right={
+            canWrite ? (
+              <Button label="New link" icon={Plus} size="sm" onPress={() => setCreating(true)} accessibilityHint="Opens the new link form" />
+            ) : undefined
+          }
         />
         {links.isRefetchError && linkList !== undefined && online ? (
           <ErrorState compact error={links.error} onRetry={() => links.refetch()} style={styles.refetchError} />

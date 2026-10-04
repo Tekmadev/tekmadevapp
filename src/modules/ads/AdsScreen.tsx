@@ -8,7 +8,8 @@ import Animated from 'react-native-reanimated';
 import { adsKeys } from '@/api/endpoints/ads';
 import { MESSAGES } from '@/api/errors';
 import type { AdsCampaign, AdsConnectedReport, AdsMeta } from '@/api/schemas/ads';
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import { useCan } from '@/auth/permissions';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
 import { ScreenList } from '@/components/ScreenList';
@@ -36,16 +37,17 @@ const STALE_OPACITY = 0.5;
 const campaignKey = (c: AdsCampaign) => c.id;
 
 /**
- * Ads (brief 8.10, owner only): what Meta reports next to what the site
+ * Ads (brief 8.10, `ads.view`): what Meta reports next to what the site
  * recorded from those ads, for the range chip. The sync line and "Refresh from
- * Meta" (a long job) sit on top, then the two KPI panels, spend and visits per
- * day, and campaign cards by spend (tap one for the ads inside it).
+ * Meta" (a long job, `ads.refresh` only) sit on top, then the two KPI panels,
+ * spend and visits per day, and campaign cards by spend (tap one for the ads
+ * inside it).
  */
 export function AdsScreen() {
   return (
-    <OwnerOnly>
+    <RequireCapability cap="ads.view">
       <AdsBody />
-    </OwnerOnly>
+    </RequireCapability>
   );
 }
 
@@ -56,6 +58,7 @@ function AdsBody() {
   const { range, query } = useAdsReport();
   const meta = useQuery(metaQuery());
   const pull = useMetaPull();
+  const canRefresh = useCan('ads.refresh');
   // Numbers count up from zero only on a first load with nothing cached; after that from what was shown.
   const [countFromZero] = useState(() => query.data === undefined);
 
@@ -96,7 +99,7 @@ function AdsBody() {
           <ErrorState compact error={query.error} onRetry={() => query.refetch()} style={styles.refetchError} />
         ) : null}
         {/* The last sync is the same for every range, so it never dims while a range loads. */}
-        {report ? <SyncCard lastSync={report.lastSync} now={now} pull={pull} /> : null}
+        {report ? <SyncCard lastSync={report.lastSync} now={now} pull={canRefresh ? pull : null} /> : null}
         {report && spent ? (
           <View style={stale ? styles.stale : null}>
             <KpiPanel title="What Meta reports" items={metaItems} columns={kpiColumns} countFromZero={countFromZero} />

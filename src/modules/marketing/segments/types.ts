@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import { can, type Capability, type CapabilityHolder } from '@/auth/capabilities';
+
 /** The four sections of the Marketing tab, in order (route param `segment`). */
 export const MARKETING_SEGMENTS = ['blog', 'email', 'links', 'crm'] as const;
 export type MarketingSegment = (typeof MARKETING_SEGMENTS)[number];
@@ -14,6 +16,33 @@ export const MARKETING_SEGMENT_LABELS: Record<MarketingSegment, string> = {
 /** Unknown or missing values open Blog. */
 export function toMarketingSegment(value: unknown): MarketingSegment {
   return (MARKETING_SEGMENTS as readonly unknown[]).includes(value) ? (value as MarketingSegment) : 'blog';
+}
+
+/** The capability each section needs (owner decision 2026-10-03). The tab shows with any one of them. */
+export const MARKETING_SEGMENT_CAPS: Readonly<Record<MarketingSegment, Capability>> = {
+  blog: 'blog.view',
+  email: 'email.view',
+  links: 'links.view',
+  crm: 'crm.view',
+};
+
+/** Every capability that opens the Marketing tab (any one is enough). */
+export const MARKETING_TAB_CAPS: readonly Capability[] = MARKETING_SEGMENTS.map((s) => MARKETING_SEGMENT_CAPS[s]);
+
+/** The sections this person may open, in tab order (staff by default: Blog, Email, Links). */
+export function allowedMarketingSegments(holder: CapabilityHolder): MarketingSegment[] {
+  return MARKETING_SEGMENTS.filter((s) => can(holder, MARKETING_SEGMENT_CAPS[s]));
+}
+
+/**
+ * The section to show for the route param: the one asked for when it is
+ * allowed, else the first allowed one (an unknown value, or a section this
+ * role cannot open, never shows a section that only answers 403).
+ */
+export function resolveMarketingSegment(value: unknown, allowed: readonly MarketingSegment[]): MarketingSegment {
+  const asked = toMarketingSegment(value);
+  if (allowed.includes(asked)) return asked;
+  return allowed[0] ?? asked;
 }
 
 /** Route params of the Marketing tab (`/marketing?segment=links&action=new`). */

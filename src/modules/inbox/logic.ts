@@ -1,5 +1,4 @@
 import {
-  OWNER_ONLY_CATEGORIES,
   NOTIFICATION_CATEGORIES,
   zNotificationFilter,
   type NotificationCategory,
@@ -9,6 +8,7 @@ import {
   type NotificationSeverity,
   type NotificationSummary,
 } from '@/api/schemas/notifications';
+import type { Capability } from '@/auth/capabilities';
 import type { Tone } from '@/design/tokens';
 import { daysBetween, formatTime, monthName, parseCalendarDate, torontoDateOf, weekdayName, weekdayOf } from '@/lib/dates';
 import { formatCount } from '@/lib/format';
@@ -80,9 +80,20 @@ export const quietToast = (category: NotificationCategory) =>
 export const EVERYTHING = 'everything';
 export type CategoryChip = NotificationCategory | typeof EVERYTHING;
 
-/** Chips in brief order; Audience and Team only for owners. */
-export function categoryChips(isOwner: boolean): { value: CategoryChip; label: string }[] {
-  const categories = NOTIFICATION_CATEGORIES.filter((c) => isOwner || !OWNER_ONLY_CATEGORIES.includes(c));
+/** The capability that lets someone read a category's rows (owner decision 2026-10-03). */
+export const categoryCapability = (category: NotificationCategory): Capability => `inbox.${category}`;
+
+/**
+ * The categories this person reads, in brief order: `inbox.<category>` for
+ * each (staff read Leads and Clients; owners and managers read all seven).
+ */
+export function readableCategories(can: (cap: Capability) => boolean): NotificationCategory[] {
+  return NOTIFICATION_CATEGORIES.filter((c) => can(categoryCapability(c)));
+}
+
+/** "Everything", then a chip per category this person reads, in brief order. */
+export function categoryChips(readable: readonly NotificationCategory[]): { value: CategoryChip; label: string }[] {
+  const categories = NOTIFICATION_CATEGORIES.filter((c) => readable.includes(c));
   return [{ value: EVERYTHING, label: INBOX_COPY.everything }, ...categories.map((c) => ({ value: c, label: CATEGORY_LABELS[c] }))];
 }
 

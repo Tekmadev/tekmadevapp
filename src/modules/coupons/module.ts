@@ -8,12 +8,12 @@ export const couponsModule: ModuleManifest = {
   icon: BadgePercent,
   group: 'more',
   moreSection: 'sales',
-  ownerOnly: true,
+  capability: 'coupons.view',
   routes: ['coupons'],
   href: '/coupons',
   summary: 'Discount codes and deal links',
   quickActions: [
-    { id: 'new-coupon', title: 'New coupon', icon: BadgePercent, href: { pathname: '/coupons', params: { action: 'new' } }, ownerOnly: true, inPlusSheet: true },
+    { id: 'new-coupon', title: 'New coupon', icon: BadgePercent, href: { pathname: '/coupons', params: { action: 'new' } }, capability: 'coupons.write', inPlusSheet: true },
   ],
   searchable: {
     screens: [

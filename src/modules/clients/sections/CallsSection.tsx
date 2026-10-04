@@ -5,6 +5,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { reviewCall } from '@/api/endpoints/clients';
 import type { Call } from '@/api/schemas/clients';
+import { useCan } from '@/auth/permissions';
 import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { Section } from '@/components/Section';
@@ -29,10 +30,16 @@ const LOG_CALL_ACTION = 'log-call';
  * clients, the CRM review banner, every booked call with its one review
  * action, the edit sheet and "Log a booked call". The route action `log-call`
  * opens that sheet once.
+ *
+ * Roles: logging needs `clients.calls.log`. Reviewing (the review button, the
+ * swipe, the edit sheet and the review banner, which asks for "your review")
+ * needs `clients.calls.review`; without it the calls are read only.
  */
 export function CallsSection({ clientId, bundle, action, onActionHandled }: SectionProps) {
   const queryClient = useQueryClient();
   const labels = useClientLabels();
+  const canLog = useCan('clients.calls.log');
+  const canReview = useCan('clients.calls.review');
   const { calls, guarantee, client } = bundle;
 
   const [logOpen, setLogOpen] = useState(action === LOG_CALL_ACTION);
@@ -67,17 +74,23 @@ export function CallsSection({ clientId, bundle, action, onActionHandled }: Sect
   return (
     <Section
       title="Calls"
-      right={<Button label="Log a booked call" icon={Plus} size="sm" variant="secondary" onPress={() => setLogOpen(true)} />}
+      right={canLog ? <Button label="Log a booked call" icon={Plus} size="sm" variant="secondary" onPress={() => setLogOpen(true)} /> : undefined}
     >
       <View style={styles.stack}>
         {guarantee.eligible ? <GuaranteeCard guarantee={guarantee} labels={labels} /> : null}
-        {guarantee.needsReview > 0 ? <ReviewBanner count={guarantee.needsReview} /> : null}
+        {guarantee.needsReview > 0 && canReview ? <ReviewBanner count={guarantee.needsReview} /> : null}
 
         {calls.length === 0 ? (
           <EmptyState compact message="No booked calls yet." />
         ) : (
           visible.map((call) => (
-            <CallCard key={call.id} call={call} labels={labels} onEdit={(c) => setEditingId(c.id)} onReview={review} />
+            <CallCard
+              key={call.id}
+              call={call}
+              labels={labels}
+              onEdit={canReview ? (c) => setEditingId(c.id) : undefined}
+              onReview={canReview ? review : undefined}
+            />
           ))
         )}
 
@@ -93,10 +106,10 @@ export function CallsSection({ clientId, bundle, action, onActionHandled }: Sect
         ) : null}
       </View>
 
-      {logOpen ? (
+      {logOpen && canLog ? (
         <LogCallSheet clientId={clientId} businessName={client.businessName} labels={labels} onClose={() => setLogOpen(false)} />
       ) : null}
-      {editing ? (
+      {editing && canReview ? (
         <CallEditSheet key={editing.id} clientId={clientId} call={editing} labels={labels} onClose={() => setEditingId(null)} />
       ) : null}
     </Section>

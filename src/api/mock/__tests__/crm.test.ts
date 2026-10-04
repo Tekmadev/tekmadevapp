@@ -39,6 +39,9 @@ const asOwner = () => {
 const asManager = () => {
   token = `mock.usr_mgr01.${Date.now() + 3_600_000}`;
 };
+const asStaff = () => {
+  token = `mock.usr_staff01.${Date.now() + 3_600_000}`;
+};
 
 beforeAll(() => {
   setAuthBridge({ getAccessToken: async () => token });
@@ -68,9 +71,9 @@ describe('meta fragment', () => {
   });
 });
 
-describe('owner only', () => {
-  it('answers 403 to a manager on every CRM endpoint', async () => {
-    asManager();
+describe('capabilities', () => {
+  it('answers 403 to staff on every CRM endpoint (crm.view, crm.write)', async () => {
+    asStaff();
     const calls: Promise<unknown>[] = [
       getCrm(),
       verifyCrm(),
@@ -82,7 +85,12 @@ describe('owner only', () => {
       inspectCrmContact('olivia.martin@mailbox.test'),
       resubscribeCrmContact('noah.singh@mailbox.test'),
     ];
-    for (const call of calls) expect((await apiError(call)).status).toBe(403);
+    for (const call of calls) expect(await apiError(call)).toMatchObject({ status: 403, code: 'forbidden' });
+  });
+
+  it('lets a manager read', async () => {
+    asManager();
+    expect((await getCrm()).mergeFields.length).toBeGreaterThan(0);
   });
 });
 

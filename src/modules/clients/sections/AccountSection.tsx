@@ -2,6 +2,7 @@ import { Pencil } from 'lucide-react-native';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { useCan } from '@/auth/permissions';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -19,10 +20,11 @@ import type { SectionProps } from './types';
 
 /**
  * Account (brief 8.5, section 10): the account fields and guarantee terms,
- * read only, with "Edit" opening the edit sheet.
+ * read only, with "Edit" opening the edit sheet for people with `clients.edit`.
  */
 export function AccountSection({ clientId, bundle }: SectionProps) {
   const labels = useClientLabels();
+  const canEdit = useCan('clients.edit');
   const { client } = bundle;
   const [editing, setEditing] = useState(false);
 
@@ -33,7 +35,9 @@ export function AccountSection({ clientId, bundle }: SectionProps) {
   return (
     <Section
       title="Account"
-      right={<Button label="Edit" icon={Pencil} size="sm" variant="secondary" onPress={() => setEditing(true)} accessibilityLabel="Edit account" />}
+      right={
+        canEdit ? <Button label="Edit" icon={Pencil} size="sm" variant="secondary" onPress={() => setEditing(true)} accessibilityLabel="Edit account" /> : undefined
+      }
     >
       <View style={styles.stack}>
         <Card padded={false}>
@@ -94,7 +98,7 @@ export function AccountSection({ clientId, bundle }: SectionProps) {
         </Card>
       </View>
 
-      {editing ? <AccountEditSheet clientId={clientId} client={client} labels={labels} onClose={() => setEditing(false)} /> : null}
+      {editing && canEdit ? <AccountEditSheet clientId={clientId} client={client} labels={labels} onClose={() => setEditing(false)} /> : null}
     </Section>
   );
 }

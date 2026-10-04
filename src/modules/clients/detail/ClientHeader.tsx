@@ -5,6 +5,7 @@ import { Linking, StyleSheet, View } from 'react-native';
 
 import type { ClientBundle } from '@/api/schemas/clients';
 import type { Meta } from '@/api/schemas/meta';
+import { useCan } from '@/auth/permissions';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { PressableScale } from '@/components/PressableScale';
@@ -87,15 +88,17 @@ function Dot() {
 
 /**
  * Under the large business name: plan · email · phone, the status, Blocked
- * and Test badges, then Go live (until the client is live) and Open portal.
+ * and Test badges, then Go live (until the client is live, for people with
+ * `clients.go_live`) and Open portal.
  */
 export function ClientHeader({ bundle, meta }: ClientHeaderProps) {
   const { colors } = useTheme();
+  const mayGoLive = useCan('clients.go_live');
   const { client } = bundle;
   const run = bundle.onboarding?.run ?? null;
   const status = badgeFor(meta?.clientStatuses, client.status, CLIENT_STATUS_FALLBACK);
   const blocked = Boolean(run?.blocked && !run.completedAt);
-  const canGoLive = client.status !== 'live';
+  const canGoLive = mayGoLive && client.status !== 'live';
 
   return (
     <View style={styles.wrap}>

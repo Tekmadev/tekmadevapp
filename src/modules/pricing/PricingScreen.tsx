@@ -7,7 +7,8 @@ import Animated from 'react-native-reanimated';
 import { pricingKeys, pricingQuery } from '@/api/endpoints/pricing';
 import { errorMessage, MESSAGES } from '@/api/errors';
 import type { Pricing, PricingMeta } from '@/api/schemas/pricing';
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import { useCan } from '@/auth/permissions';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { ErrorState } from '@/components/ErrorState';
 import { Icon } from '@/components/Icon';
 import { Screen } from '@/components/Screen';
@@ -27,23 +28,26 @@ import { ProductCard } from './ProductCard';
 import { SalesTaxCard } from './SalesTaxCard';
 
 /**
- * Pricing (brief 8.12, owner only): the Stripe note, the sales tax card, one
- * card per growth plan (cheapest monthly first) and the Webline product.
+ * Pricing (brief 8.12, `pricing.view`): the Stripe note, the sales tax card,
+ * one card per growth plan (cheapest monthly first) and the Webline product.
  * Each card is its own form with its own Save. Cached prices show at once and
  * refresh on focus, on app resume and on a pull; edits in progress are never
  * overwritten by a refetch. A first load shows the skeleton after
- * `showAfterMs`; a failure shows ErrorState, never zeros.
+ * `showAfterMs`; a failure shows ErrorState, never zeros. Without
+ * `pricing.write` (staff) the fields are read only, with no Save and no tax
+ * switches; the note stays.
  */
 export function PricingScreen() {
   return (
-    <OwnerOnly>
+    <RequireCapability cap="pricing.view">
       <PricingBody />
-    </OwnerOnly>
+    </RequireCapability>
   );
 }
 
 function PricingBody() {
   const online = useIsOnline();
+  const canWrite = useCan('pricing.write');
   const query = useQuery(pricingQuery());
   const meta = useQuery(metaQuery());
   const { data, refetch, dataUpdatedAt } = query;
@@ -64,7 +68,7 @@ function PricingBody() {
 
   let body: ReactNode;
   if (data) {
-    body = <PricingBlocks data={data} meta={meta.data} animate={animate} />;
+    body = <PricingBlocks data={data} meta={meta.data} animate={animate} readOnly={!canWrite} />;
   } else if (waitingOffline) {
     body = <ErrorState message={MESSAGES.network} onRetry={online ? () => refetch() : undefined} />;
   } else if (query.isError) {
@@ -105,10 +109,10 @@ function StripeNote() {
   );
 }
 
-type BlocksProps = { data: Pricing; meta: PricingMeta | undefined; animate: boolean };
+type BlocksProps = { data: Pricing; meta: PricingMeta | undefined; animate: boolean; readOnly: boolean };
 
 /** The loaded sections in order, pulled into place with the list stagger on a first load. */
-function PricingBlocks({ data, meta, animate }: BlocksProps) {
+function PricingBlocks({ data, meta, animate, readOnly }: BlocksProps) {
   const reduceMotion = useReduceMotion();
   const plans = sortPlans(data.plans);
   const blocks: { key: string; node: ReactNode }[] = [
@@ -116,7 +120,7 @@ function PricingBlocks({ data, meta, animate }: BlocksProps) {
       key: 'tax',
       node: (
         <Section title="Sales tax" spacing={space[6]}>
-          <SalesTaxCard salesTax={data.salesTax} meta={meta} />
+          <SalesTaxCard salesTax={data.salesTax} meta={meta} readOnly={readOnly} />
         </Section>
       ),
     },
@@ -126,7 +130,7 @@ function PricingBlocks({ data, meta, animate }: BlocksProps) {
         <Section title="Plans" spacing={space[6]}>
           <View style={styles.stack}>
             {plans.map((plan) => (
-              <PlanCard key={plan.id} plan={plan} />
+              <PlanCard key={plan.id} plan={plan} readOnly={readOnly} />
             ))}
           </View>
         </Section>
@@ -140,7 +144,7 @@ function PricingBlocks({ data, meta, animate }: BlocksProps) {
         <Section title="Products" spacing={space[6]}>
           <View style={styles.stack}>
             {data.products.map((product) => (
-              <ProductCard key={product.id} product={product} meta={meta} />
+              <ProductCard key={product.id} product={product} meta={meta} readOnly={readOnly} />
             ))}
           </View>
         </Section>

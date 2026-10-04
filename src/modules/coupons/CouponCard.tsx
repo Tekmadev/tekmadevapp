@@ -14,7 +14,7 @@ import { Text } from '@/components/Text';
 import { space } from '@/design/tokens';
 import { notice } from '@/lib/notice';
 
-import { couponFace, dealUrlOf, type CouponFaceData } from './logic';
+import { couponActions, couponFace, type CouponAccess, type CouponFaceData } from './logic';
 
 async function copyText(value: string) {
   try {
@@ -113,21 +113,23 @@ type CardProps = {
   meta: CouponsMeta | undefined;
   now: Date;
   online: boolean;
+  /** `coupons.share` (deal link) and `coupons.write` (Disable). */
+  access: CouponAccess;
   onDisable: (coupon: Coupon) => void;
 };
 
 /**
  * A coupon in the list. Active coupons get "Disable" (it asks for a
- * HoldToConfirm; there is no re-enable), and, when the API sent a deal link
- * (growth plans monthly or Anything), "Copy deal link" and Share.
+ * HoldToConfirm; there is no re-enable; `coupons.write`), and, when the API
+ * sent a deal link (growth plans monthly or Anything), "Copy deal link" and
+ * Share (`coupons.share`). With neither, the card ends at its facts.
  */
-export function CouponCard({ coupon, meta, now, online, onDisable }: CardProps) {
+export function CouponCard({ coupon, meta, now, online, access, onDisable }: CardProps) {
   const face = couponFace(coupon, meta, now);
-  const dealUrl = dealUrlOf(coupon);
-  const active = coupon.status === 'active';
+  const { dealUrl, disable } = couponActions(coupon, access);
   return (
     <CouponFace face={face} copyable>
-      {active ? (
+      {dealUrl || disable ? (
         <>
           <Divider />
           <View style={styles.actions}>
@@ -144,16 +146,18 @@ export function CouponCard({ coupon, meta, now, online, onDisable }: CardProps) 
                 />
               </>
             ) : null}
-            <Button
-              label="Disable"
-              icon={Ban}
-              variant="ghost"
-              size="sm"
-              disabled={!online}
-              onPress={() => onDisable(coupon)}
-              accessibilityHint={online ? 'Asks you to confirm' : 'You are offline'}
-              style={styles.disable}
-            />
+            {disable ? (
+              <Button
+                label="Disable"
+                icon={Ban}
+                variant="ghost"
+                size="sm"
+                disabled={!online}
+                onPress={() => onDisable(coupon)}
+                accessibilityHint={online ? 'Asks you to confirm' : 'You are offline'}
+                style={styles.disable}
+              />
+            ) : null}
           </View>
         </>
       ) : null}

@@ -7,6 +7,7 @@ import { newIdempotencyKey } from '@/api/client';
 import { clientKeys, clientsMetaQuery, createClient, type NewClientInput } from '@/api/endpoints/clients';
 import { ApiError, fieldErrors } from '@/api/errors';
 import type { CreateClientResult, PlanId } from '@/api/schemas/clients';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { Select, type SelectOption } from '@/components/form/Select';
 import { SwitchRow } from '@/components/form/Switch';
 import { TextField } from '@/components/form/TextField';
@@ -55,9 +56,18 @@ function validate(input: NewClientInput): Errors {
  * details filled in. Creating sends one Idempotency-Key per intent: retrying
  * the same details reuses it, so a timeout never makes two clients; changing
  * anything is a new intent. On success it opens the client in place of this
- * screen and says whether the portal invite went out.
+ * screen and says whether the portal invite went out. Needs `clients.create`
+ * (owners and managers): anyone else who lands here is sent back.
  */
 export function NewClientScreen() {
+  return (
+    <RequireCapability cap="clients.create">
+      <NewClientForm />
+    </RequireCapability>
+  );
+}
+
+function NewClientForm() {
   const prefill = useLocalSearchParams<Prefill>();
   const queryClient = useQueryClient();
   const meta = useQuery(clientsMetaQuery());

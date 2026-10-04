@@ -3,6 +3,7 @@ import type { Coupon } from '@/api/schemas/coupons';
 
 import {
   COUPON_MESSAGES,
+  couponActions,
   couponErrors,
   couponFace,
   couponInput,
@@ -216,5 +217,27 @@ describe('previewFace', () => {
 describe('copy', () => {
   it('matches the brief', () => {
     expect(createdToast('TKM-7Q4X')).toBe('Coupon "TKM-7Q4X" created and live at checkout.');
+  });
+});
+
+describe('couponActions', () => {
+  const owner = { canShare: true, canWrite: true };
+  const staff = { canShare: true, canWrite: false };
+
+  it('gives owners and managers the deal link and Disable', () => {
+    expect(couponActions(coupon(), owner)).toEqual({ dealUrl: 'https://www.tekmadev.com/deal/FALLGROW', disable: true });
+  });
+
+  it('lets staff share but never disable', () => {
+    expect(couponActions(coupon(), staff)).toEqual({ dealUrl: 'https://www.tekmadev.com/deal/FALLGROW', disable: false });
+  });
+
+  it('drops the deal link without coupons.share or without a link from the API', () => {
+    expect(couponActions(coupon(), { canShare: false, canWrite: true })).toEqual({ dealUrl: null, disable: true });
+    expect(couponActions(coupon({ dealUrl: undefined }), staff)).toEqual({ dealUrl: null, disable: false });
+  });
+
+  it('offers nothing on a disabled coupon', () => {
+    expect(couponActions(coupon({ status: 'disabled' }), owner)).toEqual({ dealUrl: null, disable: false });
   });
 });

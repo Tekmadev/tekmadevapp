@@ -7,7 +7,7 @@ export const toolsModule: ModuleManifest = {
   title: 'Free tools',
   icon: Calculator,
   group: 'customers',
-  ownerOnly: false,
+  capability: 'tools.view',
   routes: ['(tabs)/customers', 'tools/[id]'],
   href: { pathname: '/customers', params: { segment: 'tools' } },
   searchable: {

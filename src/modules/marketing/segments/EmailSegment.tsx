@@ -9,7 +9,7 @@ import { deleteCampaign, emailKeys, emailMetaQuery, emailOverviewQuery, setCampa
 import { sessionKeys } from '@/api/endpoints/session';
 import { MESSAGES } from '@/api/errors';
 import type { Campaign, EngagementEvent } from '@/api/schemas/email';
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import { useCan } from '@/auth/permissions';
 import { Card } from '@/components/Card';
 import { ConfirmSheet } from '@/components/ConfirmSheet';
 import { Divider } from '@/components/Divider';
@@ -54,23 +54,20 @@ const openTemplates = () => router.push('/email/templates');
 const openSubscribers = () => router.push('/email/subscribers');
 
 /**
- * Marketing, Email (brief 8.11, GET /email/overview): the four KPIs, links to
- * Templates and Subscribers, the campaigns (tracking registrations for emails
- * the CRM sends: Pause / Resume, Delete with HoldToConfirm, "New campaign"),
- * then Recent engagement (the latest opens and clicks). A failed read is an
- * ErrorState with Retry, never zeros; offline keeps the cached page under the
- * banner and disables every write.
+ * Marketing, Email (brief 8.11, GET /email/overview, `email.view`): the four
+ * KPIs, links to Templates and Subscribers, the campaigns (tracking
+ * registrations for emails the CRM sends: Pause / Resume, Delete with
+ * HoldToConfirm, "New campaign"), then Recent engagement (the latest opens and
+ * clicks). Campaign writes need `email.campaigns.write` and the Subscribers
+ * row needs `email.subscribers.view` (staff get neither: campaigns read only,
+ * Templates only). A failed read is an ErrorState with Retry, never zeros;
+ * offline keeps the cached page under the banner and disables every write.
  */
-export function EmailSegment(props: MarketingSegmentProps) {
-  return (
-    <OwnerOnly>
-      <EmailBody {...props} />
-    </OwnerOnly>
-  );
-}
-
-function EmailBody({ chrome }: MarketingSegmentProps) {
+export function EmailSegment({ chrome }: MarketingSegmentProps) {
   const queryClient = useQueryClient();
+  const canWriteCampaigns = useCan('email.campaigns.write');
+  const canSeeSubscribers = useCan('email.subscribers.view');
+  const canWriteSubscribers = useCan('email.subscribers.write');
   const online = useIsOnline();
   const reduceMotion = useReduceMotion();
   const now = useMinuteClock();
@@ -137,14 +134,22 @@ function EmailBody({ chrome }: MarketingSegmentProps) {
             <Section
               title="Campaigns"
               spacing={0}
-              action={{ label: 'New campaign', onPress: () => setCreating(true), accessibilityHint: 'Registers a campaign key' }}
+              action={
+                canWriteCampaigns
+                  ? { label: 'New campaign', onPress: () => setCreating(true), accessibilityHint: 'Registers a campaign key' }
+                  : undefined
+              }
             />
           </View>
         );
       case 'campaignsEmpty':
         return (
           <View style={styles.gutter}>
-            <EmptyState compact message={EMAIL_COPY.campaignsEmpty} action={{ label: 'New campaign', onPress: () => setCreating(true) }} />
+            {canWriteCampaigns ? (
+              <EmptyState compact message={EMAIL_COPY.campaignsEmpty} action={{ label: 'New campaign', onPress: () => setCreating(true) }} />
+            ) : (
+              <EmptyState compact message={EMAIL_COPY.campaignsEmptyReadOnly} />
+            )}
           </View>
         );
       case 'campaign':
@@ -154,6 +159,7 @@ function EmailBody({ chrome }: MarketingSegmentProps) {
             meta={meta.data}
             toggling={toggling.has(item.campaign.id)}
             online={online}
+            canWrite={canWriteCampaigns}
             onToggle={toggle}
             onDelete={setDeleting}
             index={item.index}
@@ -214,15 +220,25 @@ function EmailBody({ chrome }: MarketingSegmentProps) {
             onPress={openTemplates}
             accessibilityHint="Opens the email templates"
           />
-          <Divider inset={72} />
-          <ListRow
-            title="Subscribers"
-            subtitle={data ? `${formatCount(data.stats.activeSubscribers)} active` : 'Search, unsubscribe or erase'}
-            icon={Users}
-            background="surface"
-            onPress={openSubscribers}
-            accessibilityHint="Opens the subscriber list"
-          />
+          {canSeeSubscribers ? (
+            <>
+              <Divider inset={72} />
+              <ListRow
+                title="Subscribers"
+                subtitle={
+                  data
+                    ? `${formatCount(data.stats.activeSubscribers)} active`
+                    : canWriteSubscribers
+                      ? 'Search, unsubscribe or erase'
+                      : 'Search and look up'
+                }
+                icon={Users}
+                background="surface"
+                onPress={openSubscribers}
+                accessibilityHint="Opens the subscriber list"
+              />
+            </>
+          ) : null}
         </Card>
       </View>
     </View>
@@ -246,7 +262,7 @@ function EmailBody({ chrome }: MarketingSegmentProps) {
         renderItem={renderItem}
         keyExtractor={itemKey}
         getItemType={itemType}
-        extraData={{ meta: meta.data, now, toggling, online, campaigns: data?.campaigns }}
+        extraData={{ meta: meta.data, now, toggling, online, campaigns: data?.campaigns, canWriteCampaigns }}
         ListHeaderComponent={header}
         ListEmptyComponent={empty}
         ListFooterComponent={footer}
@@ -254,7 +270,7 @@ function EmailBody({ chrome }: MarketingSegmentProps) {
         refetching={overview.isFetching && data !== undefined}
         queryKey={emailKeys.overview()}
       />
-      {creating ? <NewCampaignSheet onClose={() => setCreating(false)} /> : null}
+      {creating && canWriteCampaigns ? <NewCampaignSheet onClose={() => setCreating(false)} /> : null}
       <ConfirmSheet
         visible={deleting !== null}
         onClose={() => setDeleting(null)}

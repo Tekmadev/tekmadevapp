@@ -1,8 +1,23 @@
 import type { ReactNode } from 'react';
 
+import type { Capability } from '@/auth/capabilities';
+
 /** The four sections of the Customers tab, in order (route param `segment`). */
 export const CUSTOMER_SEGMENTS = ['clients', 'leads', 'tools', 'subscriptions'] as const;
 export type CustomerSegment = (typeof CUSTOMER_SEGMENTS)[number];
+
+/** What each section needs. Subscriptions is money: owners and managers only. */
+export const SEGMENT_CAPABILITIES: Record<CustomerSegment, Capability> = {
+  clients: 'clients.view',
+  leads: 'leads.view',
+  tools: 'tools.view',
+  subscriptions: 'billing.view',
+};
+
+/** The sections this person may open, in tab order. */
+export function visibleSegments(can: (cap: Capability) => boolean): CustomerSegment[] {
+  return CUSTOMER_SEGMENTS.filter((s) => can(SEGMENT_CAPABILITIES[s]));
+}
 
 export const SEGMENT_LABELS: Record<CustomerSegment, string> = {
   clients: 'Clients',
@@ -11,9 +26,15 @@ export const SEGMENT_LABELS: Record<CustomerSegment, string> = {
   subscriptions: 'Subscriptions',
 };
 
-/** Unknown or missing values open Clients. */
-export function toSegment(value: unknown): CustomerSegment {
-  return (CUSTOMER_SEGMENTS as readonly unknown[]).includes(value) ? (value as CustomerSegment) : 'clients';
+/**
+ * The section to show for a route param. Unknown or missing values open the
+ * first section this person may open (Clients for every role today); so does
+ * a section they may not open (an old link to Subscriptions for staff).
+ */
+export function toSegment(value: unknown, visible: readonly CustomerSegment[] = CUSTOMER_SEGMENTS): CustomerSegment {
+  const wanted = (CUSTOMER_SEGMENTS as readonly unknown[]).includes(value) ? (value as CustomerSegment) : null;
+  if (wanted && visible.includes(wanted)) return wanted;
+  return visible[0] ?? 'clients';
 }
 
 /** Route params of the Customers tab (`/customers?segment=clients&view=blocked`). */
@@ -34,7 +55,7 @@ export type CustomersParams = {
  *     ListFooterComponent={<View style={{ height: chrome.fabClearance }} />} ... />
  */
 export type SegmentChrome = {
-  /** Title "Customers" and the header actions (search, Inbox bell, owner menu). */
+  /** Title "Customers" and the header actions (search, Inbox bell, the Checklist templates menu). */
   screen: { title: string; headerRight: ReactNode };
   /** The section tabs. Render it first in the list header, under the large title. */
   switcher: ReactNode;

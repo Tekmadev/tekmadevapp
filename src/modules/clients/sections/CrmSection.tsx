@@ -5,7 +5,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { clientKeys, saveCrmLocation, type CrmLocationInput } from '@/api/endpoints/clients';
 import type { CrmLocation } from '@/api/schemas/clients';
-import { useIsOwner } from '@/auth/session';
+import { useCan } from '@/auth/permissions';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { ConfirmSheet } from '@/components/ConfirmSheet';
@@ -27,20 +27,20 @@ import { refreshClient, showSaveError, updateBundle } from './sectionData';
 import type { SectionProps } from './types';
 
 /**
- * CRM account (brief 8.5, section 8), owner only. The shell never renders it
- * for managers; it also renders nothing when the signed-in role is not owner,
- * and the server answers 403 anyway.
+ * CRM account (brief 8.5, section 8), for people with `clients.crm`. The shell
+ * never renders it for anyone else; it also renders nothing on its own when
+ * the capability is missing, and the server answers 403 anyway.
  */
-export function CrmSection({ clientId, bundle, isOwner }: SectionProps) {
-  const ownerSession = useIsOwner();
-  if (!isOwner || !ownerSession) return null;
+export function CrmSection({ clientId, bundle }: SectionProps) {
+  const canCrm = useCan('clients.crm');
+  if (!canCrm) return null;
   return <CrmAccount clientId={clientId} crm={bundle.crmLocation} />;
 }
 
 function CrmAccount({ clientId, crm }: { clientId: string; crm: CrmLocation | undefined }) {
   const queryClient = useQueryClient();
   if (!crm) {
-    // An owner always gets the key; without it the bundle is not what we expect.
+    // Someone with clients.crm always gets the key; without it the bundle is not what we expect.
     return (
       <Section title="CRM account">
         <Card padded={false}>

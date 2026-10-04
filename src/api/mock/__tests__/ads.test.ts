@@ -7,8 +7,8 @@ import { ADS_RANGES, metaFragment, zAdsRefreshResult, zAdsReport, type AdsConnec
 import { addDays, todayToronto } from '@/lib/dates';
 
 /**
- * The ads domain (owner only) through the real mock transport: every range adds
- * up (days, campaigns and ads against the totals), managers get 403, the long
+ * The ads domain (ads.view, ads.refresh) through the real mock transport: every range adds
+ * up (days, campaigns and ads against the totals), staff get 403, the long
  * refresh job succeeds twice then fails on every 3rd call with the documented
  * 502, the failure reaches the inbox, and the "not connected" state has no numbers.
  */
@@ -19,6 +19,9 @@ const asOwner = () => {
 };
 const asManager = () => {
   token = `mock.usr_mgr01.${Date.now() + 3_600_000}`;
+};
+const asStaff = () => {
+  token = `mock.usr_staff01.${Date.now() + 3_600_000}`;
 };
 
 const ownerOnly = jest.fn();
@@ -124,15 +127,17 @@ describe('GET /ads', () => {
     expect([e.status, e.code, e.message]).toEqual([400, 'range', 'Unknown range. Use 7d, 14d, 30d, 3m or all.']);
   });
 
-  it('is owner only', async () => {
-    asManager();
+  it('refuses staff (ads.view, ads.refresh) and lets a manager read', async () => {
+    asStaff();
     const read = await apiError(getAds('30d'));
-    expect([read.status, read.message]).toEqual([403, 'That section is owner only.']);
+    expect([read.status, read.code]).toEqual([403, 'forbidden']);
     const refresh = await apiError(refreshAds());
-    expect(refresh.status).toBe(403);
+    expect([refresh.status, refresh.code]).toEqual([403, 'forbidden']);
     expect(ownerOnly).toHaveBeenCalledTimes(2);
-    // A refused manager never runs the job.
+    // A refused pull never runs the job.
     expect(adsState.refreshCalls).toBe(0);
+    asManager();
+    expect(connected(await getAds('30d')).range).toBe('30d');
   });
 
   it('starts with the failed pull the inbox reports', async () => {

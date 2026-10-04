@@ -20,6 +20,7 @@ import {
   updatePost,
 } from '@/api/endpoints/blog';
 import { fieldErrors, MESSAGES } from '@/api/errors';
+import { useCan } from '@/auth/permissions';
 import type { Post, PostDetail, PostStatus, PostWrite } from '@/api/schemas/blog';
 import { openInBrowser } from '@/components/automation/ApprovalBlocks';
 import { Badge } from '@/components/Badge';
@@ -150,6 +151,8 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
   const topInset = useTopBarInset();
   const badgeInBar = useBadgeFitsBar();
   const online = useIsOnline();
+  // Move to trash is its own capability (`blog.trash`); the editor itself needs `blog.write` (PostEditorScreen).
+  const canTrash = useCan('blog.trash');
   const meta = useQuery(metaQuery());
   const authors = useQuery(authorsQuery());
   const categories = useQuery(categoriesQuery());
@@ -602,7 +605,7 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
     ...(live
       ? [{ label: 'View live', icon: ExternalLink, hint: live.replace(/^https:\/\/www\./, ''), onPress: () => openInBrowser(live, colors) }]
       : []),
-    ...(!isNew
+    ...(!isNew && canTrash
       ? [{ label: 'Move to trash', icon: Trash2, destructive: true, hint: offlineHint, disabled: !online, onPress: () => setTrashOpen(true) }]
       : []),
   ];

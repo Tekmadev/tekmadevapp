@@ -1,9 +1,12 @@
-import type { Me } from '../../schemas/session';
+import type { Capability } from '@/auth/capabilities';
+
+import type { Me, SearchResultType } from '../../schemas/session';
 import { metaFixture } from '../fixtures/meta';
 import { inboxStateFor, mockDevices } from '../fixtures/notifications';
 import { searchFixtures } from '../fixtures/overview';
 import { loaderState } from '../fixtures/settings';
 import { MOCK_ACCOUNTS } from '../fixtures/staff';
+import { capabilitiesFor, mockCan } from '../permissions';
 import { fail, mockId, notFound, nowIso, ok, str, type MockRoute, type MockStaff } from '../router';
 import { env } from '@/lib/env';
 
@@ -31,6 +34,26 @@ export function staffLabel(user: MockStaff): string {
 }
 
 const NAME_MAX = 80;
+
+/** What each search result type needs (the server filters results with the same `*.view` rows). */
+const SEARCH_CAPABILITY: Record<SearchResultType, Capability> = {
+  client: 'clients.view',
+  lead: 'leads.view',
+  subscriber: 'email.subscribers.view',
+  post: 'blog.view',
+  coupon: 'coupons.view',
+  link: 'links.view',
+};
+
+/**
+ * GET /search for this caller: only the result types their capabilities open,
+ * and test clients only for people who may see test data. The scope applies
+ * before the top 20 are cut, so staff get their own best matches.
+ */
+function searchFor(q: string, user: MockStaff) {
+  const types = new Set((Object.keys(SEARCH_CAPABILITY) as SearchResultType[]).filter((t) => mockCan(user, SEARCH_CAPABILITY[t])));
+  return searchFixtures(q, { types, includeTest: mockCan(user, 'testdata.view') });
+}
 const EXPO_PUSH_TOKEN = /^Expo(nent)?PushToken\[[^\]\s]{1,4096}\]$/;
 
 export const routes: MockRoute[] = [
@@ -44,6 +67,8 @@ export const routes: MockRoute[] = [
       const me: Me = {
         user: { id: user.id, email: user.email, name: staffName(user) },
         role: user.role,
+        // What this person may do: the app shows and hides everything from this list.
+        capabilities: capabilitiesFor(user),
         // Server feature flags. The 'assistant' module stays hidden until listed here.
         features: [],
         timezone: 'America/Toronto',
@@ -65,8 +90,8 @@ export const routes: MockRoute[] = [
     method: 'GET',
     path: '/search',
     latency: 'fast',
-    // Any staff. Role filtered inside: managers only ever get clients and leads.
-    handler: ({ query, role }) => ok({ results: searchFixtures(query.q ?? '', role) }),
+    // Any staff. Each result type needs its `*.view` capability; test clients need testdata.view.
+    handler: ({ query, user }) => ok({ results: searchFor(query.q ?? '', user) }),
   },
   {
     method: 'POST',

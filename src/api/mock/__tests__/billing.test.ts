@@ -19,6 +19,9 @@ const asOwner = () => {
 const asManager = () => {
   token = `mock.usr_mgr01.${Date.now() + 3_600_000}`;
 };
+const asStaff = () => {
+  token = `mock.usr_staff01.${Date.now() + 3_600_000}`;
+};
 
 beforeAll(() => {
   setAuthBridge({ getAccessToken: async () => token });
@@ -176,6 +179,14 @@ describe('GET /billing/orders', () => {
     expect(zOrderPage.safeParse(await getOrders()).success).toBe(true);
     const e = await apiError(api.get('/billing/orders', { query: { status: 'shipped' } }));
     expect([e.status, e.code, e.message]).toEqual([400, 'status', 'Unknown order status.']);
+  });
+
+  it('needs billing.view: staff never see money (orders and subscriptions)', async () => {
+    asStaff();
+    for (const attempt of [getOrders(), getSubscriptions()]) {
+      const e = await apiError(attempt);
+      expect([e.status, e.code, e.message]).toEqual([403, 'forbidden', 'Your role cannot do that.']);
+    }
   });
 });
 

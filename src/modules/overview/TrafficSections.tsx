@@ -51,7 +51,7 @@ export function PagesSection({ pages }: { pages: readonly LabelCount[] }) {
 }
 
 /**
- * "Top tracking links (30d)": owners only (managers get null) and only when a
+ * "Top tracking links (30d)": null without `links.view`, and shown only when a
  * link had a visit, so the caller skips it otherwise. A bar opens the link.
  */
 export function LinksSection({ links }: { links: readonly TopLink[] }) {

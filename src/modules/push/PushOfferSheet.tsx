@@ -2,6 +2,7 @@ import { BellRing } from 'lucide-react-native';
 import { useContext, useEffect, useState, useSyncExternalStore } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { useCapabilities } from '@/auth/permissions';
 import { useSession } from '@/auth/session';
 import { Button } from '@/components/Button';
 import { Icon } from '@/components/Icon';
@@ -17,7 +18,7 @@ import { space } from '@/design/tokens';
 import { notice } from '@/lib/notice';
 import { storage } from '@/lib/storage';
 
-import { PUSH_COPY, shouldOfferPush } from './logic';
+import { PUSH_COPY, pushPitch, readableCategories, shouldOfferPush } from './logic';
 import { askPermission } from './permission';
 import { registerThisPhone } from './registration';
 import { usePushState } from './store';
@@ -39,11 +40,12 @@ function useAnySheetOpen(): boolean {
 }
 
 /**
- * "Get pushes for new leads and sales?" (brief section 9): asked once per
- * install, right after a password sign-in (never on a cold start), after the
- * biometric offer, with nothing else on screen, and only while the system
- * would still show its prompt. "Turn on" shows the system prompt, then
- * registers this phone. Mounted by the push host.
+ * "Get pushes for new leads and sales?" (brief section 9; "Get pushes for new
+ * leads?" for someone who gets no Sales pushes): asked once per install, right
+ * after a password sign-in (never on a cold start), after the biometric offer,
+ * with nothing else on screen, and only while the system would still show its
+ * prompt. "Turn on" shows the system prompt, then registers this phone.
+ * Mounted by the push host.
  */
 export function PushOfferSheet({ locked }: { locked: boolean }) {
   // Captured at mount, like the app lock: the signed-in area mounts right after the sign-in.
@@ -51,6 +53,8 @@ export function PushOfferSheet({ locked }: { locked: boolean }) {
   const justSignedIn = useSession((s) => s.justSignedIn);
   const permission = usePushState((s) => s.permission);
   const sheetOpen = useAnySheetOpen();
+  const capabilities = useCapabilities();
+  const pitch = pushPitch(readableCategories(capabilities));
   const [offered, setOffered] = useState(() => storage.getBoolean(OFFERED_KEY) === true);
   const [visible, setVisible] = useState(false);
   const ready = shouldOfferPush({ freshSignIn, offered, justSignedIn, locked, sheetOpen, permission });
@@ -87,13 +91,13 @@ export function PushOfferSheet({ locked }: { locked: boolean }) {
   };
 
   return (
-    <Sheet visible={visible} onClose={close} title={PUSH_COPY.offerTitle} footer={<OfferActions onTurnOn={turnOn} onNotNow={close} />}>
-      <OfferBody />
+    <Sheet visible={visible} onClose={close} title={pitch.title} footer={<OfferActions onTurnOn={turnOn} onNotNow={close} />}>
+      <OfferBody body={pitch.body} />
     </Sheet>
   );
 }
 
-function OfferBody() {
+function OfferBody({ body }: { body: string }) {
   const { colors } = useTheme();
   return (
     <View style={styles.row}>
@@ -101,7 +105,7 @@ function OfferBody() {
         <Icon icon={BellRing} size={24} color="gold" />
       </View>
       <Text variant="body" color="ink3" style={styles.flex}>
-        {PUSH_COPY.offerBody}
+        {body}
       </Text>
     </View>
   );

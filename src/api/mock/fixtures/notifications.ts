@@ -10,7 +10,8 @@ import type {
 } from '../../schemas/notifications';
 import { NOTIFICATION_CATEGORIES, OWNER_ONLY_CATEGORIES } from '../../schemas/notifications';
 import type { Role } from '../../types';
-import { daysAgo, daysFromNow, minutesAgo, mockId, nowIso } from '../router';
+import { inboxCategories, isOwnerOnly, mockCan } from '../permissions';
+import { daysAgo, daysFromNow, minutesAgo, mockId, nowIso, type MockStaff } from '../router';
 import { SEED_CLIENTS, SEED_PEOPLE, type SeedClient } from './seed';
 
 /**
@@ -21,8 +22,12 @@ import { SEED_CLIENTS, SEED_PEOPLE, type SeedClient } from './seed';
  * - A repeating problem bumps the same row: it moves to the top, `occurrences`
  *   goes up and it becomes unread again for everyone (read state is stored as
  *   "read up to this last_occurred_at", so a bump makes it unread by itself).
- * - Managers never see owner-audience rows (Audience, Team, and events that
- *   point at owner-only pages). Test rows are owner-only and opt-in.
+ * - Who reads a row follows the capability table (src/api/mock/permissions.ts,
+ *   owner decision 2026-10-03): a row needs `inbox.<category>` (staff read
+ *   Leads and Clients only; owners and managers read all seven), and test rows
+ *   need `testdata.view` and, in lists, an explicit opt-in. `audience` is kept
+ *   on the record as the server stores it; owners and managers both read
+ *   owner-audience rows now, and those rows all sit in categories staff never read.
  *
  * Everything here is mutable in-memory state: the routes change it and later
  * reads see the change, like the real server.
@@ -33,7 +38,7 @@ type EventDef = {
   category: NotificationCategory;
   severity: NotificationSeverity;
   needsAction: boolean;
-  /** Owner-audience event: never shown to managers. Audience and Team are owner-only as a whole. */
+  /** Owner-audience event (the server's `audience: 'owner'`). Reading it follows the category's capability. */
   ownerOnly?: boolean;
 };
 
@@ -945,11 +950,17 @@ export function isMuted(row: Pick<NotificationRecord, 'category'>, state: UserIn
   return state.prefs.get(row.category)?.muted ?? false;
 }
 
-/** May this role see the row? Test rows only for owners who asked for them. */
-export function canSee(row: NotificationRecord, role: Role, includeTest: boolean): boolean {
-  if (row.is_test && (role !== 'owner' || !includeTest)) return false;
-  if (role !== 'owner' && (row.audience === 'owner' || OWNER_ONLY_CATEGORIES.includes(row.category))) return false;
-  return true;
+/** Who reads the inbox: the caller's id (read marks, prefs) and role (their capabilities). */
+export type InboxCaller = Pick<MockStaff, 'id' | 'role'>;
+
+/**
+ * May this caller see the row? It must be in one of their categories
+ * (`inbox.<category>`, see inboxCategories), and a test row needs
+ * `testdata.view` plus `includeTest` (lists ask with `test=1`; by id it is always asked).
+ */
+export function callerSees(who: Pick<MockStaff, 'role'>, row: NotificationRecord, includeTest: boolean): boolean {
+  if (row.is_test && (!includeTest || !mockCan(who, 'testdata.view'))) return false;
+  return inboxCategories(who).includes(row.category);
 }
 
 /** Newest first; ties (same microsecond) broken by id so paging stays stable. */
@@ -958,8 +969,9 @@ export function compareRows(a: NotificationRecord, b: NotificationRecord): numbe
   return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
 }
 
-export function visibleRows(role: Role, includeTest: boolean): NotificationRecord[] {
-  return notificationRows.filter((row) => canSee(row, role, includeTest)).sort(compareRows);
+/** The caller's rows, newest first. */
+export function visibleRows(who: Pick<MockStaff, 'role'>, includeTest: boolean): NotificationRecord[] {
+  return notificationRows.filter((row) => callerSees(who, row, includeTest)).sort(compareRows);
 }
 
 export function findRow(id: string): NotificationRecord | undefined {
@@ -972,13 +984,17 @@ export function serializeNotification(row: NotificationRecord, state: UserInbox)
   return { ...item, is_read: isRead(row, state), is_muted: isMuted(row, state) };
 }
 
-export function summarize(userId: string, role: Role, includeTest = false): NotificationSummary {
-  const state = inboxStateFor(userId, role);
+/**
+ * The caller's badge: unread and critical unread leave out quiet categories,
+ * needs action counts open rows whether quiet or not. Only rows the caller sees.
+ */
+export function summarize(who: InboxCaller, includeTest = false): NotificationSummary {
+  const state = inboxStateFor(who.id, who.role);
   let unread = 0;
   let needsAction = 0;
   let criticalUnread = 0;
   for (const row of notificationRows) {
-    if (!canSee(row, role, includeTest)) continue;
+    if (!callerSees(who, row, includeTest)) continue;
     if (row.needs_action && !row.resolved_at) needsAction += 1;
     if (isRead(row, state) || isMuted(row, state)) continue;
     unread += 1;
@@ -992,17 +1008,16 @@ export function summarize(userId: string, role: Role, includeTest = false): Noti
  * user (test rows excluded, quiet categories not counted as unread).
  */
 export function notificationSummaryFor(userId: string, role: Role): NotificationSummary {
-  return summarize(userId, role, false);
+  return summarize({ id: userId, role }, false);
 }
 
-export function prefsFor(userId: string, role: Role): NotificationPref[] {
-  const state = inboxStateFor(userId, role);
-  return NOTIFICATION_CATEGORIES.filter((category) => role === 'owner' || !OWNER_ONLY_CATEGORIES.includes(category)).map(
-    (category) => {
-      const pref = state.prefs.get(category) ?? { muted: false, push: true };
-      return { category, label: CATEGORY_LABELS[category], muted: pref.muted, push: pref.push };
-    },
-  );
+/** One pref row per category the caller reads (inboxCategories), in catalogue order. */
+export function prefsFor(who: InboxCaller): NotificationPref[] {
+  const state = inboxStateFor(who.id, who.role);
+  return inboxCategories(who).map((category) => {
+    const pref = state.prefs.get(category) ?? { muted: false, push: true };
+    return { category, label: CATEGORY_LABELS[category], muted: pref.muted, push: pref.push };
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -1169,7 +1184,8 @@ export const metaFixture: NotificationsMeta = {
   notificationCategories: NOTIFICATION_CATEGORIES.map((value) => ({
     value,
     label: CATEGORY_LABELS[value],
-    ownerOnly: OWNER_ONLY_CATEGORIES.includes(value),
+    // Like the server: true only when owners alone hold the category's capability (none today).
+    ownerOnly: isOwnerOnly(`inbox.${value}`),
   })),
   notificationSeverities: [
     { value: 'info', label: 'Info', tone: 'neutral' },

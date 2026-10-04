@@ -6,7 +6,8 @@ import { StyleSheet, View } from 'react-native';
 import { loaderSettingsQuery, resetLoaderSettings, saveLoaderSettings, settingsKeys } from '@/api/endpoints/settings';
 import { errorMessage, MESSAGES } from '@/api/errors';
 import type { LoaderSettings } from '@/api/schemas/settings';
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import { useCan } from '@/auth/permissions';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { session } from '@/auth/session';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -40,28 +41,32 @@ import {
 } from './logic';
 
 const IN_USE_NOTE = 'Every page on the site and this app use these settings.';
+const VIEW_ONLY_NOTE = 'View only. Your role cannot change the loader.';
 
 const previewLoader = (settings: LoaderSettings | null) => useLoaderStore.getState().preview(settings);
 
 /**
- * Loader (brief 8.14, owner only): the black hole's six settings for the whole
- * site and this app. The live preview stays pinned at the top; dragging a
- * slider previews the value at once (every mark in the app reads the loader
- * store on the UI thread), with a haptic per step. Nothing reaches the site
- * until "Save for the whole site". "Undo changes" drops the draft; "Reset to
- * original" puts the brief's defaults back everywhere after a hold.
+ * Loader (brief 8.14; `loader.view`, owners and managers): the black hole's
+ * six settings for the whole site and this app. The live preview stays pinned
+ * at the top; dragging a slider previews the value at once (every mark in the
+ * app reads the loader store on the UI thread), with a haptic per step.
+ * Nothing reaches the site until "Save for the whole site". "Undo changes"
+ * drops the draft; "Reset to original" puts the brief's defaults back
+ * everywhere after a hold. Without `loader.write` the sliders show the saved
+ * values, locked, and the buttons are left out.
  */
 export function LoaderScreen() {
   return (
-    <OwnerOnly>
+    <RequireCapability cap="loader.view">
       <LoaderBody />
-    </OwnerOnly>
+    </RequireCapability>
   );
 }
 
 function LoaderBody() {
   const queryClient = useQueryClient();
   const online = useIsOnline();
+  const canWrite = useCan('loader.write');
   const query = useQuery(loaderSettingsQuery());
   useRefreshOnFocus([settingsKeys.loader()]);
 
@@ -130,50 +135,56 @@ function LoaderBody() {
         {query.isRefetchError && online ? (
           <ErrorState compact error={query.error} onRetry={() => query.refetch()} style={styles.refetchError} />
         ) : null}
-        <SliderGroup title="Speed" fields={SPEED_FIELDS} values={values} disabled={busy} onChange={change} />
-        <SliderGroup title="Pull" fields={PULL_FIELDS} values={values} disabled={busy} onChange={change} />
+        <SliderGroup title="Speed" fields={SPEED_FIELDS} values={values} disabled={busy || !canWrite} onChange={change} />
+        <SliderGroup title="Pull" fields={PULL_FIELDS} values={values} disabled={busy || !canWrite} onChange={change} />
         <SliderGroup
           title="Appear delay"
           fields={[DELAY_FIELD]}
           values={values}
-          disabled={busy}
+          disabled={busy || !canWrite}
           onChange={change}
           // Letting go of the delay plays it again in the preview.
           onChangeEnd={() => setReplay((n) => n + 1)}
         />
-        <View style={styles.actions}>
-          <Text variant="small" color={changed ? 'ink2' : 'ink3'} align="center" accessibilityLiveRegion="polite">
-            {changed ? UNSAVED_NOTE : IN_USE_NOTE}
-          </Text>
-          <PendingButton
-            label="Save for the whole site"
-            pendingLabel="Saving"
-            fullWidth
-            disabled={!changed || reset.isPending}
-            onPress={() => (draft ? save.mutateAsync(draft) : undefined)}
-            accessibilityHint="Every page on the site and this app switch to these settings."
-          />
-          <View style={styles.row}>
-            <Button
-              label="Undo changes"
-              variant="secondary"
-              icon={Undo2}
-              disabled={!changed || busy}
-              onPress={undo}
-              style={styles.half}
-              accessibilityHint="Goes back to the saved settings. Nothing is sent."
+        {canWrite ? (
+          <View style={styles.actions}>
+            <Text variant="small" color={changed ? 'ink2' : 'ink3'} align="center" accessibilityLiveRegion="polite">
+              {changed ? UNSAVED_NOTE : IN_USE_NOTE}
+            </Text>
+            <PendingButton
+              label="Save for the whole site"
+              pendingLabel="Saving"
+              fullWidth
+              disabled={!changed || reset.isPending}
+              onPress={() => (draft ? save.mutateAsync(draft) : undefined)}
+              accessibilityHint="Every page on the site and this app switch to these settings."
             />
-            <Button
-              label="Reset to original"
-              variant="secondary"
-              icon={RotateCcw}
-              // Already the originals with nothing changed: there is nothing to reset.
-              disabled={!online || busy || (saved !== undefined && isOriginal(saved) && !changed)}
-              onPress={() => setResetOpen(true)}
-              style={styles.half}
-            />
+            <View style={styles.row}>
+              <Button
+                label="Undo changes"
+                variant="secondary"
+                icon={Undo2}
+                disabled={!changed || busy}
+                onPress={undo}
+                style={styles.half}
+                accessibilityHint="Goes back to the saved settings. Nothing is sent."
+              />
+              <Button
+                label="Reset to original"
+                variant="secondary"
+                icon={RotateCcw}
+                // Already the originals with nothing changed: there is nothing to reset.
+                disabled={!online || busy || (saved !== undefined && isOriginal(saved) && !changed)}
+                onPress={() => setResetOpen(true)}
+                style={styles.half}
+              />
+            </View>
           </View>
-        </View>
+        ) : (
+          <Text variant="small" color="ink3" align="center" style={styles.viewOnly}>
+            {VIEW_ONLY_NOTE}
+          </Text>
+        )}
       </>
     );
   } else if (query.isError) {
@@ -204,7 +215,7 @@ function LoaderBody() {
         </View>
       </Screen>
       <ConfirmSheet
-        visible={resetOpen}
+        visible={resetOpen && canWrite}
         onClose={() => setResetOpen(false)}
         title="Reset to original"
         message={RESET_MESSAGE}
@@ -273,6 +284,7 @@ const styles = StyleSheet.create({
   refetchError: { marginBottom: space[4] },
   card: { gap: space[5] },
   actions: { gap: space[3], marginTop: space[1] },
+  viewOnly: { marginTop: space[1] },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: space[2] },
   half: { flexGrow: 1, flexBasis: 150 },
   skeletonGroup: { gap: space[3], marginBottom: space[6] },

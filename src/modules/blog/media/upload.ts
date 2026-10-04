@@ -18,7 +18,7 @@ const STORAGE_TIMEOUT_MS = 180_000;
  * 2026-09-30):
  *
  * 1. read the file into an ArrayBuffer (its byte count is the size we declare),
- * 2. POST /blog/media { fileName, size, type } for a signed slot (owner only;
+ * 2. POST /blog/media { fileName, size, type } for a signed slot (`blog.write`;
  *    a 400 `type` or `size` comes back as an ApiError with the server's message),
  * 3. upload the bytes straight to Supabase Storage with the app's client:
  *    `uploadToSignedUrl(path, token, bytes, { contentType })`. The token

@@ -8,6 +8,7 @@ import {
   flattenClicks,
   LINK_COPY,
   linkFinalUrl,
+  linkMenuActions,
   referrerLabel,
   removeLink,
   shareUrlOf,
@@ -176,5 +177,17 @@ describe('cache helpers', () => {
     ];
     expect(flattenClicks(pages).map((c) => c.id)).toEqual(['1', '2', '3']);
     expect(flattenClicks(undefined)).toEqual([]);
+  });
+});
+
+describe('linkMenuActions', () => {
+  it('gives writers Disable or Enable and Delete after the sharing actions', () => {
+    expect(linkMenuActions(link({ active: true }), true)).toEqual(['copy', 'share', 'qr', 'disable', 'delete']);
+    expect(linkMenuActions(link({ active: false }), true)).toEqual(['copy', 'share', 'qr', 'enable', 'delete']);
+  });
+
+  it('keeps Copy, Share and QR code for staff, nothing that writes', () => {
+    expect(linkMenuActions(link({ active: true }), false)).toEqual(['copy', 'share', 'qr']);
+    expect(linkMenuActions(link({ active: false }), false)).toEqual(['copy', 'share', 'qr']);
   });
 });

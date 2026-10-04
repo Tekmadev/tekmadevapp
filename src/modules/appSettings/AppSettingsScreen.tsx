@@ -7,7 +7,8 @@ import Animated from 'react-native-reanimated';
 import { sessionKeys } from '@/api/endpoints/session';
 import { ApiError, errorMessage } from '@/api/errors';
 import { queryClient } from '@/api/query';
-import { session } from '@/auth/session';
+import { can } from '@/auth/permissions';
+import { session, useSession } from '@/auth/session';
 import { Card } from '@/components/Card';
 import { ConfirmSheet } from '@/components/ConfirmSheet';
 import { ListRow } from '@/components/ListRow';
@@ -73,6 +74,9 @@ export function AppSettingsScreen() {
   const [clearOpen, setClearOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [draftCount, setDraftCount] = useState(0);
+  // Every role has the Inbox today; a server list without it hides the notification settings too.
+  // Signing out (from this screen) clears the profile: keep the group so nothing jumps on the way out.
+  const notifications = useSession((s) => s.me === null || can(s.me, 'notifications.view'));
 
   useFocusEffect(refreshMeIfStale);
 
@@ -91,14 +95,16 @@ export function AppSettingsScreen() {
           </View>
         </SettingsGroup>
 
-        <SettingsGroup title={SETTINGS_COPY.notifications} icon={Bell} index={1}>
-          <ListRow
-            title={SETTINGS_COPY.notificationsRow}
-            subtitle={SETTINGS_COPY.notificationsRowHint}
-            icon={SlidersHorizontal}
-            onPress={() => router.push('/settings/notifications')}
-          />
-        </SettingsGroup>
+        {notifications ? (
+          <SettingsGroup title={SETTINGS_COPY.notifications} icon={Bell} index={1}>
+            <ListRow
+              title={SETTINGS_COPY.notificationsRow}
+              subtitle={SETTINGS_COPY.notificationsRowHint}
+              icon={SlidersHorizontal}
+              onPress={() => router.push('/settings/notifications')}
+            />
+          </SettingsGroup>
+        ) : null}
 
         <SecurityCard index={2} />
 

@@ -1,18 +1,11 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { removeTeamMember, teamKeys } from '@/api/endpoints/team';
 import { ApiError } from '@/api/errors';
 import type { Team, TeamMember } from '@/api/schemas/team';
 import { notice } from '@/lib/notice';
-import { metaQuery } from '@/modules/overview/hooks';
 
-import { removedMessage, teamRoles, withoutMember } from './logic';
-
-/** Role labels, tones and help lines from GET /meta (cached app-wide), with the brief's words as a fallback. */
-export function useTeamRoles() {
-  const { data } = useQuery(metaQuery());
-  return teamRoles(data?.teamRoles);
-}
+import { removedMessage, withoutMember } from './logic';
 
 /**
  * DELETE /team/:email, then drop the row from the cached list and refetch it
@@ -37,7 +30,7 @@ export function useRemoveMember() {
         notice.err(error.message);
         return;
       }
-      // Refused (the env owner, yourself): the list may be out of date, so check it again.
+      // Refused (the env owner, yourself, a role change): the list may be out of date, so check it again.
       void queryClient.invalidateQueries({ queryKey: teamKeys.all });
       throw error;
     }

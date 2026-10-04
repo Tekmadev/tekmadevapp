@@ -22,7 +22,11 @@ export class ApiError extends Error {
     this.kind = init.kind ?? 'http';
   }
 
+  /** 403 for an owner-only section (code `owner_only`); `isForbidden` covers every 403. */
   get isOwnerOnly() {
+    return this.status === 403 && this.code !== 'forbidden';
+  }
+  get isForbidden() {
     return this.status === 403;
   }
   get isUnauthorized() {
@@ -39,6 +43,7 @@ export class ApiError extends Error {
 export const MESSAGES = {
   sessionEnded: 'Your session ended. Sign in again.',
   ownerOnly: 'That section is owner only.',
+  forbidden: 'Your role cannot do that.',
   offline: 'You are offline',
   network: 'Could not reach the server. Check your connection.',
   timeout: 'That took too long. Nothing is lost: try again in a moment.',
@@ -98,14 +103,16 @@ function stringFields(value: unknown): Record<string, string> | undefined {
  * Turn an HTTP status and parsed body into an ApiError. Accepts the documented
  * envelope `{ ok:false, error:{ code, message, fields? } }` and falls back to
  * status-based copy for anything else (HTML error pages, empty bodies).
- * 403 always uses the owner-only copy: that is the contract for this API.
+ * 403: `forbidden` (a role limit on one action) shows "Your role cannot do that.";
+ * every other 403 (`owner_only`, `not_staff`) uses the owner-only copy.
  */
 export function toApiError(status: number, body: unknown): ApiError {
   const envelope = body && typeof body === 'object' ? (body as { ok?: unknown; error?: unknown }) : undefined;
   const error = envelope && envelope.ok === false && isErrorBody(envelope.error) ? envelope.error : undefined;
   const fallback = fallbackMessage(status);
   if (status === 403) {
-    return new ApiError({ status, code: error?.code ?? fallback.code, message: MESSAGES.ownerOnly });
+    const code = error?.code ?? fallback.code;
+    return new ApiError({ status, code, message: code === 'forbidden' ? MESSAGES.forbidden : MESSAGES.ownerOnly });
   }
   return new ApiError({
     status,

@@ -18,6 +18,8 @@ export const SLUG_MAX = 60;
 /** The brief's strings, exact. */
 export const LINK_COPY = {
   emptyLinks: 'No links yet. Create one above.',
+  /** Without `links.write` there is nothing above to create with. */
+  emptyLinksReadOnly: 'No links yet.',
   emptyClicks: 'No clicks yet. They appear here as soon as a link is visited.',
   slug: 'Enter a slug using letters, numbers and dashes.',
   reserved: 'That slug is reserved by an existing page. Pick another.',
@@ -28,6 +30,7 @@ export const LINK_COPY = {
   noEdit: 'Links cannot be edited after creation. Check the slug and destination before you create it.',
   disableMessage: 'It returns 404 at once, for everyone who opens it or scans its QR code. You can enable it again later.',
   disabledNote: 'Disabled: this link returns 404 until you enable it.',
+  disabledNoteReadOnly: 'Disabled: this link returns 404.',
   notFound: 'That link no longer exists.',
 } as const;
 
@@ -36,6 +39,20 @@ export const FALLBACK_UTM_SOURCES = ['instagram', 'facebook', 'linkedin', 'busin
 export const FALLBACK_UTM_MEDIUMS = ['social', 'qr', 'email', 'cpc', 'organic', 'offline'] as const;
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** An entry of a link's actions menu. */
+export type LinkMenuAction = 'copy' | 'share' | 'qr' | 'disable' | 'enable' | 'delete';
+
+/**
+ * A link's long-press / overflow menu, in order. Copy, Share and QR code are
+ * part of viewing (`links.view`); Disable or Enable and Delete need
+ * `links.write` (owner decision 2026-10-03).
+ */
+export function linkMenuActions(link: Pick<ShortLink, 'active'>, canWrite: boolean): LinkMenuAction[] {
+  const actions: LinkMenuAction[] = ['copy', 'share', 'qr'];
+  if (canWrite) actions.push(link.active ? 'disable' : 'enable', 'delete');
+  return actions;
+}
 
 /** "tekmadev.com/insta" */
 export function shortLinkText(slug: string): string {

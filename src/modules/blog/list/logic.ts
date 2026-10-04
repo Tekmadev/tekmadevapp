@@ -27,11 +27,53 @@ export const BLOG_COPY = {
   trashTitle: 'Move to trash?',
   trashed: 'Moved to trash.',
   shareFirst: 'Publish it first. The link works once it is live.',
+  /** Read-only roles cannot publish, so they are not told to. */
+  shareNotLive: 'The link works once the post is live.',
   noCategories: 'No categories yet. Add one above.',
+  /** Read-only roles (no `blog.write`) get the empty states without the call to create. */
+  emptyReadOnly: 'No posts yet.',
+  noCategoriesReadOnly: 'No categories yet.',
   categoryAdded: 'Category added.',
   categoryRenamed: 'Category renamed.',
   categoryDeleted: 'Category deleted.',
 } as const;
+
+/* ---------- what each role may do (owner decision 2026-10-03) ---------- */
+
+/** What the signed-in person may do to posts: `blog.write` and `blog.trash`. Reading is `blog.view`. */
+export type PostAccess = { canWrite: boolean; canTrash: boolean };
+
+/** An entry of a post's actions sheet. `read` stands in for `edit` without `blog.write`. */
+export type PostMenuAction = 'edit' | 'read' | 'publish' | 'unpublish' | 'viewLive' | 'share' | 'trash';
+
+/**
+ * The long-press / "More actions" sheet of a post, in order. Without
+ * `blog.write` it keeps only what reading allows (open, View live, Share
+ * link); Move to trash needs `blog.trash`. Never an action that only fails with 403.
+ */
+export function postMenuActions(row: Pick<PostRow, 'status'>, access: PostAccess): PostMenuAction[] {
+  const live = row.status === 'published';
+  const actions: PostMenuAction[] = [access.canWrite ? 'edit' : 'read'];
+  if (access.canWrite) actions.push(live ? 'unpublish' : 'publish');
+  if (live) actions.push('viewLive');
+  actions.push('share');
+  if (access.canTrash) actions.push('trash');
+  return actions;
+}
+
+/**
+ * A row's swipes: right publishes or unpublishes (`blog.write`), left moves to
+ * trash (`blog.trash`). Writes, so none offline.
+ */
+export function postSwipeActions(
+  row: Pick<PostRow, 'status'>,
+  access: PostAccess,
+  online: boolean,
+): { publish: 'publish' | 'unpublish' | null; trash: boolean } {
+  if (!online) return { publish: null, trash: false };
+  const publish = access.canWrite ? (row.status === 'published' ? 'unpublish' : 'publish') : null;
+  return { publish, trash: access.canTrash };
+}
 
 /* ---------- status labels and tones ---------- */
 

@@ -117,7 +117,7 @@ export function topLinksNow(nowMs: number = Date.now()): TopLink[] {
     .slice(0, TOP_LINKS_MAX);
 }
 
-/** GET /overview for one caller. The inbox block and `topLinks` depend on who asks. */
+/** GET /overview with the caller's own inbox block; routes/overview.ts trims what their capabilities leave out. */
 export function overviewFor(user: { id: string; role: Role }): Overview {
   const leads = leadCounts();
   const traffic = analyticsFor('30d');
@@ -139,8 +139,8 @@ export function overviewFor(user: { id: string; role: Role }): Overview {
     },
     attentionClients: attentionClientsNow(),
     traffic: { series: traffic.series, topSources: traffic.topSources, topPages: traffic.topPages.slice(0, 10) },
-    // Links are a Marketing (owner) screen: managers never get them, not even as numbers.
-    topLinks: user.role === 'owner' ? topLinksNow() : null,
+    // Everything, as an owner sees it: routes/overview.ts trims revenue and links per caller.
+    topLinks: topLinksNow(),
     recentLeads: recentLeads(RECENT_ROWS),
     recentSubscriptions: recentSubscriptions(RECENT_ROWS),
     inbox,
@@ -220,9 +220,9 @@ const TYPE_ORDER: Record<SearchResultType, number> = { client: 0, lead: 1, subsc
 const labelOf = (options: readonly { value: string; label: string }[], value: string) => options.find((o) => o.value === value)?.label ?? value;
 const joinParts = (parts: (string | null | undefined | false)[]) => parts.filter((p): p is string => !!p).join(' · ');
 
-function clientCandidates(role: Role): Candidate[] {
-  // Owners find test clients too (marked "Test"); managers never see them.
-  return visibleClients(role === 'owner').map((record) => {
+function clientCandidates(includeTest: boolean): Candidate[] {
+  // People who may see test data find test clients too (marked "Test"); nobody else ever does.
+  return visibleClients(includeTest).map((record) => {
     const c = clientView(record);
     return {
       type: 'client',
@@ -312,19 +312,34 @@ function linkCandidates(): Candidate[] {
 }
 
 /**
- * GET /search: clients, leads, subscribers, posts, coupons and links, filtered
- * by role (managers only ever get clients and leads, never test clients), best
- * matches first, at most 20. An empty query answers nothing.
+ * What one caller may find: the result types they may open (each needs its
+ * `*.view` capability, decided by routes/session.ts) and whether test clients
+ * are included (`testdata.view`).
  */
-export function searchFixtures(rawQuery: string, role: Role): SearchResult[] {
+export type SearchScope = { types: ReadonlySet<SearchResultType>; includeTest: boolean };
+
+/**
+ * GET /search: clients, leads, subscribers, posts, coupons and links, only the
+ * types in the caller's scope (never test clients without `includeTest`),
+ * best matches first, at most 20. The scope applies before the cut, so a
+ * narrower role still gets its own best 20. An empty query answers nothing.
+ */
+export function searchFixtures(rawQuery: string, scope: SearchScope): SearchResult[] {
   const q = foldSearchText(rawQuery.slice(0, QUERY_MAX));
   if (!q) return [];
   const tokens = q.split(' ');
   // Only a query that looks like a phone number is matched against phone digits.
   const qDigits = /^[\d\s()+.-]+$/.test(rawQuery.trim()) ? digitsOf(rawQuery) : '';
 
-  const pool: Candidate[] = [...clientCandidates(role), ...leadCandidates()];
-  if (role === 'owner') pool.push(...subscriberCandidates(), ...postCandidates(), ...couponCandidates(), ...linkCandidates());
+  const sources: Record<SearchResultType, () => Candidate[]> = {
+    client: () => clientCandidates(scope.includeTest),
+    lead: leadCandidates,
+    subscriber: subscriberCandidates,
+    post: postCandidates,
+    coupon: couponCandidates,
+    link: linkCandidates,
+  };
+  const pool: Candidate[] = (Object.keys(sources) as SearchResultType[]).filter((t) => scope.types.has(t)).flatMap((t) => sources[t]());
 
   return pool
     .map((c) => ({ c, score: scoreOf(c, q, tokens, qDigits) }))

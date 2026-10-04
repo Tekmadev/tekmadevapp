@@ -8,7 +8,7 @@ export const pricingModule: ModuleManifest = {
   icon: Tag,
   group: 'more',
   moreSection: 'sales',
-  ownerOnly: true,
+  capability: 'pricing.view',
   routes: ['pricing'],
   href: '/pricing',
   summary: 'Plans, Webline, sales tax',

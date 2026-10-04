@@ -24,9 +24,10 @@ type Pending = { mode: TaxMode; on: boolean };
  * configured, the badge (Charging, On, not charging, Off), the API's
  * explanation, the Stripe Tax readiness line and the switch. Turning tax on or
  * off changes what buyers pay, so the switch asks for a HoldToConfirm first
- * and only moves once the server has answered.
+ * and only moves once the server has answered. Without `pricing.write` there
+ * is no switch: the badge and the lines say where tax stands.
  */
-export function SalesTaxCard({ salesTax, meta }: { salesTax: SalesTax; meta: PricingMeta | undefined }) {
+export function SalesTaxCard({ salesTax, meta, readOnly = false }: { salesTax: SalesTax; meta: PricingMeta | undefined; readOnly?: boolean }) {
   const cache = usePricingCache();
   const online = useIsOnline();
   // Kept after closing so the sheet's copy stays put while it slides away.
@@ -67,13 +68,15 @@ export function SalesTaxCard({ salesTax, meta }: { salesTax: SalesTax; meta: Pri
                     <Text variant="bodyStrong">{label}</Text>
                     <Badge label={badge.label} tone={badge.tone} />
                   </View>
-                  <Switch
-                    value={on}
-                    onValueChange={(next) => ask(mode, next)}
-                    disabled={!online}
-                    accessibilityLabel={`Sales tax, ${label}`}
-                    accessibilityHint={online ? `${badge.label}. Asks you to confirm.` : 'You are offline'}
-                  />
+                  {readOnly ? null : (
+                    <Switch
+                      value={on}
+                      onValueChange={(next) => ask(mode, next)}
+                      disabled={!online}
+                      accessibilityLabel={`Sales tax, ${label}`}
+                      accessibilityHint={online ? `${badge.label}. Asks you to confirm.` : 'You are offline'}
+                    />
+                  )}
                 </View>
                 <Text variant="small" color="ink2">
                   {status.explanation}

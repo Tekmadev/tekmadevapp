@@ -12,6 +12,7 @@ import {
   type TaskOwner,
   type TaskStatus,
 } from '@/api/schemas/clients';
+import { useCan } from '@/auth/permissions';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -40,6 +41,7 @@ import {
   TASK_STATUSES,
 } from '../detail/onboarding/logic';
 import { RunControls } from '../detail/onboarding/RunControls';
+import { RunSummary } from '../detail/onboarding/RunSummary';
 import { TaskList, type TaskLabels } from '../detail/onboarding/TaskList';
 import { TaskStatusSheet } from '../detail/onboarding/TaskStatusSheet';
 import { useOnboardingWrites } from '../detail/onboarding/useOnboardingWrites';
@@ -60,10 +62,17 @@ const patchFields = (patch: OnboardingPatch | undefined): (keyof OnboardingPatch
  * blocked), the checklist grouped by stage with one-tap status changes
  * (optimistic, with Undo), "Add a task" and "Mark onboarding complete".
  * A completed run is read only.
+ *
+ * Roles: the run's controls and "Mark onboarding complete" need
+ * `clients.onboarding` (without it the settings show read only), "Add a task"
+ * needs `clients.tasks.create`, and the status chips `clients.tasks.status`.
  */
 export function OnboardingSection({ clientId, bundle }: SectionProps) {
   const meta = useMeta().data;
   const online = useIsOnline();
+  const canRun = useCan('clients.onboarding');
+  const canAddTask = useCan('clients.tasks.create');
+  const canTaskStatus = useCan('clients.tasks.status');
   const writes = useOnboardingWrites(clientId);
   // The task is kept after closing, so the sheet's text stays while it slides away.
   const [statusSheet, setStatusSheet] = useState<{ open: boolean; task: OnboardingTask | null }>({ open: false, task: null });
@@ -152,23 +161,27 @@ export function OnboardingSection({ clientId, bundle }: SectionProps) {
         </Card>
 
         <Card>
-          <RunControls
-            run={run}
-            stageOptions={stageOptions}
-            stageLabel={labels.stage}
-            locked={complete}
-            offline={!online}
-            saving={saving}
-            onPatch={(patch) => writes.patchRun.mutateAsync({ runId: run.id, patch })}
-            onAskComplete={() => setCompleting(true)}
-          />
+          {canRun ? (
+            <RunControls
+              run={run}
+              stageOptions={stageOptions}
+              stageLabel={labels.stage}
+              locked={complete}
+              offline={!online}
+              saving={saving}
+              onPatch={(patch) => writes.patchRun.mutateAsync({ runId: run.id, patch })}
+              onAskComplete={() => setCompleting(true)}
+            />
+          ) : (
+            <RunSummary run={run} stageLabel={labels.stage} />
+          )}
         </Card>
 
         <View style={styles.checklistHead}>
           <Text variant="eyebrow" accessibilityRole="header">
             Checklist
           </Text>
-          {complete ? null : (
+          {complete || !canAddTask ? null : (
             <Button
               label="Add a task"
               variant="secondary"
@@ -181,9 +194,14 @@ export function OnboardingSection({ clientId, bundle }: SectionProps) {
           )}
         </View>
 
-        <TaskList tasks={tasks} labels={labels} locked={locked} onPressStatus={(task) => setStatusSheet({ open: true, task })} />
+        <TaskList
+          tasks={tasks}
+          labels={labels}
+          locked={locked || !canTaskStatus}
+          onPressStatus={(task) => setStatusSheet({ open: true, task })}
+        />
 
-        {complete ? null : (
+        {complete || !canRun ? null : (
           <Button
             label="Mark onboarding complete"
             variant="secondary"

@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { emailKeys, emailTemplatesQuery } from '@/api/endpoints/email';
 import { MESSAGES } from '@/api/errors';
 import type { EmailTemplate } from '@/api/schemas/email';
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { Button } from '@/components/Button';
 import { ErrorState } from '@/components/ErrorState';
 import { Header } from '@/components/Header';
@@ -43,9 +43,9 @@ const oneParam = (value: string | string[] | undefined) => (Array.isArray(value)
  */
 export function EmailTemplateScreen() {
   return (
-    <OwnerOnly>
+    <RequireCapability cap="email.view">
       <TemplateBody />
-    </OwnerOnly>
+    </RequireCapability>
   );
 }
 

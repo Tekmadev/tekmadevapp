@@ -13,8 +13,7 @@ const SCHEME = /^tekmadev-admin:\/\/\/?/i;
 export function redirectSystemPath({ path }: { path: string; initial: boolean }): string {
   try {
     if (parseAdminUrl(path)) {
-      const role = useSession.getState().me?.role ?? null;
-      return toHref(mapAdminUrl(path, role));
+      return toHref(mapAdminUrl(path, useSession.getState().me ?? null));
     }
     if (SCHEME.test(path)) return `/${path.replace(SCHEME, '')}`;
     return path;

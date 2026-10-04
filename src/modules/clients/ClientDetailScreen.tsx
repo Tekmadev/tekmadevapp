@@ -8,7 +8,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { clientKeys, clientQuery } from '@/api/endpoints/clients';
 import { ApiError, MESSAGES } from '@/api/errors';
 import type { ClientList } from '@/api/schemas/clients';
-import { useIsOwner } from '@/auth/session';
+import { useCan } from '@/auth/permissions';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { ErrorState } from '@/components/ErrorState';
 import { goBack } from '@/components/Header';
 import { Screen, type ScreenHandle } from '@/components/Screen';
@@ -83,15 +84,26 @@ function cachedBusinessName(queryClient: QueryClient, id: string): string | unde
  * `section` (from /admin/clients/<id>#<section>) opens scrolled to that
  * section once it has laid out; `action` is handed to the sections once
  * (Calls opens "Log a booked call" for `log-call`).
+ *
+ * What shows follows the person's capabilities: the CRM tab and section need
+ * `clients.crm`, and each section hides the actions this person cannot take.
  */
 export function ClientDetailScreen() {
+  return (
+    <RequireCapability cap="clients.view">
+      <ClientDetail />
+    </RequireCapability>
+  );
+}
+
+function ClientDetail() {
   const params = useLocalSearchParams<{ id: string; section?: string; action?: string }>();
   const id = oneParam(params.id) ?? '';
   const sectionParam = oneParam(params.section);
   const actionParam = oneParam(params.action);
 
   const queryClient = useQueryClient();
-  const isOwner = useIsOwner();
+  const canCrm = useCan('clients.crm');
   const reduceMotion = useReduceMotion();
   const showSkeleton = useShowAfter();
   const online = useIsOnline();
@@ -101,7 +113,7 @@ export function ClientDetailScreen() {
   const meta = useMeta();
   const [cachedTitle] = useState(() => cachedBusinessName(queryClient, id));
 
-  const sections = visibleSections(isOwner);
+  const sections = visibleSections(canCrm);
 
   // The route's action, handed to the sections until one of them has handled it.
   const [action, setAction] = useState(actionParam);
@@ -181,7 +193,7 @@ export function ClientDetailScreen() {
 
   // Open at the route's section (also when a new link arrives while this screen is open).
   const requestJump = useEffectEvent((section: string | undefined, routeAction: string | undefined) => {
-    const target = initialSection(section, routeAction, visibleSections(isOwner));
+    const target = initialSection(section, routeAction, visibleSections(canCrm));
     if (!target) return;
     pendingJump.current = target;
     tryPendingJump();
@@ -260,7 +272,7 @@ export function ClientDetailScreen() {
             onLayout={(e) => onMeasure(section, e)}
             style={[styles.section, section === lastSection ? { minHeight: lastMinHeight } : null]}
           >
-            <Body clientId={id} bundle={bundle} isOwner={isOwner} action={action} onActionHandled={() => setAction(undefined)} />
+            <Body clientId={id} bundle={bundle} action={action} onActionHandled={() => setAction(undefined)} />
           </View>
         );
       }),
@@ -289,7 +301,6 @@ export function ClientDetailScreen() {
           <ClientMenu
             clientId={id}
             businessName={bundle.client.businessName}
-            isOwner={isOwner}
             onTrashed={() => {
               trashed.current = true;
               goBack();

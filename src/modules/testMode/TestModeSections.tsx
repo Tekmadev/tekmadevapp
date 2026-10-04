@@ -108,10 +108,14 @@ type CatalogSectionProps = {
   status: TestModeStatus;
   rebuilding: boolean;
   startedAt: number | null;
-  onRebuild: () => void;
+  /** Absent without `testmode.write`: the button is left out. */
+  onRebuild?: () => void;
 };
 
-/** Per product: the one-time price and the care plan in the sandbox, then "Rebuild test catalog" (a long job). */
+/**
+ * Per product: the one-time price and the care plan in the sandbox, then
+ * "Rebuild test catalog" (a long job) for someone who may change test mode.
+ */
 export function CatalogSection({ status, rebuilding, startedAt, onRebuild }: CatalogSectionProps) {
   const ready = catalogReady(status);
   return (
@@ -136,16 +140,18 @@ export function CatalogSection({ status, rebuilding, startedAt, onRebuild }: Cat
           ))
         )}
         {rebuilding ? <JobProgress variant="inline" active title={REBUILDING} startedAt={startedAt} note={REBUILD_NOTE} /> : null}
-        <PendingButton
-          label="Rebuild test catalog"
-          icon={RefreshCw}
-          variant="secondary"
-          size="sm"
-          disabled={rebuilding}
-          onPress={onRebuild}
-          accessibilityHint="Creates any missing sandbox prices. Up to 2 minutes."
-          style={styles.start}
-        />
+        {onRebuild ? (
+          <PendingButton
+            label="Rebuild test catalog"
+            icon={RefreshCw}
+            variant="secondary"
+            size="sm"
+            disabled={rebuilding}
+            onPress={onRebuild}
+            accessibilityHint="Creates any missing sandbox prices. Up to 2 minutes."
+            style={styles.start}
+          />
+        ) : null}
       </Card>
     </Section>
   );
@@ -156,10 +162,11 @@ export function CatalogSection({ status, rebuilding, startedAt, onRebuild }: Cat
 type DataSectionProps = {
   status: TestModeStatus;
   canDelete: boolean;
-  onDelete: () => void;
+  /** Absent without `testmode.write`: the button is left out. */
+  onDelete?: () => void;
 };
 
-/** Test rows on record, and "Delete all test data" (hold to confirm in a sheet). */
+/** Test rows on record, and "Delete all test data" (hold to confirm in a sheet) for someone who may change test mode. */
 export function DataSection({ status, canDelete, onDelete }: DataSectionProps) {
   const { clients, orders, subscriptions, logins } = status.counts;
   return (
@@ -174,15 +181,17 @@ export function DataSection({ status, canDelete, onDelete }: DataSectionProps) {
           ]}
         />
       </Card>
-      <Button
-        label="Delete all test data"
-        variant="secondary"
-        icon={Trash2}
-        disabled={!canDelete}
-        onPress={onDelete}
-        style={styles.delete}
-        accessibilityHint="Asks you to hold to confirm"
-      />
+      {onDelete ? (
+        <Button
+          label="Delete all test data"
+          variant="secondary"
+          icon={Trash2}
+          disabled={!canDelete}
+          onPress={onDelete}
+          style={styles.delete}
+          accessibilityHint="Asks you to hold to confirm"
+        />
+      ) : null}
     </Section>
   );
 }

@@ -3,10 +3,12 @@ import { addDays, parseCalendarDate } from '@/lib/dates';
 import type { Coupon, CouponDiscount, CouponDuration, CouponScope } from '../../schemas/coupons';
 import { couponsState, DEAL_BASE_URL, DEAL_SCOPES, scopeOption, type StoredCoupon } from '../fixtures/coupons';
 import { pricingState } from '../fixtures/pricing';
+import { mockCan, requireCap } from '../permissions';
 import { byNewest, fail, mockId, notFound, nowIso, ok, torontoDate, type MockRoute } from '../router';
 
 /**
- * Mock routes for the "coupons" domain (owner only). Every rule from the
+ * Mock routes for the "coupons" domain: `coupons.view` reads, `coupons.write`
+ * creates and disables (each checked with requireCap, like the server). Every rule from the
  * contract's error table is here with its exact code and message. Coupons live
  * in Stripe, so creating one needs Stripe keys (`nostripe`) and a Stripe price
  * for what it applies to (`noproducts`, read from the Pricing fixture).
@@ -35,9 +37,13 @@ const CODE_PATTERN = /^[A-Z0-9-]{3,40}$/;
 const LABEL_MAX = 80;
 const MONTHLY_DURATIONS: readonly CouponDuration[] = ['first_month', 'repeating', 'forever'];
 
-/** The API shape: `dealUrl` only for active coupons scoped to growth plans monthly or Anything. */
-export function presentCoupon(coupon: StoredCoupon): Coupon {
-  const shareable = coupon.status === 'active' && DEAL_SCOPES.includes(coupon.appliesTo.value);
+/**
+ * The API shape: `dealUrl` only for active coupons scoped to growth plans
+ * monthly or Anything, and only for a caller who may share it
+ * (`coupons.share`), like the server.
+ */
+export function presentCoupon(coupon: StoredCoupon, share = true): Coupon {
+  const shareable = share && coupon.status === 'active' && DEAL_SCOPES.includes(coupon.appliesTo.value);
   return shareable ? { ...coupon, dealUrl: `${DEAL_BASE_URL}${encodeURIComponent(coupon.code)}` } : { ...coupon };
 }
 
@@ -77,16 +83,21 @@ export const routes: MockRoute[] = [
   {
     method: 'GET',
     path: '/coupons',
-    ownerOnly: true,
     latency: 'normal',
-    handler: () => ok<Coupon[]>([...couponsState.coupons].sort(byNewest((c) => c.createdAt)).map(presentCoupon)),
+    handler: ({ user }) => {
+      const denied = requireCap(user, 'coupons.view');
+      if (denied) return denied;
+      const share = mockCan(user, 'coupons.share');
+      return ok<Coupon[]>([...couponsState.coupons].sort(byNewest((c) => c.createdAt)).map((c) => presentCoupon(c, share)));
+    },
   },
   {
     method: 'POST',
     path: '/coupons',
-    ownerOnly: true,
     latency: 'slow',
-    handler: ({ body }) => {
+    handler: ({ body, user }) => {
+      const denied = requireCap(user, 'coupons.write');
+      if (denied) return denied;
       if (!pricingState.stripeConfigured) return fail(503, 'nostripe', MESSAGES.nostripe);
 
       // Collect every inline error; the first one (in form order) is the toast.
@@ -187,20 +198,21 @@ export const routes: MockRoute[] = [
         createdAt: nowIso(),
       };
       couponsState.coupons.unshift(coupon);
-      return ok<Coupon>(presentCoupon(coupon), 201);
+      return ok<Coupon>(presentCoupon(coupon, mockCan(user, 'coupons.share')), 201);
     },
   },
   {
     method: 'POST',
     path: '/coupons/:id/disable',
-    ownerOnly: true,
     latency: 'slow',
-    handler: ({ params }) => {
+    handler: ({ params, user }) => {
+      const denied = requireCap(user, 'coupons.write');
+      if (denied) return denied;
       const coupon = couponsState.coupons.find((c) => c.id === params.id);
       if (!coupon) return notFound('That coupon');
       // Already disabled: same answer, so a retry after a dropped connection is harmless.
       coupon.status = 'disabled';
-      return ok<Coupon>(presentCoupon(coupon));
+      return ok<Coupon>(presentCoupon(coupon, mockCan(user, 'coupons.share')));
     },
   },
 ];

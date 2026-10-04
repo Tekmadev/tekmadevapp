@@ -7,6 +7,8 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValu
 import { analyticsKeys, analyticsQuery } from '@/api/endpoints/analytics';
 import { errorMessage, MESSAGES } from '@/api/errors';
 import { ANALYTICS_RANGES, type Analytics, type AnalyticsRange } from '@/api/schemas/analytics';
+import { deniedMessage, useCan } from '@/auth/permissions';
+import { useSession } from '@/auth/session';
 import { ErrorState } from '@/components/ErrorState';
 import { FilterChips, type FilterChipItem } from '@/components/FilterChips';
 import { Screen, type ScreenHandle } from '@/components/Screen';
@@ -38,8 +40,26 @@ type AnalyticsParams = { range?: string };
  * until the new ones land, so nothing jumps. Cached data shows at once and
  * refreshes on focus, on app resume and on a pull. A first load shows the
  * skeleton after `showAfterMs`; a failure shows ErrorState, never zeros.
+ * Needs `analytics.view` (every role by default). It is a tab, so someone
+ * without it gets the server's refusal in place rather than being sent away.
  */
 export function AnalyticsScreen() {
+  const allowed = useCan('analytics.view');
+  // Nobody known (the moment of signing out): no data, and no refusal either.
+  const known = useSession((s) => s.me !== null);
+  return allowed ? <AnalyticsTab /> : <AnalyticsDenied known={known} />;
+}
+
+/** The tab for someone whose role cannot see Analytics: the header, and why there is nothing. */
+function AnalyticsDenied({ known }: { known: boolean }) {
+  return (
+    <Screen title="Analytics" headerRight={<TabHeaderActions />}>
+      {known ? <ErrorState message={deniedMessage('analytics.view')} /> : null}
+    </Screen>
+  );
+}
+
+function AnalyticsTab() {
   const params = useLocalSearchParams<AnalyticsParams>();
   const range = toRange(params.range);
   const online = useIsOnline();

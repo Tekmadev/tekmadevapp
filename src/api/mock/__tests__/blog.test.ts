@@ -34,7 +34,7 @@ import {
 
 /**
  * The blog domain through the real mock transport: schemas, paging, filters,
- * owner-only 403s, slug rules (server slugify, uniqueness including the trash),
+ * capability 403s (staff read, owners and managers write), slug rules (server slugify, uniqueness including the trash),
  * revisions, publishing, the Markdown renderer and categories.
  */
 
@@ -44,6 +44,9 @@ const asOwner = () => {
 };
 const asManager = () => {
   token = `mock.usr_mgr01.${Date.now() + 3_600_000}`;
+};
+const asStaff = () => {
+  token = `mock.usr_staff01.${Date.now() + 3_600_000}`;
 };
 
 let keySeq = 0;
@@ -87,26 +90,39 @@ describe('meta fragment', () => {
   });
 });
 
-describe('owner only', () => {
-  it('answers 403 to a manager on every blog endpoint', async () => {
-    asManager();
+describe('capabilities', () => {
+  it('lets staff read posts, categories, authors and the preview (blog.view)', async () => {
+    asStaff();
+    expect((await getPosts({})).items.length).toBeGreaterThan(0);
+    expect((await getPost('post_aireceptn')).post.id).toBe('post_aireceptn');
+    expect(zRenderResult.safeParse(await renderPostMarkdown('## Hi')).success).toBe(true);
+    expect((await getCategories()).length).toBeGreaterThan(0);
+    expect((await getAuthors()).length).toBeGreaterThan(0);
+  });
+
+  it('answers 403 forbidden to staff on every blog write (blog.write, blog.trash)', async () => {
+    asStaff();
     const calls: Promise<unknown>[] = [
-      getPosts({}),
-      getPost('post_aireceptn'),
       createPost({ title: 'Nope' }, key()),
       updatePost('post_aireceptn', { title: 'Nope' }),
       publishPost('post_aireceptn'),
       setPostStatus('post_aireceptn', 'draft'),
       trashPost('post_aireceptn'),
-      renderPostMarkdown('## Hi'),
       requestMediaUpload({ fileName: 'cover.webp', size: 1024, type: 'image/webp' }),
-      getCategories(),
       createCategory('Nope', key()),
       renameCategory('bcat_aiauto01', 'Nope'),
       deleteCategory('bcat_aiauto01'),
-      getAuthors(),
     ];
-    for (const call of calls) expect((await apiError(call)).status).toBe(403);
+    for (const call of calls) expect(await apiError(call)).toMatchObject({ status: 403, code: 'forbidden' });
+    asOwner();
+    expect((await getPost('post_aireceptn')).post.title).not.toBe('Nope');
+  });
+
+  it('lets a manager read and write', async () => {
+    asManager();
+    expect((await getPosts({})).items.length).toBeGreaterThan(0);
+    const slot = await requestMediaUpload({ fileName: 'cover.webp', size: 1024, type: 'image/webp' });
+    expect(slot.token).toBeTruthy();
   });
 });
 

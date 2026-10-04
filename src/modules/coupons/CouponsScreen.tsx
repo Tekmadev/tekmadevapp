@@ -9,7 +9,8 @@ import Animated from 'react-native-reanimated';
 import { couponKeys, couponsQuery, disableCoupon } from '@/api/endpoints/coupons';
 import { errorMessage, MESSAGES } from '@/api/errors';
 import type { Coupon, CouponsMeta } from '@/api/schemas/coupons';
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import { useCan } from '@/auth/permissions';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { Button } from '@/components/Button';
 import { ConfirmSheet } from '@/components/ConfirmSheet';
 import { EmptyState } from '@/components/EmptyState';
@@ -24,7 +25,7 @@ import { metaQuery, useMinuteClock, useRefetchOnFocus } from '@/modules/overview
 import { CouponCard } from './CouponCard';
 import { CouponsSkeleton } from './CouponsSkeleton';
 import { useCouponsCache } from './hooks';
-import { DISABLED_TOAST, EMPTY_COPY } from './logic';
+import { DISABLED_TOAST, EMPTY_COPY, EMPTY_COPY_READ_ONLY, type CouponAccess } from './logic';
 import { NewCouponSheet, type NewCouponSheetProps } from './NewCouponSheet';
 
 type CouponsParams = { action?: string | string[] };
@@ -33,16 +34,18 @@ const couponKey = (c: Coupon) => c.id;
 const firstParam = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 
 /**
- * Coupons (brief 8.13, owner only): every coupon, newest first, with "New
+ * Coupons (brief 8.13, `coupons.view`): every coupon, newest first, with "New
  * coupon" above the list. `action=new` (the "New coupon" quick action) opens
  * the sheet once and is then cleared from the route. Cached coupons show at
- * once and refresh on focus, on app resume and on a pull.
+ * once and refresh on focus, on app resume and on a pull. New coupon and
+ * Disable need `coupons.write`; Copy deal link and Share need
+ * `coupons.share` (staff: view and share only).
  */
 export function CouponsScreen() {
   return (
-    <OwnerOnly>
+    <RequireCapability cap="coupons.view">
       <CouponsBody />
-    </OwnerOnly>
+    </RequireCapability>
   );
 }
 
@@ -52,6 +55,9 @@ function CouponsBody() {
   const online = useIsOnline();
   const now = useMinuteClock();
   const reduceMotion = useReduceMotion();
+  const canWrite = useCan('coupons.write');
+  const canShare = useCan('coupons.share');
+  const access: CouponAccess = { canShare, canWrite };
   const query = useQuery(couponsQuery());
   const meta = useQuery(metaQuery());
   const upsert = useCouponsCache();
@@ -61,11 +67,11 @@ function CouponsBody() {
   const [animate] = useState(() => data === undefined);
 
   // The quick action opens the sheet once; the param is then cleared so going back and forth never reopens it.
-  const [creating, setCreating] = useState(action === 'new');
+  const [creating, setCreating] = useState(action === 'new' && canWrite);
   const [seenAction, setSeenAction] = useState(action);
   if (action !== seenAction) {
     setSeenAction(action);
-    if (action === 'new') setCreating(true);
+    if (action === 'new' && canWrite) setCreating(true);
   }
   useEffect(() => {
     if (action === 'new') router.setParams({ action: undefined });
@@ -100,18 +106,27 @@ function CouponsBody() {
   else metaState = { status: 'loading' };
 
   const renderItem = ({ item, index }: ListRenderItemInfo<Coupon>) => (
-    <CouponItem coupon={item} index={index} meta={meta.data} now={now} online={online} animate={animate && !reduceMotion} onDisable={askDisable} />
+    <CouponItem
+      coupon={item}
+      index={index}
+      meta={meta.data}
+      now={now}
+      online={online}
+      access={access}
+      animate={animate && !reduceMotion}
+      onDisable={askDisable}
+    />
   );
 
-  const header = (
+  const header = canWrite ? (
     <View style={styles.header}>
       <Button label="New coupon" icon={Plus} onPress={() => setCreating(true)} accessibilityHint="Opens the new coupon form" />
     </View>
-  );
+  ) : null;
 
   let empty: ReactNode;
   if (data) {
-    empty = <EmptyState message={EMPTY_COPY} />;
+    empty = <EmptyState message={canWrite ? EMPTY_COPY : EMPTY_COPY_READ_ONLY} />;
   } else if (waitingOffline) {
     empty = <ErrorState message={MESSAGES.network} onRetry={online ? () => refetch() : undefined} />;
   } else if (query.isError) {
@@ -128,7 +143,7 @@ function CouponsBody() {
         data={data ?? []}
         renderItem={renderItem}
         keyExtractor={couponKey}
-        extraData={[meta.data, now, online]}
+        extraData={[meta.data, now, online, canWrite, canShare]}
         ListHeaderComponent={header}
         ListEmptyComponent={<View style={styles.gutter}>{empty}</View>}
         ListFooterComponent={<View style={styles.footer} />}
@@ -137,7 +152,7 @@ function CouponsBody() {
         offlineBanner={data !== undefined}
         queryKey={couponKeys.list()}
       />
-      {creating ? (
+      {creating && canWrite ? (
         <NewCouponSheet meta={meta.data} metaState={metaState} onRetryMeta={() => meta.refetch()} onClose={() => setCreating(false)} />
       ) : null}
       <ConfirmSheet
@@ -159,14 +174,15 @@ type ItemProps = {
   meta: CouponsMeta | undefined;
   now: Date;
   online: boolean;
+  access: CouponAccess;
   animate: boolean;
   onDisable: (coupon: Coupon) => void;
 };
 
-function CouponItem({ coupon, index, meta, now, online, animate, onDisable }: ItemProps) {
+function CouponItem({ coupon, index, meta, now, online, access, animate, onDisable }: ItemProps) {
   return (
     <Animated.View entering={animate && index < STAGGER_MAX ? enterPull(index) : undefined} style={styles.item}>
-      <CouponCard coupon={coupon} meta={meta} now={now} online={online} onDisable={onDisable} />
+      <CouponCard coupon={coupon} meta={meta} now={now} online={online} access={access} onDisable={onDisable} />
     </Animated.View>
   );
 }

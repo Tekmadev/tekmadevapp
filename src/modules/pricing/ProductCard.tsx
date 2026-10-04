@@ -36,8 +36,9 @@ import { SaveErrorNote } from './parts';
  * fee, an optional compare-at price, Webline Care monthly, the first charge
  * delay and Purchasable, saved together with one Save. Amounts go to Stripe;
  * the other fields are site settings that save straight away on the server.
+ * Without `pricing.write` (staff) every field is read only and there is no Save.
  */
-export function ProductCard({ product, meta }: { product: PricingProduct; meta: PricingMeta | undefined }) {
+export function ProductCard({ product, meta, readOnly = false }: { product: PricingProduct; meta: PricingMeta | undefined; readOnly?: boolean }) {
   const cache = usePricingCache();
   const [edits, setEdits] = useState<ProductEdits>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -109,6 +110,7 @@ export function ProductCard({ product, meta }: { product: PricingProduct; meta: 
         mode="money"
         value={values.amount}
         onChange={(v) => set('amount', v)}
+        readOnly={readOnly}
         min={0}
         required
         error={errors.amount}
@@ -118,6 +120,7 @@ export function ProductCard({ product, meta }: { product: PricingProduct; meta: 
         mode="money"
         value={values.compareAt}
         onChange={(v) => set('compareAt', v)}
+        readOnly={readOnly}
         min={0}
         help={COMPARE_AT_HELP}
         error={errors.compareAt}
@@ -127,6 +130,7 @@ export function ProductCard({ product, meta }: { product: PricingProduct; meta: 
         mode="money"
         value={values.monthly}
         onChange={(v) => set('monthly', v)}
+        readOnly={readOnly}
         min={0}
         required
         error={errors.monthly}
@@ -136,6 +140,7 @@ export function ProductCard({ product, meta }: { product: PricingProduct; meta: 
         suffix="days"
         value={values.trialDays}
         onChange={(v) => set('trialDays', v)}
+        readOnly={readOnly}
         min={TRIAL_DAYS_MIN}
         max={TRIAL_DAYS_MAX}
         required
@@ -147,6 +152,7 @@ export function ProductCard({ product, meta }: { product: PricingProduct; meta: 
         description={PURCHASABLE_HELP}
         value={values.active}
         onValueChange={(v) => set('active', v)}
+        disabled={readOnly}
       />
       {errors.active ? (
         <Text variant="small" tone="signal">
@@ -154,15 +160,17 @@ export function ProductCard({ product, meta }: { product: PricingProduct; meta: 
         </Text>
       ) : null}
       {saveError ? <SaveErrorNote message={saveError} /> : null}
-      <PendingButton
-        label="Save"
-        pendingLabel="Saving"
-        fullWidth
-        disabled={!dirty}
-        onPress={save}
-        onError={onError}
-        accessibilityHint={dirty ? `Saves ${product.name} to the site and Stripe` : 'Nothing has changed yet'}
-      />
+      {readOnly ? null : (
+        <PendingButton
+          label="Save"
+          pendingLabel="Saving"
+          fullWidth
+          disabled={!dirty}
+          onPress={save}
+          onError={onError}
+          accessibilityHint={dirty ? `Saves ${product.name} to the site and Stripe` : 'Nothing has changed yet'}
+        />
+      )}
     </Card>
   );
 }

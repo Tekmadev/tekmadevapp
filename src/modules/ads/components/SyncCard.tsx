@@ -16,7 +16,8 @@ type SyncCardProps = {
   lastSync: AdsLastSync | null;
   /** The minute clock, so "5 min ago" stays true while the screen sits open. */
   now: Date;
-  pull: MetaPull;
+  /** The Meta pull, or null without `ads.refresh`: then the card is the status line only. */
+  pull: MetaPull | null;
 };
 
 /**
@@ -24,28 +25,31 @@ type SyncCardProps = {
  * with the server's reason) and "Refresh from Meta". While the pull runs, the
  * black hole and "Pulling from Meta…" take the status line's place with the
  * elapsed time; the rest of the screen stays usable and the button is disabled.
+ * Without `ads.refresh` there is no button: the card is the sync status only.
  */
 export function SyncCard({ lastSync, now, pull }: SyncCardProps) {
   return (
     <Card style={styles.card}>
-      {pull.running ? (
+      {pull?.running ? (
         <JobProgress variant="inline" active title={PULLING} startedAt={pull.startedAt} note="Up to 2 minutes. You can keep using the app." />
       ) : (
         <SyncStatus lastSync={lastSync} now={now} />
       )}
-      <PendingButton
-        label="Refresh from Meta"
-        icon={RefreshCw}
-        variant="secondary"
-        size="sm"
-        disabled={pull.running}
-        onPress={() => {
-          // The job reports through its own progress row and toasts; the button only starts it.
-          void pull.start();
-        }}
-        accessibilityHint="Pulls the latest spend and clicks from Meta. Up to 2 minutes."
-        style={styles.button}
-      />
+      {pull ? (
+        <PendingButton
+          label="Refresh from Meta"
+          icon={RefreshCw}
+          variant="secondary"
+          size="sm"
+          disabled={pull.running}
+          onPress={() => {
+            // The job reports through its own progress row and toasts; the button only starts it.
+            void pull.start();
+          }}
+          accessibilityHint="Pulls the latest spend and clicks from Meta. Up to 2 minutes."
+          style={styles.button}
+        />
+      ) : null}
     </Card>
   );
 }

@@ -9,7 +9,7 @@ import { metaFragment, zCoupon, zCoupons, type Coupon } from '@/api/schemas/coup
  * Coupon routes through the real mock transport: the list and its deal links,
  * every documented validation code (percent, amount, months, max, expires,
  * expirespast, code, dupe, noproducts, nostripe), auto codes, idempotent
- * creates, disabling, and owner-only 403s. GET /coupons is not paged.
+ * creates, disabling, and capability 403s. GET /coupons is not paged.
  */
 
 let token: string | null = null;
@@ -19,6 +19,9 @@ const asOwner = () => {
 };
 const asManager = () => {
   token = tokenFor('usr_mgr01');
+};
+const asStaff = () => {
+  token = tokenFor('usr_staff01');
 };
 
 beforeAll(() => {
@@ -89,14 +92,22 @@ describe('GET /coupons', () => {
     ]);
   });
 
-  it('is owner only', async () => {
-    asManager();
-    for (const call of [getCoupons(), create(base), disableCoupon('cpn_fallgrow26')]) {
+  it('lets staff read and share, and refuses their creates and disables (coupons.write)', async () => {
+    asStaff();
+    const listed = byCode(await getCoupons(), 'FALLGROW');
+    expect(listed?.status).toBe('active');
+    for (const call of [create(base), disableCoupon('cpn_fallgrow26')]) {
       const e = await apiError(call);
-      expect([e.status, e.code]).toEqual([403, 'owner_only']);
+      expect([e.status, e.code]).toEqual([403, 'forbidden']);
     }
     asOwner();
     expect(byCode(await getCoupons(), 'FALLGROW')?.status).toBe('active');
+  });
+
+  it('lets a manager read, with the deal links', async () => {
+    asManager();
+    const list = await getCoupons();
+    expect(list.some((c) => c.dealUrl !== undefined)).toBe(true);
   });
 });
 

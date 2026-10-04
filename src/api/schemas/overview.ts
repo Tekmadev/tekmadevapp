@@ -22,8 +22,11 @@ export const zOverviewKpis = z.object({
   totalLeads: z.number().int(),
   /** Leads with status `booked`. */
   bookedCalls: z.number().int(),
-  /** Live-mode subscriptions that are active, trialing or past due, Webline Care included. */
-  activeSubs: z.number().int(),
+  /**
+   * Live-mode subscriptions that are active, trialing or past due, Webline Care
+   * included. Null without `overview.revenue` (staff): hidden, never sent as 0.
+   */
+  activeSubs: z.number().int().nullable(),
   /** Pageviews over the last 30 days: the `total` of GET /analytics?range=30d. */
   pageviews30d: z.number().int(),
 });
@@ -108,13 +111,16 @@ export const zOverview = z.object({
   traffic: zOverviewTraffic,
   /**
    * Top 10 short links with clicks in the period, busiest first. Empty when none
-   * had a visit. Null for managers: links are owner only.
+   * had a visit. Null without `links.view`.
    */
   topLinks: z.array(zTopLink).nullable(),
   /** The 8 newest leads (the first rows of GET /leads). */
   recentLeads: z.array(zLead),
-  /** The 8 newest live-mode subscriptions (the first rows of GET /billing/subscriptions). */
-  recentSubscriptions: z.array(zSubscription),
+  /**
+   * The 8 newest live-mode subscriptions (the first rows of GET /billing/subscriptions).
+   * Null without `overview.revenue` (staff), never an empty list.
+   */
+  recentSubscriptions: z.array(zSubscription).nullable(),
   /** The caller's inbox summary (same as GET /notifications/summary). */
   inbox: zNotificationSummary,
 });

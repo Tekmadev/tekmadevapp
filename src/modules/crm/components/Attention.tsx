@@ -23,6 +23,8 @@ type AttentionHeaderProps = {
   selected: readonly CrmAttentionItem[];
   onSelectAll: () => void;
   onClear: () => void;
+  /** `crm.write`: selecting, Retry and Discard. Without it only the title and count show. */
+  canWrite: boolean;
 };
 
 /**
@@ -30,7 +32,7 @@ type AttentionHeaderProps = {
  * selection: Retry (signed items only: an unsigned message cannot be trusted)
  * and Discard (HoldToConfirm; discarded items stay on record).
  */
-export function AttentionHeader({ items, selected, onSelectAll, onClear }: AttentionHeaderProps) {
+export function AttentionHeader({ items, selected, onSelectAll, onClear, canWrite }: AttentionHeaderProps) {
   const { retry, discard } = useAttentionActions();
   // The count when the sheet opened, so its wording holds while it closes after the selection clears.
   const [discardCount, setDiscardCount] = useState<number | null>(null);
@@ -46,7 +48,7 @@ export function AttentionHeader({ items, selected, onSelectAll, onClear }: Atten
 
   return (
     <Section title="Needs attention" right={right} spacing={space[3]}>
-      {items.length > 0 ? (
+      {items.length > 0 && canWrite ? (
         <View style={styles.toolbar}>
           <View style={styles.toolbarTop}>
             <Text variant="label" color={selected.length > 0 ? 'ink' : 'ink3'} style={styles.flex} accessibilityLiveRegion="polite">
@@ -114,7 +116,8 @@ type AttentionRowProps = {
   meta: Partial<CrmMeta> | undefined;
   now: Date;
   selected: boolean;
-  onToggle: (item: CrmAttentionItem) => void;
+  /** Null when this person cannot act on items (`crm.write`): no checkbox, the card only reads. */
+  onToggle: ((item: CrmAttentionItem) => void) | null;
 };
 
 /** A stuck item: what, who, direction and tries, why it stopped, when. The whole card toggles its checkbox. */
@@ -123,6 +126,38 @@ export function AttentionRow({ item, meta, now, selected, onToggle }: AttentionR
   const when = whenText(item.at, now);
   const facts = [direction, triesLabel(item.tries), item.signed ? null : 'Unsigned'].filter(Boolean).join(' · ');
   const spoken = [item.what, item.who, facts, item.why, when].filter(Boolean).join('. ');
+
+  const texts = (
+    <View style={styles.body} importantForAccessibility="no-hide-descendants">
+      <View style={styles.top}>
+        <Text variant="bodyStrong" style={styles.flex}>
+          {item.what}
+        </Text>
+        <Text variant="small" color="ink4" tabular>
+          {when}
+        </Text>
+      </View>
+      <Text variant="small" color="ink2" numberOfLines={2}>
+        {item.who}
+      </Text>
+      <Text variant="small" color="ink4">
+        {facts}
+      </Text>
+      <Text variant="small" tone="warn">
+        {item.why}
+      </Text>
+    </View>
+  );
+
+  if (!onToggle) {
+    return (
+      <Card padded={false}>
+        <View style={styles.row} accessible accessibilityLabel={spoken}>
+          {texts}
+        </View>
+      </Card>
+    );
+  }
 
   return (
     <Card padded={false}>
@@ -138,25 +173,7 @@ export function AttentionRow({ item, meta, now, selected, onToggle }: AttentionR
         <View importantForAccessibility="no-hide-descendants">
           <CheckboxBox checked={selected} />
         </View>
-        <View style={styles.body} importantForAccessibility="no-hide-descendants">
-          <View style={styles.top}>
-            <Text variant="bodyStrong" style={styles.flex}>
-              {item.what}
-            </Text>
-            <Text variant="small" color="ink4" tabular>
-              {when}
-            </Text>
-          </View>
-          <Text variant="small" color="ink2" numberOfLines={2}>
-            {item.who}
-          </Text>
-          <Text variant="small" color="ink4">
-            {facts}
-          </Text>
-          <Text variant="small" tone="warn">
-            {item.why}
-          </Text>
-        </View>
+        {texts}
       </PressableScale>
     </Card>
   );

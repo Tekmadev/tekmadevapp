@@ -7,11 +7,11 @@ export const linksModule: ModuleManifest = {
   title: 'Links',
   icon: Link2,
   group: 'marketing',
-  ownerOnly: true,
+  capability: 'links.view',
   routes: ['(tabs)/marketing', 'links/[id]', 'links/qr/[id]'],
   href: { pathname: '/marketing', params: { segment: 'links' } },
   quickActions: [
-    { id: 'new-link', title: 'New link', icon: Link2, href: { pathname: '/marketing', params: { segment: 'links', action: 'new' } }, ownerOnly: true, inPlusSheet: true },
+    { id: 'new-link', title: 'New link', icon: Link2, href: { pathname: '/marketing', params: { segment: 'links', action: 'new' } }, capability: 'links.write', inPlusSheet: true },
   ],
   searchable: {
     screens: [

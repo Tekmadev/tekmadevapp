@@ -16,6 +16,11 @@ export type LoaderSettings = z.infer<typeof zLoaderSettings>;
 export const zMe = z.object({
   user: z.object({ id: z.string(), email: z.string(), name: z.string().nullable() }),
   role: zRole,
+  /**
+   * What this person may do (names in src/auth/capabilities.ts). The app shows
+   * and hides everything from this list; without it, the role's default table.
+   */
+  capabilities: z.array(z.string()).optional(),
   /** Server feature flags; a module with `feature` stays hidden until listed here. */
   features: z.array(z.string()),
   timezone: z.literal('America/Toronto'),

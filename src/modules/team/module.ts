@@ -8,13 +8,13 @@ export const teamModule: ModuleManifest = {
   icon: Shield,
   group: 'more',
   moreSection: 'settings',
-  ownerOnly: true,
+  capability: 'team.view',
   routes: ['team'],
   href: '/team',
-  summary: 'Owners and managers',
+  summary: 'Owners, managers and staff',
   searchable: {
     screens: [
-      { title: 'Team', keywords: ['staff', 'members', 'managers'], href: '/team' },
+      { title: 'Team', keywords: ['staff', 'members', 'managers', 'roles'], href: '/team' },
     ],
   },
 };

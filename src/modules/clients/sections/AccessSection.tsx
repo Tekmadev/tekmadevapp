@@ -6,6 +6,7 @@ import { StyleSheet, View } from 'react-native';
 import { requestAccess, updateAccessGrant, type AccessGrantPatch, type NewAccessGrantInput } from '@/api/endpoints/clients';
 import type { AccessGrant, AccessProvider, AccessStatus } from '@/api/schemas/clients';
 import type { Meta } from '@/api/schemas/meta';
+import { useCan } from '@/auth/permissions';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
@@ -49,11 +50,14 @@ const grantName = (meta: Meta | undefined, grant: AccessGrant) => grant.label?.t
 
 /**
  * Access (brief 8.5, section 3): every access Tekmadev asked the client for.
- * Tap a grant to change its status and the note the client sees; "Request
- * another access" asks for something new.
+ * Tap a grant to change its status and the note the client sees (needs
+ * `clients.access.update`; without it the rows are read only); "Request
+ * another access" asks for something new (`clients.access.request`).
  */
 export function AccessSection({ clientId, bundle }: SectionProps) {
   const meta = useMeta();
+  const canUpdate = useCan('clients.access.update');
+  const canRequest = useCan('clients.access.request');
   const grants = bundle.accessGrants;
   const [editing, setEditing] = useState<string | null>(null);
   const [requesting, setRequesting] = useState(false);
@@ -66,24 +70,31 @@ export function AccessSection({ clientId, bundle }: SectionProps) {
           <EmptyState compact message="No access requests yet." />
         </Card>
       ) : (
-        <RecordCard items={grants} keyOf={(g) => g.id} render={(g) => <GrantRow grant={g} meta={meta} onPress={() => setEditing(g.id)} />} />
+        <RecordCard
+          items={grants}
+          keyOf={(g) => g.id}
+          render={(g) => <GrantRow grant={g} meta={meta} onPress={canUpdate ? () => setEditing(g.id) : undefined} />}
+        />
       )}
-      <Button
-        label={grants.length === 0 ? 'Request access' : 'Request another access'}
-        icon={Plus}
-        variant="secondary"
-        size="sm"
-        onPress={() => setRequesting(true)}
-        style={styles.add}
-      />
+      {canRequest ? (
+        <Button
+          label={grants.length === 0 ? 'Request access' : 'Request another access'}
+          icon={Plus}
+          variant="secondary"
+          size="sm"
+          onPress={() => setRequesting(true)}
+          style={styles.add}
+        />
+      ) : null}
 
-      {edited ? <GrantStatusSheet key={edited.id} clientId={clientId} grant={edited} meta={meta} onClose={() => setEditing(null)} /> : null}
+      {edited && canUpdate ? <GrantStatusSheet key={edited.id} clientId={clientId} grant={edited} meta={meta} onClose={() => setEditing(null)} /> : null}
       {requesting ? <RequestAccessSheet clientId={clientId} meta={meta} onClose={() => setRequesting(false)} /> : null}
     </Section>
   );
 }
 
-function GrantRow({ grant, meta, onPress }: { grant: AccessGrant; meta: Meta | undefined; onPress: () => void }) {
+/** A grant. With `onPress` the row opens the status sheet; without it (no `clients.access.update`) it is read only. */
+function GrantRow({ grant, meta, onPress }: { grant: AccessGrant; meta: Meta | undefined; onPress?: () => void }) {
   const name = grantName(meta, grant);
   const status = statusOf(meta, grant.status);
   const method = grant.method ? labelFrom(meta?.accessMethods, ACCESS_METHOD_LABELS, grant.method) : null;
@@ -99,7 +110,7 @@ function GrantRow({ grant, meta, onPress }: { grant: AccessGrant; meta: Meta | u
     <RecordRow
       onPress={onPress}
       accessibilityLabel={[name, status.label, grant.accountIdentifier, subtitle, stamps].filter(Boolean).join('. ')}
-      accessibilityHint="Changes the status and the note the client sees"
+      accessibilityHint={onPress ? 'Changes the status and the note the client sees' : undefined}
     >
       <RecordHead title={name} badge={status} />
       {grant.accountIdentifier ? (

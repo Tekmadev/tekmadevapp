@@ -3,7 +3,8 @@ import { Tags } from 'lucide-react-native';
 import { StyleSheet, View } from 'react-native';
 import { useKeyboardState } from 'react-native-keyboard-controller';
 
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import { useCan, useCapabilities } from '@/auth/permissions';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { Fab } from '@/components/Fab';
 import { Menu } from '@/components/Menu';
 import { ScrollTabs, type ScrollTabItem } from '@/components/ScrollTabs';
@@ -17,9 +18,11 @@ import { CrmSegment } from './segments/CrmSegment';
 import { EmailSegment } from './segments/EmailSegment';
 import { LinksSegment } from './segments/LinksSegment';
 import {
+  allowedMarketingSegments,
   MARKETING_SEGMENT_LABELS,
   MARKETING_SEGMENTS,
-  toMarketingSegment,
+  MARKETING_TAB_CAPS,
+  resolveMarketingSegment,
   type MarketingParams,
   type MarketingSegment,
   type MarketingSegmentChrome,
@@ -30,42 +33,51 @@ const TABS: readonly ScrollTabItem<MarketingSegment>[] = MARKETING_SEGMENTS.map(
 /** The Fab is 56dp and floats 16dp above the tab bar; rows get this much extra room under them. */
 const FAB_CLEARANCE = 56 + space[4] + space[2];
 
-/** Each section's header menu (after search and the bell). A section without items shows no menu. */
-const SEGMENT_MENUS: Record<MarketingSegment, ActionSheetItem[]> = {
-  blog: [
+const openCategories = () => router.push('/blog/categories');
+
+/**
+ * Each section's header menu (after search and the bell). A section without
+ * items shows no menu. Categories open read only without `blog.write`.
+ */
+function segmentMenu(segment: MarketingSegment, canWritePosts: boolean): ActionSheetItem[] {
+  if (segment !== 'blog') return [];
+  return [
     {
       label: BLOG_COPY.categories,
       icon: Tags,
-      hint: 'Rename, add or delete categories',
-      onPress: () => router.push('/blog/categories'),
+      hint: canWritePosts ? 'Rename, add or delete categories' : 'Every category and its post count',
+      onPress: openCategories,
     },
-  ],
-  email: [],
-  links: [],
-  crm: [],
-};
+  ];
+}
 
 const newPost = () => router.push({ pathname: '/blog/[id]', params: { id: 'new' } });
 
 /**
- * The Marketing tab (brief 7 and 8.11, owner only): Blog, Email, Links and CRM,
- * switched by tabs under the title and bound to the route param `segment`
- * (default blog), so deep links (/admin/blog, /admin/email...) land on the
- * right one. Each segment owns its list and states; this shell owns the title,
- * the header actions (search, Inbox bell, the section's menu) and Blog's gold
- * "New post" button.
+ * The Marketing tab (brief 7 and 8.11): Blog, Email, Links and CRM, switched
+ * by tabs under the title and bound to the route param `segment` (default the
+ * first section this person may open), so deep links (/admin/blog,
+ * /admin/email...) land on the right one. Each section needs its `.view`
+ * capability and only allowed sections get a tab (staff: Blog, Email, Links);
+ * the tab itself needs any one of them. Each segment owns its list and states;
+ * this shell owns the title, the header actions (search, Inbox bell, the
+ * section's menu) and Blog's gold "New post" button (`blog.write` only).
  */
 export function MarketingScreen() {
   return (
-    <OwnerOnly>
+    <RequireCapability caps={MARKETING_TAB_CAPS}>
       <MarketingBody />
-    </OwnerOnly>
+    </RequireCapability>
   );
 }
 
 function MarketingBody() {
   const params = useLocalSearchParams<MarketingParams>();
-  const segment = toMarketingSegment(params.segment);
+  const capabilities = useCapabilities();
+  const canWritePosts = useCan('blog.write');
+  const allowed = allowedMarketingSegments(capabilities);
+  const segment = resolveMarketingSegment(params.segment, allowed);
+  const tabs = TABS.filter((t) => allowed.includes(t.value));
   const keyboardVisible = useKeyboardState((s) => s.isVisible);
 
   // A segment's one-shot action belongs to it: leaving it drops the action.
@@ -74,13 +86,19 @@ function MarketingBody() {
   const headerRight = (
     <View style={styles.actions}>
       <TabHeaderActions />
-      <Menu title={MARKETING_SEGMENT_LABELS[segment]} items={SEGMENT_MENUS[segment]} />
+      <Menu title={MARKETING_SEGMENT_LABELS[segment]} items={segmentMenu(segment, canWritePosts)} />
     </View>
   );
 
   const chrome: MarketingSegmentChrome = {
     screen: { title: 'Marketing', headerRight },
-    switcher: <ScrollTabs items={TABS} active={segment} onChange={switchTo} accessibilityLabel="Marketing sections" style={styles.switcher} />,
+    // One section only (a narrow capability list): no tabs to switch between.
+    switcher:
+      tabs.length > 1 ? (
+        <ScrollTabs items={tabs} active={segment} onChange={switchTo} accessibilityLabel="Marketing sections" style={styles.switcher} />
+      ) : (
+        <View style={styles.switcher} />
+      ),
     fabClearance: FAB_CLEARANCE,
   };
 
@@ -96,7 +114,7 @@ function MarketingBody() {
         <CrmSegment chrome={chrome} params={params} />
       )}
       {/* Out of the way while typing in a search box; the tab bar hides then too. */}
-      {segment === 'blog' && !keyboardVisible ? (
+      {segment === 'blog' && canWritePosts && !keyboardVisible ? (
         <Fab onPress={newPost} accessibilityLabel={BLOG_COPY.newPost} accessibilityHint="Opens the editor" />
       ) : null}
     </View>

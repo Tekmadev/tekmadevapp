@@ -18,13 +18,16 @@ type ReconcileCardProps = {
   reconcile: LongJob;
   busy: boolean;
   verified: boolean;
+  /** `crm.write`: "Run now". Without it the card only reads. */
+  canWrite: boolean;
 };
 
 /**
  * The last reconcile: "<time>: checked N contacts, corrected M." or the safety
- * stop's explanation in red, then "Run now" (a long job, "Checking every contact").
+ * stop's explanation in red, then "Run now" (a long job, "Checking every
+ * contact", `crm.write` only).
  */
-export function ReconcileCard({ last, now, reconcile, busy, verified }: ReconcileCardProps) {
+export function ReconcileCard({ last, now, reconcile, busy, verified, canWrite }: ReconcileCardProps) {
   const line = last ? reconcileLine(last, now) : null;
 
   return (
@@ -52,23 +55,25 @@ export function ReconcileCard({ last, now, reconcile, busy, verified }: Reconcil
           </Text>
         </View>
       )}
-      {!verified && !reconcile.running ? (
+      {canWrite && !verified && !reconcile.running ? (
         <Text variant="small" color="ink4">
           {VERIFY_FIRST}
         </Text>
       ) : null}
-      <PendingButton
-        label="Run now"
-        icon={Play}
-        variant="secondary"
-        size="sm"
-        disabled={busy || reconcile.running || !verified}
-        onPress={() => {
-          void reconcile.start();
-        }}
-        accessibilityHint="Checks every contact on both sides. Up to 2 minutes."
-        style={styles.button}
-      />
+      {canWrite ? (
+        <PendingButton
+          label="Run now"
+          icon={Play}
+          variant="secondary"
+          size="sm"
+          disabled={busy || reconcile.running || !verified}
+          onPress={() => {
+            void reconcile.start();
+          }}
+          accessibilityHint="Checks every contact on both sides. Up to 2 minutes."
+          style={styles.button}
+        />
+      ) : null}
     </Card>
   );
 }

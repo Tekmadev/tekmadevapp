@@ -7,8 +7,9 @@ import type { Visibility } from '../types';
 
 /**
  * Android app shortcuts (long-press the launcher icon): Inbox, New client,
- * Write a post (owner), Analytics. Generated from the registry's quick actions
- * that have a `shortcut`, filtered by role and feature flags, registered while
+ * Write a post, Analytics, each only for people who hold its capability.
+ * Generated from the registry's quick actions that have a `shortcut`,
+ * filtered by capability and feature flags, registered while
  * someone is signed in and cleared on sign-out. Tapping one is routed by
  * `useQuickActionRouting(onQuickAction)` in the signed-in layout.
  */
@@ -55,7 +56,7 @@ export async function clearAppShortcuts(): Promise<void> {
 
 /**
  * Keep the launcher shortcuts in step with the signed-in person: set after
- * sign-in, updated when the role or feature flags change, cleared when the
+ * sign-in, updated when capabilities or feature flags change, cleared when the
  * signed-in area unmounts (any sign-out, including a forced one).
  */
 export function useAppShortcuts() {
@@ -81,8 +82,8 @@ let initialHandled = false;
 
 /**
  * Passed to `useQuickActionRouting`: returns true to stop the router from
- * navigating. A shortcut this person may not use (an owner shortcut left
- * pinned after a role change) is ignored, as is the launch action the second
+ * navigating. A shortcut this person may not use (one left pinned after a
+ * role or capability change) is ignored, as is the launch action the second
  * time the signed-in layout mounts. Stable and synchronous, as the hook needs.
  */
 export function onQuickAction(action: QuickActions.Action): boolean {

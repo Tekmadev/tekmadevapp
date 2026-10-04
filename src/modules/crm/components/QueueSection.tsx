@@ -29,13 +29,16 @@ type QueueCardProps = {
   sync: LongJob;
   busy: boolean;
   verified: boolean;
+  /** `crm.write`: "Sync now". Without it only the figures show. */
+  canWrite: boolean;
 };
 
 /**
  * The queue: four figures with the server's sub-lines (2 x 2; the labels wrap
- * rather than cut off at large font sizes), then "Sync now" (a long job).
+ * rather than cut off at large font sizes), then "Sync now" (a long job,
+ * `crm.write` only).
  */
-export function QueueCard({ queue, sync, busy, verified }: QueueCardProps) {
+export function QueueCard({ queue, sync, busy, verified, canWrite }: QueueCardProps) {
   return (
     <View style={styles.queue}>
       <View style={styles.grid}>
@@ -48,27 +51,29 @@ export function QueueCard({ queue, sync, busy, verified }: QueueCardProps) {
           <QueueTile label={STATS[3].label} stat={queue[STATS[3].key]} />
         </View>
       </View>
-      <Card style={styles.syncCard}>
-        {sync.running ? (
-          <JobProgress variant="inline" active title={SYNCING} startedAt={sync.startedAt} note={LONG_JOB_NOTE} />
-        ) : (
-          <Text variant="small" color="ink3">
-            {verified ? 'Pushes what is waiting and applies what came in from the CRM, for each switch that is on.' : VERIFY_FIRST}
-          </Text>
-        )}
-        <PendingButton
-          label="Sync now"
-          icon={RefreshCw}
-          variant="secondary"
-          size="sm"
-          disabled={busy || sync.running || !verified}
-          onPress={() => {
-            void sync.start();
-          }}
-          accessibilityHint="Pushes and applies everything queued. Up to 2 minutes."
-          style={styles.button}
-        />
-      </Card>
+      {canWrite ? (
+        <Card style={styles.syncCard}>
+          {sync.running ? (
+            <JobProgress variant="inline" active title={SYNCING} startedAt={sync.startedAt} note={LONG_JOB_NOTE} />
+          ) : (
+            <Text variant="small" color="ink3">
+              {verified ? 'Pushes what is waiting and applies what came in from the CRM, for each switch that is on.' : VERIFY_FIRST}
+            </Text>
+          )}
+          <PendingButton
+            label="Sync now"
+            icon={RefreshCw}
+            variant="secondary"
+            size="sm"
+            disabled={busy || sync.running || !verified}
+            onPress={() => {
+              void sync.start();
+            }}
+            accessibilityHint="Pushes and applies everything queued. Up to 2 minutes."
+            style={styles.button}
+          />
+        </Card>
+      ) : null}
     </View>
   );
 }

@@ -1,4 +1,4 @@
-import type { NotificationPrefs } from '@/api/schemas/notifications';
+import { NOTIFICATION_CATEGORIES, type NotificationPrefs } from '@/api/schemas/notifications';
 
 import {
   KIT_TAP_WINDOW_MS,
@@ -22,18 +22,21 @@ const prefs: NotificationPrefs = [
 ];
 
 const meta: CategoryMeta[] = [
-  { value: 'leads', label: 'Leads', ownerOnly: false },
-  { value: 'sales', label: 'Sales and orders', ownerOnly: false },
-  { value: 'billing', label: 'Billing', ownerOnly: false },
-  { value: 'clients', label: 'Clients', ownerOnly: false },
-  { value: 'audience', label: 'Audience', ownerOnly: true },
-  { value: 'team', label: 'Team', ownerOnly: true },
-  { value: 'system', label: 'System', ownerOnly: false },
+  { value: 'leads', label: 'Leads' },
+  { value: 'sales', label: 'Sales and orders' },
+  { value: 'billing', label: 'Billing' },
+  { value: 'clients', label: 'Clients' },
+  { value: 'audience', label: 'Audience' },
+  { value: 'team', label: 'Team' },
+  { value: 'system', label: 'System' },
 ];
+
+/** What an owner or a manager reads (every `inbox.*`), and what staff read (Leads and Clients). */
+const ALL = NOTIFICATION_CATEGORIES;
 
 describe('prefRows', () => {
   it('follows the meta order and labels, skipping categories without a row', () => {
-    expect(prefRows(prefs, meta, true).map((p) => [p.category, p.label])).toEqual([
+    expect(prefRows(prefs, meta, ALL).map((p) => [p.category, p.label])).toEqual([
       ['leads', 'Leads'],
       ['sales', 'Sales and orders'],
       ['audience', 'Audience'],
@@ -43,12 +46,13 @@ describe('prefRows', () => {
   });
 
   it('falls back to the brief order without meta', () => {
-    expect(prefRows(prefs, undefined, true).map((p) => p.category)).toEqual(['leads', 'sales', 'audience', 'team', 'system']);
+    expect(prefRows(prefs, undefined, ALL).map((p) => p.category)).toEqual(['leads', 'sales', 'audience', 'team', 'system']);
   });
 
-  it('never shows Team or Audience to a manager', () => {
-    expect(prefRows(prefs, meta, false).map((p) => p.category)).toEqual(['leads', 'sales', 'system']);
-    expect(prefRows(prefs, undefined, false).map((p) => p.category)).toEqual(['leads', 'sales', 'system']);
+  it('shows only the categories this person may read, even if the server sent more rows', () => {
+    expect(prefRows(prefs, meta, ['leads', 'clients']).map((p) => p.category)).toEqual(['leads']);
+    expect(prefRows(prefs, undefined, ['leads', 'sales', 'system']).map((p) => p.category)).toEqual(['leads', 'sales', 'system']);
+    expect(prefRows(prefs, meta, [])).toEqual([]);
   });
 });
 

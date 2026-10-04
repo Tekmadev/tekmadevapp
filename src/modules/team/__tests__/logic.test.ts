@@ -1,8 +1,8 @@
 import type { TeamMember } from '@/api/schemas/team';
 
 import {
+  addableRoles,
   canRemove,
-  FALLBACK_ROLES,
   generateTempPassword,
   insertMember,
   lastSignInText,
@@ -11,10 +11,11 @@ import {
   newMemberInput,
   passwordFromBytes,
   removeMessage,
-  roleBadge,
+  roleWithArticle,
+  selfNote,
   shareCredentialsText,
   TEAM_COPY,
-  teamRoles,
+  TEAM_ROLES,
   validateNewMember,
   withoutMember,
 } from '../logic';
@@ -32,18 +33,29 @@ const member = (over: Partial<TeamMember>): TeamMember => ({
 });
 
 describe('roles', () => {
-  it('uses the brief when /meta has not loaded', () => {
-    expect(teamRoles(undefined)).toBe(FALLBACK_ROLES);
-    expect(teamRoles([])).toBe(FALLBACK_ROLES);
-    expect(roleBadge(teamRoles(undefined), 'owner')).toEqual({ label: 'Owner', tone: 'gold' });
-    expect(roleBadge(teamRoles(undefined), 'manager')).toEqual({ label: 'Manager', tone: 'neutral' });
+  it('lists every role, narrowest first, with the owner decision copy', () => {
+    expect(TEAM_ROLES).toEqual([
+      {
+        value: 'staff',
+        label: 'Staff',
+        tone: 'muted',
+        help: 'Leads and outreach, analytics and onboarding help. Marketing, pricing and coupons are view only. No money.',
+      },
+      { value: 'manager', label: 'Manager', tone: 'neutral', help: 'Everything except removing team members or making owners.' },
+      { value: 'owner', label: 'Owner', tone: 'gold', help: 'Full access, can manage the team.' },
+    ]);
   });
 
-  it('prefers the server labels', () => {
-    const roles = [{ value: 'owner' as const, label: 'Owner', help: 'x', tone: 'gold' as const }];
-    expect(roleBadge(roles, 'owner')).toEqual({ label: 'Owner', tone: 'gold' });
-    // A role missing from /meta still gets the brief's badge.
-    expect(roleBadge(roles, 'manager')).toEqual({ label: 'Manager', tone: 'neutral' });
+  it('offers Owner only to someone who may make owners', () => {
+    expect(addableRoles(true).map((r) => r.value)).toEqual(['staff', 'manager', 'owner']);
+    // A manager adds managers and staff; Staff stays the default (the first choice).
+    expect(addableRoles(false).map((r) => r.value)).toEqual(['staff', 'manager']);
+  });
+
+  it('reads well after "as"', () => {
+    expect(roleWithArticle('owner')).toBe('an Owner');
+    expect(roleWithArticle('manager')).toBe('a Manager');
+    expect(roleWithArticle('staff')).toBe('Staff');
   });
 });
 
@@ -67,10 +79,22 @@ describe('row text', () => {
 
 describe('canRemove', () => {
   it('never offers to remove an env owner or yourself', () => {
-    expect(canRemove(member({ envOwner: true, role: 'owner' }), 'someone@else.test')).toBe(false);
-    expect(canRemove(member({}), 'MAYA@tekmadev.test')).toBe(false);
-    expect(canRemove(member({}), 'owner@tekmadev.test')).toBe(true);
-    expect(canRemove(member({ role: 'owner' }), null)).toBe(true);
+    expect(canRemove(member({ envOwner: true, role: 'owner' }), 'someone@else.test', true)).toBe(false);
+    expect(canRemove(member({}), 'MAYA@tekmadev.test', true)).toBe(false);
+    expect(canRemove(member({}), 'owner@tekmadev.test', true)).toBe(true);
+    expect(canRemove(member({ role: 'owner' }), null, true)).toBe(true);
+    expect(canRemove(member({ role: 'staff' }), 'owner@tekmadev.test', true)).toBe(true);
+  });
+
+  it('offers nothing to someone without team.remove (a manager)', () => {
+    expect(canRemove(member({}), 'owner@tekmadev.test', false)).toBe(false);
+    expect(canRemove(member({ role: 'staff' }), 'maya@tekmadev.test', false)).toBe(false);
+    expect(canRemove(member({ envOwner: true, role: 'owner' }), 'maya@tekmadev.test', false)).toBe(false);
+  });
+
+  it('tells you who can remove you', () => {
+    expect(selfNote(true)).toBe('This is you. Another owner can remove you.');
+    expect(selfNote(false)).toBe('This is you. An owner can remove you.');
   });
 });
 
@@ -83,6 +107,12 @@ describe('cached list', () => {
     expect(insertMember([envOwner, manager], owner).map((m) => m.email)).toEqual(['owner@t.test', 'new-owner@t.test', 'a@t.test']);
     const late = member({ email: 'b@t.test', addedAt: '2026-10-02T00:00:00Z' });
     expect(insertMember([envOwner, manager], late).map((m) => m.email)).toEqual(['owner@t.test', 'a@t.test', 'b@t.test']);
+  });
+
+  it('puts staff after the managers, however early they were added', () => {
+    const staff = member({ email: 's@t.test', role: 'staff', addedAt: '2025-12-01T00:00:00Z' });
+    const late = member({ email: 'b@t.test', addedAt: '2026-10-02T00:00:00Z' });
+    expect(insertMember([envOwner, manager, staff], late).map((m) => m.email)).toEqual(['owner@t.test', 'a@t.test', 'b@t.test', 's@t.test']);
   });
 
   it('never lists someone twice and removes by email', () => {
@@ -140,11 +170,12 @@ describe('temporary passwords', () => {
   });
 
   it('shares the email, the password and where to sign in', () => {
-    const text = shareCredentialsText({ email: 'maya@x.co', password: 'aA2b-B3cC-4dD5', roleLabel: 'Manager' });
+    const text = shareCredentialsText({ email: 'maya@x.co', password: 'aA2b-B3cC-4dD5', role: 'manager' });
     expect(text).toContain('as a Manager.');
     expect(text).toContain('Email: maya@x.co');
     expect(text).toContain('Temporary password: aA2b-B3cC-4dD5');
     expect(text).toContain('https://www.tekmadev.com/admin');
-    expect(shareCredentialsText({ email: 'a@b.co', password: 'p', roleLabel: 'Owner' })).toContain('as an Owner.');
+    expect(shareCredentialsText({ email: 'a@b.co', password: 'p', role: 'owner' })).toContain('as an Owner.');
+    expect(shareCredentialsText({ email: 'a@b.co', password: 'p', role: 'staff' })).toContain('as Staff.');
   });
 });

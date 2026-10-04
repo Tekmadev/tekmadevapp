@@ -8,7 +8,8 @@ import { StyleSheet, View } from 'react-native';
 import { linkClicksInfiniteQuery, linkKeys, linksMetaQuery, linksQuery } from '@/api/endpoints/links';
 import { MESSAGES } from '@/api/errors';
 import type { LinkClick, LinksMeta, ShortLink } from '@/api/schemas/links';
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import { useCan } from '@/auth/permissions';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -54,9 +55,10 @@ type LinkHeaderProps = {
   onSheet: (sheet: LinkSheet) => void;
 };
 
-/** Status, clicks, Copy / Share / QR code, every field, then Disable / Enable and Delete. */
+/** Status, clicks, Copy / Share / QR code, every field, then Disable / Enable and Delete (`links.write`). */
 function LinkHeader({ link, meta, onSheet }: LinkHeaderProps) {
   const { setActive } = useLinkMutations();
+  const canWrite = useCan('links.write');
   const status = statusBadge(meta, link.active);
   const url = shareUrlOf(link);
   const chips = utmChips(link);
@@ -82,7 +84,7 @@ function LinkHeader({ link, meta, onSheet }: LinkHeaderProps) {
       </View>
       {link.active ? null : (
         <Text variant="small" color="ink3" style={styles.note}>
-          {LINK_COPY.disabledNote}
+          {canWrite ? LINK_COPY.disabledNote : LINK_COPY.disabledNoteReadOnly}
         </Text>
       )}
 
@@ -110,29 +112,31 @@ function LinkHeader({ link, meta, onSheet }: LinkHeaderProps) {
         </Text>
       </Section>
 
-      <View style={styles.manage}>
-        {link.active ? (
+      {canWrite ? (
+        <View style={styles.manage}>
+          {link.active ? (
+            <PendingButton
+              label="Disable link"
+              icon={Ban}
+              variant="secondary"
+              fullWidth
+              accessibilityHint="It returns 404 at once. Asks you to confirm."
+              onPress={() => onSheet({ link, kind: 'disable' })}
+              offlineHint={false}
+            />
+          ) : (
+            <PendingButton label="Enable link" pendingLabel="Enabling" icon={Power} variant="secondary" fullWidth onPress={() => setActive(link, true)} offlineHint={false} />
+          )}
           <PendingButton
-            label="Disable link"
-            icon={Ban}
-            variant="secondary"
+            label="Delete link"
+            icon={Trash2}
+            variant="ghost"
             fullWidth
-            accessibilityHint="It returns 404 at once. Asks you to confirm."
-            onPress={() => onSheet({ link, kind: 'disable' })}
-            offlineHint={false}
+            accessibilityHint="Asks you to confirm"
+            onPress={() => onSheet({ link, kind: 'delete' })}
           />
-        ) : (
-          <PendingButton label="Enable link" pendingLabel="Enabling" icon={Power} variant="secondary" fullWidth onPress={() => setActive(link, true)} offlineHint={false} />
-        )}
-        <PendingButton
-          label="Delete link"
-          icon={Trash2}
-          variant="ghost"
-          fullWidth
-          accessibilityHint="Asks you to confirm"
-          onPress={() => onSheet({ link, kind: 'delete' })}
-        />
-      </View>
+        </View>
+      ) : null}
 
       <Section title="Click history" spacing={space[1]} style={styles.history} />
     </View>
@@ -158,15 +162,15 @@ function DetailSkeleton() {
  * One short link (brief 8.11, "tap a link card to see its own click
  * history"; deep link /admin/links/<id>): the status, the click count, Copy,
  * Share and QR code, every field with the final URL the visitor lands on,
- * Disable / Enable and Delete, then its clicks with infinite scroll. The link
- * comes from GET /links (there is no single-link endpoint), loaded again on
- * open, on focus and on resume.
+ * Disable / Enable and Delete (`links.write` only), then its clicks with
+ * infinite scroll. The link comes from GET /links (there is no single-link
+ * endpoint), loaded again on open, on focus and on resume. Needs `links.view`.
  */
 export function LinkDetailScreen() {
   return (
-    <OwnerOnly>
+    <RequireCapability cap="links.view">
       <LinkDetail />
-    </OwnerOnly>
+    </RequireCapability>
   );
 }
 

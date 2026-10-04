@@ -23,15 +23,18 @@ type SwitchCardsProps = {
   verified: boolean;
   online: boolean;
   now: Date;
+  /** `crm.write`: the switches. Without it each card shows its state only. */
+  canWrite: boolean;
 };
 
 /**
  * Outbound, Inbound and Nightly reconcile: one card each, with its badge (Off,
  * Running, or "On, not running" with the reason in red). Turning one on waits
  * for a verified connection; turning Outbound on asks HoldToConfirm, since it
- * queues every contact once.
+ * queues every contact once. Without `crm.write` the cards keep their badge,
+ * description and warnings, with no switch.
  */
-export function SwitchCards({ switches, meta, verified, online, now }: SwitchCardsProps) {
+export function SwitchCards({ switches, meta, verified, online, now, canWrite }: SwitchCardsProps) {
   const labelFor = (surface: CrmSurface) => surfaceLabel(meta, surface);
   const { pending, set } = useCrmSwitch(labelFor);
   const [confirmOutbound, setConfirmOutbound] = useState(false);
@@ -58,10 +61,11 @@ export function SwitchCards({ switches, meta, verified, online, now }: SwitchCar
           pending={pending === surface}
           locked={pending !== null && pending !== surface}
           now={now}
+          canWrite={canWrite}
           onChange={(next) => toggle(surface, next)}
         />
       ))}
-      {!online ? (
+      {!online && canWrite ? (
         <Text variant="small" color="ink4">
           {MESSAGES.offline}
         </Text>
@@ -91,10 +95,11 @@ type SwitchCardProps = {
   /** Another switch is saving: one change at a time. */
   locked: boolean;
   now: Date;
+  canWrite: boolean;
   onChange: (next: boolean) => void;
 };
 
-function SwitchCard({ label, description, sw, verified, online, pending, locked, now, onChange }: SwitchCardProps) {
+function SwitchCard({ label, description, sw, verified, online, pending, locked, now, canWrite, onChange }: SwitchCardProps) {
   const badge = switchBadge(sw);
   const warning = switchWarning(sw);
   const needsVerify = !sw.on && !verified;
@@ -108,14 +113,16 @@ function SwitchCard({ label, description, sw, verified, online, pending, locked,
           <Text variant="title">{label}</Text>
           <Badge label={badge.label} tone={badge.tone} dot style={styles.badge} />
         </View>
-        <Switch
-          value={sw.on}
-          onValueChange={onChange}
-          disabled={disabled}
-          pending={pending}
-          accessibilityLabel={`${label}, ${badge.label}`}
-          accessibilityHint={needsVerify ? VERIFY_FIRST : description}
-        />
+        {canWrite ? (
+          <Switch
+            value={sw.on}
+            onValueChange={onChange}
+            disabled={disabled}
+            pending={pending}
+            accessibilityLabel={`${label}, ${badge.label}`}
+            accessibilityHint={needsVerify ? VERIFY_FIRST : description}
+          />
+        ) : null}
       </View>
       <Text variant="small" color="ink3">
         {description}
@@ -128,7 +135,7 @@ function SwitchCard({ label, description, sw, verified, online, pending, locked,
           </Text>
         </View>
       ) : null}
-      {needsVerify ? (
+      {needsVerify && canWrite ? (
         <Text variant="small" color="ink4">
           {VERIFY_FIRST}
         </Text>

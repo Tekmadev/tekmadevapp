@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { reviewIntake } from '@/api/endpoints/clients';
+import { useCan } from '@/auth/permissions';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -25,7 +26,8 @@ import type { SectionProps } from './types';
 
 /**
  * Intake (brief 8.5, section 2): the latest version's status, vN and its
- * submitted and reviewed times, "Mark reviewed" while it waits on us, and
+ * submitted and reviewed times, "Mark reviewed" while it waits on us (for
+ * people with `clients.intake.review`), and
  * every answer rendered from the intake schema in GET /meta. The answers are
  * open while the intake waits for review and folded otherwise, so a long
  * intake does not bury the sections below it.
@@ -33,6 +35,7 @@ import type { SectionProps } from './types';
 export function IntakeSection({ clientId, bundle }: SectionProps) {
   const queryClient = useQueryClient();
   const meta = useMeta();
+  const canReview = useCan('clients.intake.review');
   const intake = bundle.intake;
   // null: follow the status (open while submitted); true/false once the person chose.
   const [expanded, setExpanded] = useState<boolean | null>(null);
@@ -94,7 +97,7 @@ export function IntakeSection({ clientId, bundle }: SectionProps) {
             </Text>
           ))}
         </View>
-        {intake.status === 'submitted' ? (
+        {intake.status === 'submitted' && canReview ? (
           <PendingButton
             label="Mark reviewed"
             pendingLabel="Saving"

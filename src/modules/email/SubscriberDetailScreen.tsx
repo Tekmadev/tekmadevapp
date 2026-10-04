@@ -7,7 +7,8 @@ import { StyleSheet, View } from 'react-native';
 import { deleteSubscriber, emailKeys, emailMetaQuery, subscriberQuery, unsubscribeSubscriber } from '@/api/endpoints/email';
 import { ApiError, MESSAGES } from '@/api/errors';
 import type { ConsentEvent, EmailMeta, Subscriber } from '@/api/schemas/email';
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import { useCan } from '@/auth/permissions';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -74,13 +75,15 @@ function facts(s: Subscriber, meta: EmailMeta | undefined, now: Date): KeyValueI
  * in CRM", the consent history timeline, Unsubscribe (active only) and
  * permanent erasure, both behind HoldToConfirm and both waiting for the
  * server (they touch the CRM). Opened from a row, the header shows at once
- * from the cached list while the history loads.
+ * from the cached list while the history loads. Needs
+ * `email.subscribers.view`; Unsubscribe and Delete need
+ * `email.subscribers.write`, and "Inspect in CRM" needs `crm.view`.
  */
 export function SubscriberDetailScreen() {
   return (
-    <OwnerOnly>
+    <RequireCapability cap="email.subscribers.view">
       <SubscriberBody />
-    </OwnerOnly>
+    </RequireCapability>
   );
 }
 
@@ -90,6 +93,8 @@ function SubscriberBody() {
   const queryClient = useQueryClient();
   const online = useIsOnline();
   const now = useMinuteClock();
+  const canWrite = useCan('email.subscribers.write');
+  const canInspect = useCan('crm.view');
   const [fromList] = useState(() => (id ? cachedSubscriber(queryClient, id) : undefined));
   const [confirming, setConfirming] = useState<Confirming>(null);
   const [erased, setErased] = useState(false);
@@ -137,6 +142,8 @@ function SubscriberBody() {
         }
         meta={meta.data}
         now={now}
+        canWrite={canWrite}
+        canInspect={canInspect}
         onUnsubscribe={() => setConfirming('unsubscribe')}
         onErase={() => setConfirming('erase')}
       />
@@ -194,11 +201,15 @@ type SubscriberViewProps = {
   historyNode: ReactNode;
   meta: EmailMeta | undefined;
   now: Date;
+  /** `email.subscribers.write`: Unsubscribe and Delete permanently. */
+  canWrite: boolean;
+  /** `crm.view`: "Inspect in CRM". */
+  canInspect: boolean;
   onUnsubscribe: () => void;
   onErase: () => void;
 };
 
-function SubscriberView({ subscriber, history, historyNode, meta, now, onUnsubscribe, onErase }: SubscriberViewProps) {
+function SubscriberView({ subscriber, history, historyNode, meta, now, canWrite, canInspect, onUnsubscribe, onErase }: SubscriberViewProps) {
   const status = subscriberStatusBadge(meta, subscriber.status);
   const crm = crmBadge(subscriber.inCrm);
   const left = leftLine(meta, subscriber);
@@ -218,15 +229,17 @@ function SubscriberView({ subscriber, history, historyNode, meta, now, onUnsubsc
         </Text>
       ) : null}
 
-      <Button
-        label="Inspect in CRM"
-        icon={ScanSearch}
-        variant="secondary"
-        fullWidth
-        accessibilityHint="Compares this address here and in the CRM"
-        onPress={() => router.push({ pathname: '/crm/inspect', params: { email: subscriber.email } })}
-        style={styles.inspect}
-      />
+      {canInspect ? (
+        <Button
+          label="Inspect in CRM"
+          icon={ScanSearch}
+          variant="secondary"
+          fullWidth
+          accessibilityHint="Compares this address here and in the CRM"
+          onPress={() => router.push({ pathname: '/crm/inspect', params: { email: subscriber.email } })}
+          style={styles.inspect}
+        />
+      ) : null}
 
       <Section title="Details" style={styles.details}>
         <Card padded={false}>
@@ -248,26 +261,30 @@ function SubscriberView({ subscriber, history, historyNode, meta, now, onUnsubsc
         )}
       </Section>
 
-      <View style={styles.actions}>
-        {subscriber.status === 'active' ? (
+      {canWrite ? (
+        <View style={styles.actions}>
+          {subscriber.status === 'active' ? (
+            <Button
+              label="Unsubscribe"
+              icon={MailX}
+              variant="secondary"
+              fullWidth
+              accessibilityHint="Asks you to hold to confirm"
+              onPress={onUnsubscribe}
+            />
+          ) : null}
           <Button
-            label="Unsubscribe"
-            icon={MailX}
-            variant="secondary"
+            label="Delete permanently"
+            icon={Trash2}
+            variant="destructive"
             fullWidth
-            accessibilityHint="Asks you to hold to confirm"
-            onPress={onUnsubscribe}
+            accessibilityHint="Erases this subscriber. Asks you to hold to confirm"
+            onPress={onErase}
           />
-        ) : null}
-        <Button
-          label="Delete permanently"
-          icon={Trash2}
-          variant="destructive"
-          fullWidth
-          accessibilityHint="Erases this subscriber. Asks you to hold to confirm"
-          onPress={onErase}
-        />
-      </View>
+        </View>
+      ) : (
+        <View style={styles.end} />
+      )}
     </View>
   );
 }
@@ -278,4 +295,5 @@ const styles = StyleSheet.create({
   inspect: { marginTop: space[5] },
   details: { marginTop: layout.sectionGap },
   actions: { gap: space[3], paddingBottom: space[6] },
+  end: { height: space[6] },
 });

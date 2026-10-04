@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { clientKeys, deleteClient } from '@/api/endpoints/clients';
 import { overviewKeys } from '@/api/endpoints/overview';
+import { useCan } from '@/auth/permissions';
 import { ConfirmSheet } from '@/components/ConfirmSheet';
 import { Menu } from '@/components/Menu';
 import type { ActionSheetItem } from '@/components/sheet/ActionSheet';
@@ -12,7 +13,6 @@ import { notice } from '@/lib/notice';
 export type ClientMenuProps = {
   clientId: string;
   businessName: string;
-  isOwner: boolean;
   /** After the client moved to the trash: leave the screen. */
   onTrashed: () => void;
 };
@@ -21,12 +21,13 @@ export type ClientMenuProps = {
 export const trashMessage = (businessName: string) => `Move ${businessName} to trash. Data is kept; the portal stops working for them.`;
 
 /**
- * The header's overflow menu. Today it holds one owner-only action, "Move to
- * trash" (a HoldToConfirm sheet, then DELETE /clients/:id). Managers get no
- * items, so the menu renders nothing for them.
+ * The header's overflow menu. Today it holds one action, "Move to trash" (a
+ * HoldToConfirm sheet, then DELETE /clients/:id), for people with
+ * `clients.trash`. Anyone else gets no items, so the menu renders nothing.
  */
-export function ClientMenu({ clientId, businessName, isOwner, onTrashed }: ClientMenuProps) {
+export function ClientMenu({ clientId, businessName, onTrashed }: ClientMenuProps) {
   const queryClient = useQueryClient();
+  const canTrash = useCan('clients.trash');
   const [confirming, setConfirming] = useState(false);
 
   const trash = useMutation({
@@ -41,8 +42,8 @@ export function ClientMenu({ clientId, businessName, isOwner, onTrashed }: Clien
     },
   });
 
-  const items: ActionSheetItem[] = isOwner
-    ? [{ label: 'Move to trash', icon: Trash2, destructive: true, hint: 'Owner only. Data is kept.', onPress: () => setConfirming(true) }]
+  const items: ActionSheetItem[] = canTrash
+    ? [{ label: 'Move to trash', icon: Trash2, destructive: true, hint: 'Data is kept.', onPress: () => setConfirming(true) }]
     : [];
 
   return (

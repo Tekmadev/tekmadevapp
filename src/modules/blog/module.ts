@@ -7,11 +7,11 @@ export const blogModule: ModuleManifest = {
   title: 'Blog',
   icon: FileText,
   group: 'marketing',
-  ownerOnly: true,
+  capability: 'blog.view',
   routes: ['(tabs)/marketing', 'blog/[id]', 'blog/categories'],
   href: { pathname: '/marketing', params: { segment: 'blog' } },
   quickActions: [
-    { id: 'write-post', title: 'Write a post', icon: FileText, href: { pathname: '/blog/[id]', params: { id: 'new' } }, ownerOnly: true, inPlusSheet: true, shortcut: { icon: 'shortcut_post', order: 3 } },
+    { id: 'write-post', title: 'Write a post', icon: FileText, href: { pathname: '/blog/[id]', params: { id: 'new' } }, capability: 'blog.write', inPlusSheet: true, shortcut: { icon: 'shortcut_post', order: 3 } },
   ],
   searchable: {
     screens: [

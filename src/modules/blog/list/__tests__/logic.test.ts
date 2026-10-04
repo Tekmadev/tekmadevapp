@@ -7,6 +7,8 @@ import {
   liveUrl,
   patchRow,
   postCountText,
+  postMenuActions,
+  postSwipeActions,
   removeCategory,
   rowFromPost,
   rowMetaLine,
@@ -174,5 +176,36 @@ describe('categories', () => {
     expect(renamed.map((c) => c.name)).toEqual(['Ads', 'Case studies', 'Zebra guides']);
     expect(renamed.find((c) => c.id === 'bcat_1')?.slug).toBe('guides');
     expect(removeCategory(renamed, 'bcat_2').map((c) => c.id)).toEqual(['bcat_3', 'bcat_1']);
+  });
+});
+
+describe('postMenuActions', () => {
+  const owner = { canWrite: true, canTrash: true };
+  const staff = { canWrite: false, canTrash: false };
+
+  it('gives writers every action', () => {
+    expect(postMenuActions(row({ status: 'draft' }), owner)).toEqual(['edit', 'publish', 'share', 'trash']);
+    expect(postMenuActions(row({ status: 'published' }), owner)).toEqual(['edit', 'unpublish', 'viewLive', 'share', 'trash']);
+  });
+
+  it('keeps only reading for staff: open, View live and Share link', () => {
+    expect(postMenuActions(row({ status: 'published' }), staff)).toEqual(['read', 'viewLive', 'share']);
+    expect(postMenuActions(row({ status: 'draft' }), staff)).toEqual(['read', 'share']);
+  });
+
+  it('shows Move to trash only with blog.trash', () => {
+    expect(postMenuActions(row({ status: 'draft' }), { canWrite: true, canTrash: false })).toEqual(['edit', 'publish', 'share']);
+  });
+});
+
+describe('postSwipeActions', () => {
+  it('publishes or unpublishes and trashes for writers online', () => {
+    expect(postSwipeActions(row({ status: 'draft' }), { canWrite: true, canTrash: true }, true)).toEqual({ publish: 'publish', trash: true });
+    expect(postSwipeActions(row({ status: 'published' }), { canWrite: true, canTrash: true }, true)).toEqual({ publish: 'unpublish', trash: true });
+  });
+
+  it('offers no swipe to staff, and none offline', () => {
+    expect(postSwipeActions(row({ status: 'draft' }), { canWrite: false, canTrash: false }, true)).toEqual({ publish: null, trash: false });
+    expect(postSwipeActions(row({ status: 'draft' }), { canWrite: true, canTrash: true }, false)).toEqual({ publish: null, trash: false });
   });
 });

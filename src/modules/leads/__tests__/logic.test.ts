@@ -1,5 +1,6 @@
 import { metaFixture } from '@/api/mock/fixtures/leads';
 import type { Lead, LeadsMeta } from '@/api/schemas/leads';
+import { can } from '@/auth/capabilities';
 
 import {
   asksQualifiers,
@@ -8,6 +9,7 @@ import {
   copyTargets,
   hasFilters,
   isUpcoming,
+  leadClientAction,
   needLabel,
   needOptions,
   newClientParams,
@@ -174,3 +176,18 @@ describe('detail', () => {
     expect(referrerText('https://www.google.com/')).toBe('https://www.google.com/');
   });
 });
+
+describe('leadClientAction (roles, owner decision 2026-10-03)', () => {
+  it('offers Create client only with leads.convert and clients.create', () => {
+    expect(leadClientAction(null, (cap) => can('owner', cap))).toBe('create');
+    expect(leadClientAction(null, (cap) => can('manager', cap))).toBe('create');
+    // Staff may convert leads on the web but cannot create clients: no button, never one that only fails.
+    expect(leadClientAction(null, (cap) => can('staff', cap))).toBeNull();
+  });
+
+  it('offers Open client once the lead is a client, to anyone with clients.view', () => {
+    expect(leadClientAction('cl_acmeplumb01', (cap) => can('staff', cap))).toBe('open');
+    expect(leadClientAction('cl_acmeplumb01', (cap) => can(['leads.view'], cap))).toBeNull();
+  });
+});
+

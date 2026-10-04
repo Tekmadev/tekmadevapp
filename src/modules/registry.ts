@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 
+import { capabilitiesOf } from '@/auth/capabilities';
 import { useSession } from '@/auth/session';
 
 import { adsModule } from './ads/module';
@@ -23,7 +24,16 @@ import { subscriptionsModule } from './subscriptions/module';
 import { teamModule } from './team/module';
 import { testModeModule } from './testMode/module';
 import { toolsModule } from './tools/module';
-import { isVisible, type ModuleGroup, type ModuleManifest, type MoreSection, type QuickAction, type ScreenEntry, type Visibility } from './types';
+import {
+  isVisible,
+  visibleTo,
+  type ModuleGroup,
+  type ModuleManifest,
+  type MoreSection,
+  type QuickAction,
+  type ScreenEntry,
+  type Visibility,
+} from './types';
 
 /**
  * The module registry, in display order. A future automation ships as a new
@@ -86,13 +96,13 @@ export function visibleTabs(v: Visibility): TabDef[] {
 }
 
 export function quickActionsFor(v: Visibility): QuickAction[] {
-  return visibleModules(v).flatMap((m) =>
-    (m.quickActions ?? []).filter((q) => !q.ownerOnly || v.role === 'owner'),
-  );
+  return visibleModules(v).flatMap((m) => (m.quickActions ?? []).filter((q) => visibleTo(q.capability, v)));
 }
 
 export function searchableScreens(v: Visibility): (ScreenEntry & { moduleId: string })[] {
-  return visibleModules(v).flatMap((m) => (m.searchable?.screens ?? []).map((s) => ({ ...s, moduleId: m.id })));
+  return visibleModules(v).flatMap((m) =>
+    (m.searchable?.screens ?? []).filter((s) => visibleTo(s.capability, v)).map((s) => ({ ...s, moduleId: m.id })),
+  );
 }
 
 export function moduleById(id: string): ModuleManifest | undefined {
@@ -104,7 +114,7 @@ export type MoreMenuSection = { id: MoreSection; title: string; modules: ModuleM
 /**
  * The More tab's menu: visible "more" modules (hidden ones excluded) grouped by
  * section in MORE_SECTIONS order. A section with nothing visible is dropped, so
- * a manager sees no Insights section at all.
+ * staff see no Insights section at all.
  */
 export function moreMenu(v: Visibility): MoreMenuSection[] {
   const mods = visibleModules(v).filter((m) => m.group === 'more' && !m.hidden && m.moreSection);
@@ -141,14 +151,16 @@ export function shortcutActions(v: Visibility): ShortcutAction[] {
 /** Visibility for the signed-in user outside React (quick action routing, stores). */
 export function currentVisibility(): Visibility {
   const me = useSession.getState().me;
-  return { role: me?.role ?? null, features: me?.features };
+  return { role: me?.role ?? null, features: me?.features, capabilities: capabilitiesOf(me) };
 }
 
-/** Visibility for the signed-in user (role + feature flags from GET /me). */
+/** Visibility for the signed-in user (role, capabilities and feature flags from GET /me). */
 export function useVisibility(): Visibility {
   const role = useSession((s) => s.me?.role ?? null);
   const features = useSession((s) => s.me?.features);
-  return useMemo(() => ({ role, features }), [role, features]);
+  // Cached per profile, so this is stable until GET /me answers with a new one.
+  const capabilities = useSession((s) => capabilitiesOf(s.me));
+  return useMemo(() => ({ role, features, capabilities }), [role, features, capabilities]);
 }
 
 export function useVisibleModules() {

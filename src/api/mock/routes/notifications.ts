@@ -1,7 +1,7 @@
-import { zNotificationCategory, zNotificationFilter, OWNER_ONLY_CATEGORIES } from '../../schemas/notifications';
+import { zNotificationCategory, zNotificationFilter } from '../../schemas/notifications';
 import type { NotificationFilter } from '../../schemas/notifications';
 import {
-  canSee,
+  callerSees,
   findRow,
   inboxStateFor,
   isMuted,
@@ -14,6 +14,7 @@ import {
   visibleRows,
   type NotificationRecord,
 } from '../fixtures/notifications';
+import { mockCan, requireCap } from '../permissions';
 import { bool, fail, nowIso, ok, str, type MockContext, type MockResult, type MockRoute } from '../router';
 import { staffLabel } from './session';
 
@@ -22,6 +23,12 @@ import { staffLabel } from './session';
  * Read marks and quiet categories are per caller; resolution is shared.
  * Endpoints the contract does not list yet (GET /notifications/:id,
  * POST /notifications/test-push) are written up in docs/api-requests/notifications.md.
+ *
+ * Who sees what follows the capability table, like the server: every route
+ * needs `notifications.view`; a row needs `inbox.<category>` (staff read Leads
+ * and Clients only); test rows need `testdata.view` and, in lists, `test=1`.
+ * Owner-audience events (Stripe webhook, Meta, CRM, coupon redeemed) are read
+ * by anyone holding their category: managers hold every category now.
  */
 
 const MAX_IDS = 500;
@@ -45,12 +52,12 @@ function decodeCursor(cursor: string): { at: string; id: string } | null {
 const isAfter = (row: NotificationRecord, cursor: { at: string; id: string }) =>
   row.last_occurred_at < cursor.at || (row.last_occurred_at === cursor.at && row.id < cursor.id);
 
-const wantsTest = (ctx: MockContext) => ctx.isOwner && (ctx.query.test === '1' || ctx.query.test === 'true');
+const wantsTest = (ctx: MockContext) => mockCan(ctx.user, 'testdata.view') && (ctx.query.test === '1' || ctx.query.test === 'true');
 
-/** Owners can open any row by id (test rows included); managers only staff-audience, non-test rows. */
+/** Any row of the caller's categories by id (test rows too, with `testdata.view`). */
 const visibleById = (ctx: MockContext, id: string) => {
   const row = findRow(id);
-  return row && canSee(row, ctx.role, true) ? row : undefined;
+  return row && callerSees(ctx.user, row, true) ? row : undefined;
 };
 
 const missing = () => fail(404, 'not_found', 'That notification no longer exists.');
@@ -68,7 +75,7 @@ function parseIds(body: Record<string, unknown>): string[] | MockResult {
 function setRead(ctx: MockContext, read: boolean): MockResult {
   const ids = parseIds(ctx.body);
   if (!Array.isArray(ids)) return ids;
-  const state = inboxStateFor(ctx.user.id, ctx.role);
+  const state = inboxStateFor(ctx.user.id, ctx.user.role);
   const rows = ids.map((id) => visibleById(ctx, id)).filter((row): row is NotificationRecord => !!row);
   for (const row of rows) {
     if (read) state.reads.set(row.id, row.last_occurred_at);
@@ -76,7 +83,7 @@ function setRead(ctx: MockContext, read: boolean): MockResult {
   }
   return ok({
     items: rows.map((row) => serializeNotification(row, state)),
-    summary: summarize(ctx.user.id, ctx.role),
+    summary: summarize(ctx.user),
   });
 }
 
@@ -86,7 +93,9 @@ export const routes: MockRoute[] = [
     path: '/notifications',
     latency: 'normal',
     handler: (ctx) => {
-      const { query, user, role } = ctx;
+      const denied = requireCap(ctx.user, 'notifications.view');
+      if (denied) return denied;
+      const { query, user } = ctx;
       const filter = zNotificationFilter.safeParse(query.filter ?? 'all');
       if (!filter.success) return fail(400, 'filter', 'Unknown filter. Use all, unread or action.');
       const category = query.category ? zNotificationCategory.safeParse(query.category) : undefined;
@@ -99,11 +108,11 @@ export const routes: MockRoute[] = [
       }
       const limit = Math.min(Math.max(parseInt(query.limit ?? '', 10) || 30, 1), 100);
       const includeTest = wantsTest(ctx);
-      const state = inboxStateFor(user.id, role);
+      const state = inboxStateFor(user.id, user.role);
       const want: NotificationFilter = filter.data;
 
-      // Managers asking for Audience or Team simply get nothing: those rows are never theirs.
-      const rows = visibleRows(role, includeTest).filter((row) => {
+      // A category the caller does not read is simply empty: those rows are never theirs.
+      const rows = visibleRows(user, includeTest).filter((row) => {
         if (category?.success && row.category !== category.data) return false;
         if (cursor && !isAfter(row, cursor)) return false;
         // Unread matches the count: quiet categories are left out.
@@ -115,7 +124,7 @@ export const routes: MockRoute[] = [
       const page = rows.slice(0, limit);
       const last = page[page.length - 1];
       return ok({
-        summary: summarize(user.id, role, includeTest),
+        summary: summarize(user, includeTest),
         items: page.map((row) => serializeNotification(row, state)),
         nextCursor: rows.length > limit && last ? encodeCursor(last) : null,
       });
@@ -125,34 +134,36 @@ export const routes: MockRoute[] = [
     method: 'GET',
     path: '/notifications/summary',
     latency: 'fast',
-    handler: ({ user, role }) => ok(summarize(user.id, role)),
+    handler: ({ user }) => requireCap(user, 'notifications.view') ?? ok(summarize(user)),
   },
   {
     method: 'GET',
     path: '/notifications/prefs',
     latency: 'fast',
-    handler: ({ user, role }) => ok(prefsFor(user.id, role)),
+    handler: ({ user }) => requireCap(user, 'notifications.view') ?? ok(prefsFor(user)),
   },
   {
     method: 'PATCH',
     path: '/notifications/prefs/:category',
     latency: 'fast',
-    handler: ({ params, body, user, role, isOwner }) => {
+    handler: ({ params, body, user }) => {
+      const denied = requireCap(user, 'notifications.view');
+      if (denied) return denied;
       const category = zNotificationCategory.safeParse(params.category);
       if (!category.success) return fail(404, 'not_found', 'That notification category does not exist.');
-      if (!isOwner && OWNER_ONLY_CATEGORIES.includes(category.data)) {
-        return fail(403, 'owner_only', 'That section is owner only.');
-      }
+      // Owner-only categories answer owner_only, the rest a role does not read answer forbidden.
+      const refused = requireCap(user, `inbox.${category.data}`);
+      if (refused) return refused;
       const fields: Record<string, string> = {};
       if ('muted' in body && bool(body.muted) === undefined) fields.muted = 'Send true or false.';
       if ('push' in body && bool(body.push) === undefined) fields.push = 'Send true or false.';
       if (Object.keys(fields).length) return fail(400, 'input', 'Send quiet and push as true or false.', fields);
 
-      const state = inboxStateFor(user.id, role);
+      const state = inboxStateFor(user.id, user.role);
       const current = state.prefs.get(category.data) ?? { muted: false, push: true };
       const next = { muted: bool(body.muted) ?? current.muted, push: bool(body.push) ?? current.push };
       state.prefs.set(category.data, next);
-      const pref = prefsFor(user.id, role).find((p) => p.category === category.data);
+      const pref = prefsFor(user).find((p) => p.category === category.data);
       return pref ? ok(pref) : fail(500, 'unavailable', 'Could not load this just now. Nothing is lost: try again in a moment.');
     },
   },
@@ -160,19 +171,21 @@ export const routes: MockRoute[] = [
     method: 'POST',
     path: '/notifications/read',
     latency: 'fast',
-    handler: (ctx) => setRead(ctx, true),
+    handler: (ctx) => requireCap(ctx.user, 'notifications.view') ?? setRead(ctx, true),
   },
   {
     method: 'POST',
     path: '/notifications/unread',
     latency: 'fast',
-    handler: (ctx) => setRead(ctx, false),
+    handler: (ctx) => requireCap(ctx.user, 'notifications.view') ?? setRead(ctx, false),
   },
   {
     method: 'POST',
     path: '/notifications/read-all',
     latency: 'normal',
-    handler: ({ body, user, role }) => {
+    handler: ({ body, user }) => {
+      const denied = requireCap(user, 'notifications.view');
+      if (denied) return denied;
       let seen: string | undefined;
       if (body.seen !== undefined && body.seen !== null) {
         seen = str(body.seen);
@@ -183,18 +196,18 @@ export const routes: MockRoute[] = [
           console.warn(`[mock] read-all seen "${seen}" has no microseconds. Was it re-encoded through a Date? Send last_occurred_at exactly as received.`);
         }
       }
-      const state = inboxStateFor(user.id, role);
+      const state = inboxStateFor(user.id, user.role);
       let count = 0;
-      // Everything the caller can see (an owner's test rows too), up to the newest row they were shown.
+      // Everything the caller can see (test rows too, with testdata.view), up to the newest row they were shown.
       for (const row of notificationRows) {
-        if (!canSee(row, role, true)) continue;
+        if (!callerSees(user, row, true)) continue;
         // Exact string compare: both sides carry the server's microseconds.
         if (seen !== undefined && row.last_occurred_at > seen) continue;
         if (isRead(row, state)) continue;
         state.reads.set(row.id, row.last_occurred_at);
         count += 1;
       }
-      return ok({ count, summary: summarize(user.id, role) });
+      return ok({ count, summary: summarize(user) });
     },
   },
   {
@@ -202,6 +215,8 @@ export const routes: MockRoute[] = [
     path: '/notifications/test-push',
     latency: 'normal',
     handler: ({ body, user }) => {
+      const denied = requireCap(user, 'notifications.view');
+      if (denied) return denied;
       const deviceId = str(body.deviceId);
       const mine = mockDevices.filter((d) => d.userId === user.id);
       const targets = deviceId ? mine.filter((d) => d.id === deviceId) : mine;
@@ -217,9 +232,11 @@ export const routes: MockRoute[] = [
     path: '/notifications/:id',
     latency: 'fast',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'notifications.view');
+      if (denied) return denied;
       const row = visibleById(ctx, ctx.params.id);
       if (!row) return missing();
-      return ok(serializeNotification(row, inboxStateFor(ctx.user.id, ctx.role)));
+      return ok(serializeNotification(row, inboxStateFor(ctx.user.id, ctx.user.role)));
     },
   },
   {
@@ -227,6 +244,8 @@ export const routes: MockRoute[] = [
     path: '/notifications/:id/resolve',
     latency: 'fast',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'notifications.view');
+      if (denied) return denied;
       const resolved = bool(ctx.body.resolved);
       if (resolved === undefined) return fail(400, 'resolved', 'Send resolved as true or false.');
       const row = visibleById(ctx, ctx.params.id);
@@ -241,9 +260,9 @@ export const routes: MockRoute[] = [
         row.resolved_at = null;
         row.resolved_by = null;
       }
-      const state = inboxStateFor(ctx.user.id, ctx.role);
+      const state = inboxStateFor(ctx.user.id, ctx.user.role);
       state.reads.set(row.id, row.last_occurred_at);
-      return ok({ item: serializeNotification(row, state), summary: summarize(ctx.user.id, ctx.role) });
+      return ok({ item: serializeNotification(row, state), summary: summarize(ctx.user) });
     },
   },
 ];

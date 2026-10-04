@@ -12,11 +12,13 @@ import {
   verifyConnection,
 } from '../fixtures/crm';
 import { addConsentEvent, CURRENT_POLICY_VERSION, findSubscriberByEmail } from '../fixtures/email';
+import { requireCap } from '../permissions';
 import { bool, fail, isEmail, notFound, nowIso, ok, str, type MockResult, type MockRoute } from '../router';
 
 /**
  * Mock routes for the "crm" domain (contract section 11, Marketing > CRM).
- * Owner only. Verify, Sync now and Run now are long jobs. Switches cannot be
+ * `crm.view` reads, `crm.write` acts (requireCap in each handler, like the
+ * server). Verify, Sync now and Run now are long jobs. Switches cannot be
  * turned on until the connection is verified. Every inspector lookup "calls
  * the CRM live" (slow). Never name the CRM vendor: it is "the CRM".
  * Rules the contract does not spell out are in docs/api-requests/crm.md.
@@ -120,17 +122,17 @@ export const routes: MockRoute[] = [
   {
     method: 'GET',
     path: '/crm',
-    ownerOnly: true,
     latency: 'normal',
-    handler: () => ok(crmStatus()),
+    handler: ({ user }) => requireCap(user, 'crm.view') ?? ok(crmStatus()),
   },
   {
     method: 'POST',
     path: '/crm/verify',
-    ownerOnly: true,
     latency: 'long',
     jobMs: 6000,
-    handler: () => {
+    handler: ({ user }) => {
+      const denied = requireCap(user, 'crm.write');
+      if (denied) return denied;
       if (!crmState.configured) return notConfigured();
       if (crmState.upstreamDown) return fail(502, 'probe', CRM_MESSAGES.probe);
       return ok(verifyConnection(nowIso()));
@@ -139,9 +141,10 @@ export const routes: MockRoute[] = [
   {
     method: 'PUT',
     path: '/crm/switches/:surface',
-    ownerOnly: true,
     latency: 'normal',
-    handler: ({ params, body }) => {
+    handler: ({ params, body, user }) => {
+      const denied = requireCap(user, 'crm.write');
+      if (denied) return denied;
       const surface = zCrmSurface.safeParse(params.surface);
       if (!surface.success) return notFound('That switch');
       const on = bool(body.on);
@@ -167,10 +170,11 @@ export const routes: MockRoute[] = [
   {
     method: 'POST',
     path: '/crm/sync',
-    ownerOnly: true,
     latency: 'long',
     jobMs: 5000,
-    handler: () => {
+    handler: ({ user }) => {
+      const denied = requireCap(user, 'crm.write');
+      if (denied) return denied;
       const blocked = needsVerified();
       if (blocked) return blocked;
       if (crmState.upstreamDown) return fail(502, 'sync', CRM_MESSAGES.sync);
@@ -195,10 +199,11 @@ export const routes: MockRoute[] = [
   {
     method: 'POST',
     path: '/crm/reconcile',
-    ownerOnly: true,
     latency: 'long',
     jobMs: 7000,
-    handler: () => {
+    handler: ({ user }) => {
+      const denied = requireCap(user, 'crm.write');
+      if (denied) return denied;
       const blocked = needsVerified();
       if (blocked) return blocked;
       if (crmState.upstreamDown) return fail(502, 'reconcile', CRM_MESSAGES.reconcile);
@@ -224,9 +229,10 @@ export const routes: MockRoute[] = [
   {
     method: 'POST',
     path: '/crm/retry',
-    ownerOnly: true,
     latency: 'normal',
-    handler: ({ body }) => {
+    handler: ({ body, user }) => {
+      const denied = requireCap(user, 'crm.write');
+      if (denied) return denied;
       const batch = readBatch(body);
       if (isResult(batch)) return batch;
       // Only signed items can be retried: an unsigned message cannot be trusted.
@@ -244,9 +250,10 @@ export const routes: MockRoute[] = [
   {
     method: 'POST',
     path: '/crm/discard',
-    ownerOnly: true,
     latency: 'normal',
-    handler: ({ body }) => {
+    handler: ({ body, user }) => {
+      const denied = requireCap(user, 'crm.write');
+      if (denied) return denied;
       const batch = readBatch(body);
       if (isResult(batch)) return batch;
       const picked = crmState.attention.filter((a) => a.queue === batch.queue && batch.ids.includes(a.id));
@@ -260,10 +267,11 @@ export const routes: MockRoute[] = [
   {
     method: 'GET',
     path: '/crm/inspect',
-    ownerOnly: true,
     // Each lookup calls the CRM live.
     latency: 'slow',
-    handler: ({ query }) => {
+    handler: ({ query, user }) => {
+      const denied = requireCap(user, 'crm.view');
+      if (denied) return denied;
       const email = query.email?.trim();
       if (!isEmail(email)) return fail(400, 'email', CRM_MESSAGES.email, { email: CRM_MESSAGES.email });
       const blocked = needsConnection();
@@ -274,9 +282,10 @@ export const routes: MockRoute[] = [
   {
     method: 'POST',
     path: '/crm/resubscribe',
-    ownerOnly: true,
     latency: 'slow',
-    handler: ({ body }) => {
+    handler: ({ body, user }) => {
+      const denied = requireCap(user, 'crm.write');
+      if (denied) return denied;
       const email = str(body.email)?.trim();
       if (!isEmail(email) || !email) return fail(400, 'email', CRM_MESSAGES.email, { email: CRM_MESSAGES.email });
       const blocked = needsConnection();

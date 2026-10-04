@@ -7,6 +7,8 @@ import { StyleSheet, View } from 'react-native';
 import { leadKeys, leadQuery, leadsMetaQuery } from '@/api/endpoints/leads';
 import { ApiError, MESSAGES } from '@/api/errors';
 import type { Lead, LeadsMeta } from '@/api/schemas/leads';
+import { useCanAll, useCapabilities } from '@/auth/permissions';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -30,6 +32,7 @@ import {
   bookingDistance,
   formatWhen,
   isUpcoming,
+  leadClientAction,
   leadTitle,
   needLabel,
   newClientParams,
@@ -72,6 +75,9 @@ function LeadBody({ lead, meta, now }: { lead: Lead; meta: LeadsMeta | undefined
   const status = statusBadge(meta, lead.status);
   const qualifiers = asksQualifiers(lead);
   const clientId = lead.convertedClientId;
+  // Open client, Create client, or no button (staff cannot create clients).
+  const caps = useCapabilities();
+  const clientAction = leadClientAction(clientId, (cap) => caps.includes(cap));
 
   const details: KeyValueItem[] = [
     { label: 'Business', value: lead.business },
@@ -104,7 +110,7 @@ function LeadBody({ lead, meta, now }: { lead: Lead; meta: LeadsMeta | undefined
         <LeadContactActions lead={lead} />
       </View>
 
-      {clientId ? (
+      {clientAction === 'open' && clientId ? (
         <Button
           label="Open client"
           variant="secondary"
@@ -114,7 +120,7 @@ function LeadBody({ lead, meta, now }: { lead: Lead; meta: LeadsMeta | undefined
           onPress={() => router.push({ pathname: '/clients/[id]', params: { id: clientId } })}
           style={styles.primary}
         />
-      ) : (
+      ) : clientAction === 'create' ? (
         <Button
           label="Create client from this lead"
           icon={Building2}
@@ -123,7 +129,7 @@ function LeadBody({ lead, meta, now }: { lead: Lead; meta: LeadsMeta | undefined
           onPress={() => router.push({ pathname: '/clients/new', params: newClientParams(lead) })}
           style={styles.primary}
         />
-      )}
+      ) : null}
 
       {lead.bookingAt ? (
         <View style={styles.bookingWrap}>
@@ -162,14 +168,25 @@ function LeadBody({ lead, meta, now }: { lead: Lead; meta: LeadsMeta | undefined
  * this lead" (or "Open client" once it became one), the booked call in Toronto
  * time, every field with the brief's labels, the message as typed and the
  * attribution. Opened from a list row or Home, it shows the lead already in
- * the cache at once, then loads the full record.
+ * the cache at once, then loads the full record. Needs `leads.view`; the
+ * client button follows the person's capabilities (leadClientAction).
  */
 export function LeadDetailScreen() {
+  return (
+    <RequireCapability cap="leads.view">
+      <LeadDetail />
+    </RequireCapability>
+  );
+}
+
+function LeadDetail() {
   const params = useLocalSearchParams<{ id: string }>();
   const id = oneParam(params.id) ?? '';
   const online = useIsOnline();
   const showSkeleton = useShowAfter();
   const now = useMinuteClock();
+  // Most leads are not clients yet: the skeleton keeps the button's room only for people who can create one.
+  const mayCreateClient = useCanAll('leads.convert', 'clients.create');
 
   // The row it was opened from is on screen at once; the full record always loads behind it.
   const query = useQuery({ ...leadQuery(id), enabled: id !== '', refetchOnMount: 'always' });
@@ -194,7 +211,7 @@ export function LeadDetailScreen() {
     // Offline with nothing cached: say so instead of a skeleton that never ends. It loads by itself once back online.
     body = <ErrorState message={MESSAGES.network} onRetry={online ? () => query.refetch() : undefined} />;
   } else {
-    body = showSkeleton ? <LeadDetailSkeleton withTitle={false} /> : null;
+    body = showSkeleton ? <LeadDetailSkeleton withTitle={false} withButton={mayCreateClient} /> : null;
   }
 
   return (

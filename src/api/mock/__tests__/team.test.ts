@@ -8,7 +8,9 @@ import { metaFragment, zTeam, zTeamMember, zTeamRemoveResult } from '@/api/schem
 /**
  * Team routes through the real mock transport: the list (owners first, env
  * owners locked), adding a member who can then sign in, validation, removing
- * (never the env owner, never yourself), and owner-only 403s. Not paged.
+ * (never the env owner, never yourself), and who may do what (owner decision
+ * 2026-10-03): managers see and add (never owners), only owners remove, staff
+ * get nothing. Not paged.
  */
 
 let token: string | null = null;
@@ -18,6 +20,9 @@ const asOwner = () => {
 };
 const asManager = () => {
   token = tokenFor('usr_mgr01');
+};
+const asStaff = () => {
+  token = tokenFor('usr_staff01');
 };
 
 beforeAll(() => {
@@ -47,13 +52,14 @@ const accountFor = (email: string) => {
 };
 
 describe('GET /team', () => {
-  it('lists owners first, with the env owner locked', async () => {
+  it('lists owners first, then managers, then staff, with the env owner locked', async () => {
     const team = await getTeam();
     expect(zTeam.safeParse(team).success).toBe(true);
     expect(team.map((m) => [m.email, m.role, m.envOwner])).toEqual([
       ['owner@tekmadev.test', 'owner', true],
       ['manager@tekmadev.test', 'manager', false],
       ['alexandra@tekmadev.test', 'manager', false],
+      ['staff@tekmadev.test', 'staff', false],
     ]);
     expect(team[0].name).toBe('Shajeed I.');
     expect(team[0].lastSignInAt).not.toBeNull();
@@ -67,27 +73,56 @@ describe('GET /team', () => {
     expect(parsed.success).toBe(true);
     expect(parsed.data?.teamRoles).toEqual([
       {
-        value: 'manager',
-        label: 'Manager',
-        help: 'Works on Overview, Inbox, Analytics, Leads, Free tools, Clients and Subscriptions',
-        tone: 'neutral',
+        value: 'staff',
+        label: 'Staff',
+        help: 'Leads and outreach, analytics and onboarding help. Marketing, pricing and coupons are view only. No money.',
+        tone: 'muted',
       },
-      { value: 'owner', label: 'Owner', help: 'Full access, can manage the team', tone: 'gold' },
+      { value: 'manager', label: 'Manager', help: 'Everything except removing team members or making owners.', tone: 'neutral' },
+      { value: 'owner', label: 'Owner', help: 'Full access, can manage the team.', tone: 'gold' },
     ]);
   });
 
-  it('is owner only', async () => {
+  it('is open to managers, who may not make owners or remove anyone', async () => {
     asManager();
+    expect((await getTeam()).length).toBeGreaterThan(0);
     for (const call of [
-      getTeam(),
       add({ email: 'sneaky@tekmadev.test', tempPassword: 'longenough', role: 'owner' }),
       removeTeamMember('alexandra@tekmadev.test'),
+      // Even an env owner: the right to remove is checked first.
+      removeTeamMember('owner@tekmadev.test'),
     ]) {
       const e = await apiError(call);
       expect([e.status, e.code]).toEqual([403, 'owner_only']);
     }
     asOwner();
-    expect((await getTeam()).map((m) => m.email)).not.toContain('sneaky@tekmadev.test');
+    const emails = (await getTeam()).map((m) => m.email);
+    expect(emails).not.toContain('sneaky@tekmadev.test');
+    expect(emails).toContain('alexandra@tekmadev.test');
+  });
+
+  it('lets a manager add managers and staff', async () => {
+    asManager();
+    const manager = await add({ email: 'by.manager@tekmadev.test', tempPassword: 'longenough', role: 'manager' });
+    const staff = await add({ email: 'staff.by.manager@tekmadev.test', tempPassword: 'longenough', role: 'staff' });
+    expect([manager.role, staff.role]).toEqual(['manager', 'staff']);
+    asOwner();
+    const team = await getTeam();
+    // Staff sort after every manager.
+    expect(team[team.length - 1].email).toBe('staff.by.manager@tekmadev.test');
+    await removeTeamMember('by.manager@tekmadev.test');
+    await removeTeamMember('staff.by.manager@tekmadev.test');
+  });
+
+  it('is closed to staff', async () => {
+    asStaff();
+    for (const call of [getTeam(), add({ email: 'x@tekmadev.test', tempPassword: 'longenough', role: 'staff' })]) {
+      const e = await apiError(call);
+      // A role limit, not an owner-only section: the client keeps the server's copy and stays on the screen.
+      expect([e.status, e.code, e.message]).toEqual([403, 'forbidden', 'Your role cannot do that.']);
+    }
+    const remove = await apiError(removeTeamMember('alexandra@tekmadev.test'));
+    expect([remove.status, remove.code]).toEqual([403, 'owner_only']);
   });
 });
 
@@ -95,6 +130,7 @@ describe('POST /team', () => {
   it('validates email, password and role, reporting every field', async () => {
     const all = await apiError(api.post('/team', { email: 'nope', tempPassword: 'short', role: 'admin' }, { idempotencyKey: testKey() }));
     expect([all.status, all.code, all.message]).toEqual([400, 'email', 'Enter a valid email.']);
+    expect(all.fields?.role).toBe('Pick Owner, Manager or Staff.');
     expect(Object.keys(all.fields ?? {}).sort()).toEqual(['email', 'role', 'tempPassword']);
 
     const password = await apiError(add({ email: 'new.person@tekmadev.test', tempPassword: '1234567', role: 'manager' }));

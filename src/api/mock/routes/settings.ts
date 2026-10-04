@@ -7,12 +7,14 @@ import {
   loaderState,
   type ServerLoaderSettings,
 } from '../fixtures/settings';
+import { requireCap } from '../permissions';
 import { fail, ok, type MockRoute } from '../router';
 
 /**
- * Mock routes for the "settings" domain: the loader settings the owner tunes in
- * Admin, Loader (owner only). They are the same values GET /me sends as
- * `loader`, so a save here reaches every page of the site and this app.
+ * Mock routes for the "settings" domain: the loader settings tuned in Admin,
+ * Loader (`loader.view` to read, `loader.write` to save or reset: owners and
+ * managers). They are the same values GET /me sends as `loader`, so a save
+ * here reaches every page of the site and this app.
  */
 
 const DB_MESSAGE = 'Could not save. Nothing changed on the site. Try again.';
@@ -29,16 +31,16 @@ export const routes: MockRoute[] = [
   {
     method: 'GET',
     path: '/settings/loader',
-    ownerOnly: true,
     latency: 'fast',
-    handler: () => ok<LoaderSettings>({ ...loaderState.current }),
+    handler: ({ user }) => requireCap(user, 'loader.view') ?? ok<LoaderSettings>({ ...loaderState.current }),
   },
   {
     method: 'PUT',
     path: '/settings/loader',
-    ownerOnly: true,
     latency: 'normal',
-    handler: ({ body }) => {
+    handler: ({ body, user }) => {
+      const denied = requireCap(user, 'loader.write');
+      if (denied) return denied;
       if (body.reset === true) {
         loaderState.current = { ...LOADER_DEFAULTS_SERVER };
         return ok<LoaderSettings>({ ...loaderState.current });

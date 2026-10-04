@@ -8,7 +8,7 @@ import Animated from 'react-native-reanimated';
 import { adsKeys } from '@/api/endpoints/ads';
 import { MESSAGES } from '@/api/errors';
 import type { AdsAd, AdsConnectedReport } from '@/api/schemas/ads';
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
 import { ScreenList } from '@/components/ScreenList';
@@ -33,16 +33,16 @@ const NO_ADS = 'No ad in this campaign spent in this range.';
 const adKey = (ad: AdsAd) => ad.id;
 
 /**
- * The campaign drill-down (/ads/[campaignId], owner only): the campaign's
+ * The campaign drill-down (/ads/[campaignId], `ads.view`): the campaign's
  * numbers for the shared range chip, then its ads as cards with the same
  * metrics, by spend. It reads the same GET /ads report as the Ads screen
  * (already cached when opened from there) and filters it by campaign.
  */
 export function AdsCampaignScreen() {
   return (
-    <OwnerOnly>
+    <RequireCapability cap="ads.view">
       <CampaignBody />
-    </OwnerOnly>
+    </RequireCapability>
   );
 }
 

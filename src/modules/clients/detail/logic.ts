@@ -36,9 +36,9 @@ export const SECTION_LABELS: Record<ClientSection, string> = {
   activity: 'Activity',
 };
 
-/** Sections in tab order. CRM is owner only: for managers it is never rendered, not even the tab. */
-export function visibleSections(isOwner: boolean): ClientSection[] {
-  return CLIENT_SECTIONS.filter((s) => s !== 'crm' || isOwner);
+/** Sections in tab order. CRM needs `clients.crm`: without it the section is never rendered, not even the tab. */
+export function visibleSections(canSeeCrm: boolean): ClientSection[] {
+  return CLIENT_SECTIONS.filter((s) => s !== 'crm' || canSeeCrm);
 }
 
 /** Actions that belong to one section, so opening with only `action` still lands in the right place. */
@@ -165,7 +165,8 @@ export function callsStat(guarantee: Guarantee): StatModel {
 
 /**
  * Billing: the subscription ("Ending" while it cancels), else the latest
- * one-time order, else "no billing record". Money is shown to managers too.
+ * one-time order, else "no billing record". Only for people with
+ * `clients.billing` (owners and managers); staff never get the card.
  */
 export function billingStat(billing: Billing | null, labels: StatLabels = {}, now: Date = new Date()): StatModel {
   const sub = billing?.subscription ?? null;

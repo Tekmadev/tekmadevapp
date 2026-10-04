@@ -5,7 +5,7 @@ import { Fragment, useEffect, type ReactNode } from 'react';
 import { AccessibilityInfo, StyleSheet, View } from 'react-native';
 
 import type { SearchResult } from '@/api/schemas/session';
-import type { Role } from '@/api/types';
+import type { Capability } from '@/auth/capabilities';
 import { Divider } from '@/components/Divider';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
@@ -23,6 +23,7 @@ import { InlineLoader } from '@/loader/InlineLoader';
 import { openHref } from '@/modules/inbox/navigation';
 
 import { useVisibility } from '../registry';
+import { visibilityCapabilities } from '../types';
 import { matchScreens, relatedQueries } from './screenMatch';
 import { adminHref, RESULT_TYPES, searchQuery, searchScreensFor, suggestedScreens, type SearchScreen } from './searchData';
 import { searchSheet, useSearchStore } from './searchStore';
@@ -46,8 +47,8 @@ export const SEARCH_COPY = {
  * opened from the search button in every tab header (`searchSheet.open()`).
  *
  * Screens match locally on every keystroke (title and keywords, from the
- * registry, so a manager never sees an owner-only screen). Records come from
- * GET /search 250ms after typing pauses (the server filters them by role).
+ * registry, so nobody sees a screen their capabilities do not open). Records come from
+ * GET /search 250ms after typing pauses (the server filters them by what this person may see).
  * The field is pinned at the bottom of the sheet, right above the keyboard:
  * it stays in view while the results scroll and sits under the thumb.
  */
@@ -144,6 +145,7 @@ function SearchBody() {
   const recents = useSearchStore((s) => s.recents);
   const visibility = useVisibility();
   const screens = searchScreensFor(visibility);
+  const capabilities = visibilityCapabilities(visibility);
   const { q, online, result } = useRecordSearch();
 
   const typed = text.trim();
@@ -180,7 +182,7 @@ function SearchBody() {
           <Rows
             items={records}
             keyOf={(r) => `${r.type}:${r.id}`}
-            render={(r) => <RecordRow record={r} query={typed} role={visibility.role} />}
+            render={(r) => <RecordRow record={r} query={typed} capabilities={capabilities} />}
           />
         </Group>
       ) : null}
@@ -238,7 +240,7 @@ function ScreenRow({ screen, query }: { screen: SearchScreen; query: string }) {
   );
 }
 
-function RecordRow({ record, query, role }: { record: SearchResult; query: string; role: Role | null }) {
+function RecordRow({ record, query, capabilities }: { record: SearchResult; query: string; capabilities: readonly Capability[] }) {
   const type = RESULT_TYPES[record.type];
   return (
     <ListRow
@@ -247,7 +249,7 @@ function RecordRow({ record, query, role }: { record: SearchResult; query: strin
       icon={type.icon}
       chevron={false}
       trailing={<TypeLabel label={type.label} />}
-      onPress={() => openResult(adminHref(record.url, role), query)}
+      onPress={() => openResult(adminHref(record.url, capabilities), query)}
       accessibilityLabel={[type.label, record.title, record.subtitle].filter(Boolean).join(', ')}
       accessibilityHint="Opens it"
     />

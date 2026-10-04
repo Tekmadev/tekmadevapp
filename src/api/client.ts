@@ -25,8 +25,11 @@ export type AuthBridge = {
   refresh: () => Promise<string | null>;
   /** Called when a refreshed request is still 401: sign out with this message. */
   sessionEnded: (message: string) => void;
-  /** Called on 403: toast "That section is owner only." and go back. */
-  ownerOnly: () => void;
+  /**
+   * Called on 403. `owner_only`: toast "That section is owner only." and go back.
+   * `forbidden` (a role limit on one action): the caller shows the message and stays.
+   */
+  ownerOnly: (code: string) => void;
   /** Called on 426: block with the update screen. */
   upgradeRequired: () => void;
 };
@@ -123,8 +126,9 @@ export async function apiRequest<T>(method: HttpMethod, path: string, options: R
   }
 
   if (response.status === 403) {
-    if (!options.rawAuthErrors) bridge.ownerOnly();
-    throw toApiError(403, response.body);
+    const error = toApiError(403, response.body);
+    if (!options.rawAuthErrors) bridge.ownerOnly(error.code);
+    throw error;
   }
 
   if (response.status === 426) {

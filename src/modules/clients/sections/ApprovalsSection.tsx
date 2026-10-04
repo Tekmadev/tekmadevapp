@@ -6,6 +6,7 @@ import { StyleSheet, View } from 'react-native';
 import { requestApproval, type NewApprovalInput } from '@/api/endpoints/clients';
 import type { Approval, ApprovalKind, ClientBundle, OnboardingTask } from '@/api/schemas/clients';
 import type { Meta } from '@/api/schemas/meta';
+import { useCan } from '@/auth/permissions';
 import { openInBrowser } from '@/components/automation';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -55,11 +56,12 @@ function newestFirst(a: Approval, b: Approval) {
 
 /**
  * Approvals (brief 8.5, section 5): what the client was asked to sign off, with
- * their feedback. "Request approval" asks for a new one; reusing a title makes
- * the next version and supersedes the open one (the server decides).
+ * their feedback. "Request approval" asks for a new one (`clients.approvals.request`);
+ * reusing a title makes the next version and supersedes the open one (the server decides).
  */
 export function ApprovalsSection({ clientId, bundle }: SectionProps) {
   const meta = useMeta();
+  const canRequest = useCan('clients.approvals.request');
   const { colors } = useTheme();
   const [requesting, setRequesting] = useState(false);
   const approvals = [...bundle.approvals].sort(newestFirst);
@@ -80,9 +82,11 @@ export function ApprovalsSection({ clientId, bundle }: SectionProps) {
           )}
         />
       )}
-      <Button label="Request approval" icon={Plus} variant="secondary" size="sm" onPress={() => setRequesting(true)} style={styles.add} />
+      {canRequest ? (
+        <Button label="Request approval" icon={Plus} variant="secondary" size="sm" onPress={() => setRequesting(true)} style={styles.add} />
+      ) : null}
 
-      {requesting ? <RequestApprovalSheet clientId={clientId} bundle={bundle} meta={meta} onClose={() => setRequesting(false)} /> : null}
+      {requesting && canRequest ? <RequestApprovalSheet clientId={clientId} bundle={bundle} meta={meta} onClose={() => setRequesting(false)} /> : null}
     </Section>
   );
 }

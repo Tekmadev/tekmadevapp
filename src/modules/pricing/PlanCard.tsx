@@ -31,9 +31,10 @@ import { SaveErrorNote } from './parts';
  * fee and the Build & Install fee in CAD, and Save. The fields show the
  * server's prices until edited; Save stays off until something changed and
  * sends only what changed. A partial Stripe failure shows the API's message
- * here and keeps the price that did not save, so Save can retry it.
+ * here and keeps the price that did not save, so Save can retry it. Without
+ * `pricing.write` (staff) the fields are read only and there is no Save.
  */
-export function PlanCard({ plan }: { plan: PricingPlan }) {
+export function PlanCard({ plan, readOnly = false }: { plan: PricingPlan; readOnly?: boolean }) {
   const cache = usePricingCache();
   const [edits, setEdits] = useState<PlanEdits>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -98,6 +99,7 @@ export function PlanCard({ plan }: { plan: PricingPlan }) {
         onChange={(v) => set('monthly', v)}
         min={0}
         required
+        readOnly={readOnly}
         error={errors.monthly}
       />
       <NumberField
@@ -107,18 +109,21 @@ export function PlanCard({ plan }: { plan: PricingPlan }) {
         onChange={(v) => set('setup', v)}
         min={0}
         required
+        readOnly={readOnly}
         error={errors.setup}
       />
       {saveError ? <SaveErrorNote message={saveError} /> : null}
-      <PendingButton
-        label="Save"
-        pendingLabel="Saving"
-        fullWidth
-        disabled={!dirty}
-        onPress={save}
-        onError={onError}
-        accessibilityHint={dirty ? `Saves the ${plan.name} prices to the site and Stripe` : 'Nothing has changed yet'}
-      />
+      {readOnly ? null : (
+        <PendingButton
+          label="Save"
+          pendingLabel="Saving"
+          fullWidth
+          disabled={!dirty}
+          onPress={save}
+          onError={onError}
+          accessibilityHint={dirty ? `Saves the ${plan.name} prices to the site and Stripe` : 'Nothing has changed yet'}
+        />
+      )}
     </Card>
   );
 }

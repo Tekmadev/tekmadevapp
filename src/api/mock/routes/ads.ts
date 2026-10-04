@@ -1,11 +1,12 @@
 import { DEFAULT_ADS_RANGE, zAdsRange } from '../../schemas/ads';
 import { AD_ACCOUNT_ID, adsReport, adsState, META_PULL_ERROR, refreshRowCount } from '../fixtures/ads';
 import { recordNotificationEvent } from '../fixtures/notifications';
+import { requireCap } from '../permissions';
 import { fail, nowIso, ok, type MockRoute } from '../router';
 
 /**
- * Mock routes for the "ads" domain (contract section 11, Insights). Owner only:
- * the transport answers 403 for managers before a handler runs.
+ * Mock routes for the "ads" domain (contract section 11, Insights): `ads.view`
+ * reads, `ads.refresh` pulls (requireCap in each handler, like the server).
  *
  * POST /ads/refresh is a long job (about 6 seconds). Every 3rd call fails with
  * 502 `upstream`, so both toasts can be seen from the app: success
@@ -20,9 +21,10 @@ export const routes: MockRoute[] = [
   {
     method: 'GET',
     path: '/ads',
-    ownerOnly: true,
     latency: 'normal',
-    handler: ({ query }) => {
+    handler: ({ query, user }) => {
+      const denied = requireCap(user, 'ads.view');
+      if (denied) return denied;
       const range = zAdsRange.safeParse(query.range ?? DEFAULT_ADS_RANGE);
       if (!range.success) return fail(400, 'range', 'Unknown range. Use 7d, 14d, 30d, 3m or all.');
       // Not connected: no numbers at all, never zeros.
@@ -33,10 +35,11 @@ export const routes: MockRoute[] = [
   {
     method: 'POST',
     path: '/ads/refresh',
-    ownerOnly: true,
     latency: 'long',
     jobMs: 6000,
-    handler: () => {
+    handler: ({ user }) => {
+      const denied = requireCap(user, 'ads.refresh');
+      if (denied) return denied;
       if (!adsState.connected) return fail(503, 'not_configured', 'The server is missing a setting for this feature.');
       adsState.refreshCalls += 1;
       if (adsState.refreshCalls % 3 === 0) {

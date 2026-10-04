@@ -8,7 +8,7 @@ export const loaderModule: ModuleManifest = {
   icon: Orbit,
   group: 'more',
   moreSection: 'settings',
-  ownerOnly: true,
+  capability: 'loader.view',
   routes: ['loader'],
   href: '/loader',
   summary: 'The black hole, tuned for the whole site',

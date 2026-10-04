@@ -1,10 +1,8 @@
-import { router, type Href } from 'expo-router';
 import { ExternalLink } from 'lucide-react-native';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import type { Activity } from '@/api/schemas/clients';
-import type { Role } from '@/api/types';
 import { openInBrowser } from '@/components/automation/ApprovalBlocks';
 import { isSafeHref } from '@/components/automation/markdown';
 import { Badge } from '@/components/Badge';
@@ -13,15 +11,20 @@ import { PressableScale } from '@/components/PressableScale';
 import { Text } from '@/components/Text';
 import { useTheme, type Theme } from '@/design/theme';
 import { space } from '@/design/tokens';
-import { mapAdminUrl, parseAdminUrl, toHref } from '@/lib/deeplinks';
+import { mapAdminUrl, parseAdminUrl, type LinkViewer } from '@/lib/deeplinks';
+import { openLink as openAppLink } from '@/modules/inbox/navigation';
 
 import type { ClientLabels } from '../labels';
 import { activityContent, activityMeta, CLIENT_SEES, isLongText } from './activityText';
 
-/** Web admin paths open inside the app; other https links open in a Custom Tab. */
-function openLink(url: string, role: Role | null, colors: Theme['colors']) {
+/**
+ * Web admin paths open inside the app (only what this person may open; a tab
+ * route switches tab instead of stacking a second tab bar); other https links
+ * open in a Custom Tab.
+ */
+function openLink(url: string, viewer: LinkViewer, colors: Theme['colors']) {
   if (parseAdminUrl(url)) {
-    router.push(toHref(mapAdminUrl(url, role)) as Href);
+    openAppLink(mapAdminUrl(url, viewer));
     return;
   }
   openInBrowser(url, colors);
@@ -35,7 +38,8 @@ function displayUrl(url: string): string {
 export type ActivityItemProps = {
   entry: Activity;
   labels: ClientLabels;
-  role: Role | null;
+  /** Who follows a link: the GET /me profile (its capability list wins). */
+  viewer: LinkViewer;
   /** The last row draws no rail below its dot. */
   last: boolean;
 };
@@ -44,7 +48,7 @@ export type ActivityItemProps = {
  * One timeline entry: a dot on the rail (gold when the client sees it, with
  * the "client sees" badge), what happened, and "time · actor · event".
  */
-export function ActivityItem({ entry, labels, role, last }: ActivityItemProps) {
+export function ActivityItem({ entry, labels, viewer, last }: ActivityItemProps) {
   const { colors } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const visible = entry.visibleToClient;
@@ -90,7 +94,7 @@ export function ActivityItem({ entry, labels, role, last }: ActivityItemProps) {
         ) : null}
         {link ? (
           <PressableScale
-            onPress={() => openLink(link, role, colors)}
+            onPress={() => openLink(link, viewer, colors)}
             haptic={false}
             hitSlop={{ top: 12, bottom: 12 }}
             accessibilityRole="link"

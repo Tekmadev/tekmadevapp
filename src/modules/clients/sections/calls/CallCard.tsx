@@ -18,22 +18,23 @@ import { callContactLine, callDetailsLine, callTitle, reviewAction, reviewBadge 
 export type CallCardProps = {
   call: Call;
   labels: ClientLabels;
-  /** Opens the edit sheet. */
-  onEdit: (call: Call) => void;
-  /** POST /calls/:id/review. Resolves once the cache holds the server's answer. */
-  onReview: (call: Call, counts: boolean) => Promise<void>;
+  /** Opens the edit sheet. Left out without `clients.calls.review`: the row is read only. */
+  onEdit?: (call: Call) => void;
+  /** POST /calls/:id/review. Resolves once the cache holds the server's answer. Left out without `clients.calls.review`. */
+  onReview?: (call: Call, counts: boolean) => Promise<void>;
 };
 
 /**
  * One booked call: who, status and review badges, where it came from and
  * when, then how to reach them. An unreviewed call carries one big action,
- * and swiping the row right does the same thing. Tap to edit.
+ * and swiping the row right does the same thing. Tap to edit. For people who
+ * may not review calls the card is read only: no action, swipe or edit.
  */
 export function CallCard({ call, labels, onEdit, onReview }: CallCardProps) {
   const online = useIsOnline();
   // The button and the swipe share one submit group, so a review is never sent twice.
   const { busy, run } = useSubmitGroup();
-  const needsReview = call.review === 'needs_review';
+  const needsReview = call.review === 'needs_review' && onReview !== undefined;
   const action = reviewAction(call);
   const status = { label: labelOf(labels.callStatuses, call.status), tone: toneOf(labels.callStatuses, call.status) };
   const review = reviewBadge(call, labels);
@@ -42,6 +43,7 @@ export function CallCard({ call, labels, onEdit, onReview }: CallCardProps) {
   const contact = callContactLine(call);
 
   const submitReview = () => {
+    if (!onReview) return;
     run('review', () => onReview(call, action.counts))?.catch((error: unknown) => reportSubmitError(error));
   };
 
@@ -67,10 +69,10 @@ export function CallCard({ call, labels, onEdit, onReview }: CallCardProps) {
           </View>
         }
         chevron={false}
-        onPress={() => onEdit(call)}
+        onPress={onEdit ? () => onEdit(call) : undefined}
         leftAction={swipe}
         accessibilityLabel={[title, status.label, review.label, details, contact].filter(Boolean).join(', ')}
-        accessibilityHint="Opens the call to edit it"
+        accessibilityHint={onEdit ? 'Opens the call to edit it' : undefined}
       />
       {needsReview ? (
         <View style={styles.action}>

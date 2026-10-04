@@ -1,7 +1,9 @@
 import type { NotificationItem, NotificationSummary } from '@/api/schemas/notifications';
+import { can } from '@/auth/capabilities';
 
 import {
   buildEntries,
+  categoryCapability,
   categoryChips,
   countsTowardUnread,
   dayLabel,
@@ -13,6 +15,7 @@ import {
   metaLine,
   newestInstant,
   parseFilterParam,
+  readableCategories,
   shiftSummary,
 } from '../logic';
 
@@ -78,11 +81,17 @@ describe('filters', () => {
     expect(filterSegments(0)[2]).toEqual({ value: 'action', label: 'Needs action', count: 0 });
   });
 
-  it('shows Audience and Team chips to owners only', () => {
-    const owner = categoryChips(true).map((c) => c.label);
-    const manager = categoryChips(false).map((c) => c.label);
-    expect(owner).toEqual(['Everything', 'Leads', 'Sales', 'Billing', 'Clients', 'Audience', 'Team', 'System']);
-    expect(manager).toEqual(['Everything', 'Leads', 'Sales', 'Billing', 'Clients', 'System']);
+  it('shows a chip per category the person reads, in brief order', () => {
+    const chips = (role: 'owner' | 'manager' | 'staff') => categoryChips(readableCategories((cap) => can(role, cap))).map((c) => c.label);
+    expect(chips('owner')).toEqual(['Everything', 'Leads', 'Sales', 'Billing', 'Clients', 'Audience', 'Team', 'System']);
+    expect(chips('manager')).toEqual(['Everything', 'Leads', 'Sales', 'Billing', 'Clients', 'Audience', 'Team', 'System']);
+    expect(chips('staff')).toEqual(['Everything', 'Leads', 'Clients']);
+  });
+
+  it('reads categories from the server list when /me sends one', () => {
+    const me = { role: 'staff' as const, capabilities: ['notifications.view', 'inbox.leads', 'inbox.system'] };
+    expect(readableCategories((cap) => can(me, cap))).toEqual(['leads', 'system']);
+    expect(categoryCapability('audience')).toBe('inbox.audience');
   });
 });
 

@@ -40,6 +40,9 @@ const asOwner = () => {
 const asManager = () => {
   token = `mock.usr_mgr01.${Date.now() + 3_600_000}`;
 };
+const asStaff = () => {
+  token = `mock.usr_staff01.${Date.now() + 3_600_000}`;
+};
 
 let keySeq = 0;
 const key = () => `test-email-${(keySeq += 1)}`;
@@ -89,21 +92,27 @@ describe('meta fragment', () => {
   });
 });
 
-describe('owner only', () => {
-  it('answers 403 to a manager on every email endpoint', async () => {
-    asManager();
+describe('capabilities', () => {
+  it('lets staff read the overview and templates, nothing else (email.view)', async () => {
+    asStaff();
+    expect((await getEmailOverview()).campaigns.length).toBeGreaterThan(0);
+    expect((await getEmailTemplates()).length).toBeGreaterThan(0);
     const calls: Promise<unknown>[] = [
-      getEmailOverview(),
       createCampaign({ key: 'nope', name: 'Nope' }, key()),
       setCampaignActive('camp_welcome01', false),
       deleteCampaign('camp_welcome01'),
-      getEmailTemplates(),
       getSubscribers({}),
       getSubscriber('sub_olivia001'),
       unsubscribeSubscriber('sub_olivia001'),
       deleteSubscriber('sub_olivia001'),
     ];
-    for (const call of calls) expect((await apiError(call)).status).toBe(403);
+    for (const call of calls) expect(await apiError(call)).toMatchObject({ status: 403, code: 'forbidden' });
+  });
+
+  it('lets a manager read subscribers', async () => {
+    asManager();
+    expect((await getSubscribers({})).items.length).toBeGreaterThan(0);
+    expect((await getSubscriber('sub_olivia001')).subscriber.id).toBe('sub_olivia001');
   });
 });
 

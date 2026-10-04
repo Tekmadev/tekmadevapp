@@ -31,6 +31,9 @@ const asOwner = () => {
 const asManager = () => {
   token = `mock.usr_mgr01.${Date.now() + 3_600_000}`;
 };
+const asStaff = () => {
+  token = `mock.usr_staff01.${Date.now() + 3_600_000}`;
+};
 
 beforeAll(() => {
   setAuthBridge({ getAccessToken: async () => token });
@@ -75,13 +78,31 @@ function freezeNow() {
 }
 
 describe('GET /overview: shape', () => {
-  it('parses for the owner and for a manager', async () => {
+  it('parses for the owner, a manager and staff', async () => {
     const owner = await overview();
     asManager();
     const manager = await overview();
+    asStaff();
+    const staff = await overview();
     expect(owner.recentLeads).toHaveLength(8);
     expect(owner.recentSubscriptions).toHaveLength(8);
     expect(manager.recentLeads).toEqual(owner.recentLeads);
+    expect(manager.recentSubscriptions).toEqual(owner.recentSubscriptions);
+    expect(manager.kpis).toEqual(owner.kpis);
+    expect(staff.recentLeads).toEqual(owner.recentLeads);
+  });
+
+  it('staff never get revenue: active subs and recent subscriptions are null, never zero', async () => {
+    const owner = await overview();
+    asStaff();
+    const staff = await overview();
+    expect(owner.kpis.activeSubs).toBeGreaterThan(0);
+    expect(staff.kpis.activeSubs).toBeNull();
+    expect(staff.recentSubscriptions).toBeNull();
+    // Everything else on Home is the same for staff.
+    expect({ ...staff.kpis, activeSubs: owner.kpis.activeSubs }).toEqual(owner.kpis);
+    expect(staff.traffic).toEqual(owner.traffic);
+    expect(staff.topLinks).toEqual(owner.topLinks);
   });
 
   it('has an empty meta fragment that matches its schema', () => {
@@ -168,7 +189,7 @@ describe('GET /overview: recent rows', () => {
     const page = await getSubscriptions({ limit: 8 });
     expect(o.recentSubscriptions).toEqual(page.items);
     // Webline Care keeps its cents ($77.50).
-    expect(o.recentSubscriptions.some((s) => s.kind === 'care' && s.amount.amount % 100 !== 0)).toBe(true);
+    expect((o.recentSubscriptions ?? []).some((s) => s.kind === 'care' && s.amount.amount % 100 !== 0)).toBe(true);
   });
 });
 
@@ -182,8 +203,15 @@ describe('GET /overview: inbox and needs-action', () => {
     const manager = await overview();
     expect(manager.inbox).toEqual(await getNotificationSummary());
     expect(manager.attention.needsAction).toBe(manager.inbox.needsAction);
-    // Managers never count owner-only rows.
-    expect(manager.inbox.needsAction).toBeLessThan(owner.inbox.needsAction);
+    // Managers read every category, like the owner.
+    expect(manager.inbox.needsAction).toBe(owner.inbox.needsAction);
+
+    asStaff();
+    const staff = await overview();
+    expect(staff.inbox).toEqual(await getNotificationSummary());
+    expect(staff.attention.needsAction).toBe(staff.inbox.needsAction);
+    // Staff only count their categories (Leads and Clients).
+    expect(staff.inbox.needsAction).toBeLessThan(owner.inbox.needsAction);
   });
 });
 
@@ -252,12 +280,16 @@ describe('GET /overview: client cards match the Clients screens', () => {
     expect([...counts].sort((x, y) => y - x)).toEqual(counts);
   });
 
-  it('managers get the same client cards (test clients never count for anyone)', async () => {
+  it('managers and staff get the same client cards (test clients never count for anyone)', async () => {
     const owner = await overview();
     asManager();
     const manager = await overview();
     expect(manager.attentionClients).toEqual(owner.attentionClients);
     expect({ ...manager.attention, needsAction: 0 }).toEqual({ ...owner.attention, needsAction: 0 });
+    asStaff();
+    const staff = await overview();
+    expect(staff.attentionClients).toEqual(owner.attentionClients);
+    expect({ ...staff.attention, needsAction: 0 }).toEqual({ ...owner.attention, needsAction: 0 });
   });
 });
 
@@ -287,10 +319,12 @@ describe('GET /overview: top tracking links', () => {
     for (const l of top) expect(links.find((x) => x.id === l.id)?.slug).toBe(l.slug);
   });
 
-  it('managers get null: links are owner only', async () => {
+  it('every role holds links.view, so managers and staff get the same top links', async () => {
+    const owner = await overview();
     asManager();
-    const o = await overview();
-    expect(o.topLinks).toBeNull();
+    expect((await overview()).topLinks).toEqual(owner.topLinks);
+    asStaff();
+    expect((await overview()).topLinks).toEqual(owner.topLinks);
   });
 });
 

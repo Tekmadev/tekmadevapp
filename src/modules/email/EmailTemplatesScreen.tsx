@@ -8,7 +8,7 @@ import Animated from 'react-native-reanimated';
 import { emailKeys, emailTemplatesQuery } from '@/api/endpoints/email';
 import { MESSAGES } from '@/api/errors';
 import type { EmailTemplate } from '@/api/schemas/email';
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
@@ -68,9 +68,9 @@ const TemplateCard = memo(function TemplateCard({ template, index, still }: Temp
  */
 export function EmailTemplatesScreen() {
   return (
-    <OwnerOnly>
+    <RequireCapability cap="email.view">
       <TemplatesBody />
-    </OwnerOnly>
+    </RequireCapability>
   );
 }
 

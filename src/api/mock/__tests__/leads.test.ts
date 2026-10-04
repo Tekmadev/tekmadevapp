@@ -18,6 +18,9 @@ const asOwner = () => {
 const asManager = () => {
   token = `mock.usr_mgr01.${Date.now() + 3_600_000}`;
 };
+const asStaff = () => {
+  token = `mock.usr_staff01.${Date.now() + 3_600_000}`;
+};
 
 beforeAll(() => {
   setAuthBridge({ getAccessToken: async () => token });
@@ -136,11 +139,13 @@ describe('GET /leads', () => {
     expect([need.status, need.code]).toEqual([400, 'need']);
   });
 
-  it('is open to managers too', async () => {
+  it('is open to managers and staff too (leads.view)', async () => {
     asManager();
     const page = await getLeads({});
     expect(zLeadPage.safeParse(page).success).toBe(true);
     expect(page.items.length).toBe(30);
+    asStaff();
+    expect((await getLeads({})).items).toEqual(page.items);
   });
 });
 

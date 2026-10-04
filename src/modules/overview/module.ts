@@ -7,7 +7,7 @@ export const overviewModule: ModuleManifest = {
   title: 'Overview',
   icon: LayoutDashboard,
   group: 'home',
-  ownerOnly: false,
+  capability: 'overview.view',
   routes: ['(tabs)/index'],
   href: '/',
   searchable: {

@@ -21,14 +21,17 @@ type ConnectionCardProps = {
   verify: LongJob;
   /** Another long job is running: one at a time. */
   busy: boolean;
+  /** `crm.write`: "Verify connection". Without it the card only reads. */
+  canWrite: boolean;
 };
 
 /**
  * The Connection card: the status badge with its one-line explanation, the
  * Verify checklist (each probe's plain sentence, and why it failed), "Last
- * checked <time>" and "Verify connection" (a long job, about 20 seconds).
+ * checked <time>" and "Verify connection" (a long job, about 20 seconds,
+ * `crm.write` only).
  */
-export function ConnectionCard({ connection, meta, now, verify, busy }: ConnectionCardProps) {
+export function ConnectionCard({ connection, meta, now, verify, busy, canWrite }: ConnectionCardProps) {
   const badge = healthBadge(meta, connection.health);
   const results = connection.probe?.results ?? [];
   const checked = lastCheckedLine(connection.probe?.checkedAt, now);
@@ -57,19 +60,21 @@ export function ConnectionCard({ connection, meta, now, verify, busy }: Connecti
         {checked}
       </Text>
 
-      <PendingButton
-        label="Verify connection"
-        icon={ShieldCheck}
-        variant="secondary"
-        size="sm"
-        disabled={busy || verify.running || !connection.configured}
-        onPress={() => {
-          // The job reports through its own progress row and toasts; the button only starts it.
-          void verify.start();
-        }}
-        accessibilityHint={connection.configured ? 'Runs every check against the CRM. About 20 seconds.' : 'Add the CRM token on the website first.'}
-        style={styles.button}
-      />
+      {canWrite ? (
+        <PendingButton
+          label="Verify connection"
+          icon={ShieldCheck}
+          variant="secondary"
+          size="sm"
+          disabled={busy || verify.running || !connection.configured}
+          onPress={() => {
+            // The job reports through its own progress row and toasts; the button only starts it.
+            void verify.start();
+          }}
+          accessibilityHint={connection.configured ? 'Runs every check against the CRM. About 20 seconds.' : 'Add the CRM token on the website first.'}
+          style={styles.button}
+        />
+      ) : null}
     </Card>
   );
 }

@@ -18,6 +18,9 @@ const asOwner = () => {
 const asManager = () => {
   token = `mock.usr_mgr01.${Date.now() + 3_600_000}`;
 };
+const asStaff = () => {
+  token = `mock.usr_staff01.${Date.now() + 3_600_000}`;
+};
 
 beforeAll(() => {
   setAuthBridge({ getAccessToken: async () => token });
@@ -88,13 +91,16 @@ describe('GET /analytics', () => {
     expect(data.trackingSince).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
-  it('defaults to 30 days and is the same for managers', async () => {
+  it('defaults to 30 days and is the same for managers and staff (analytics.view)', async () => {
     const plain = await api.get<Analytics>('/analytics');
     expect(plain.range).toBe('30d');
     asManager();
     const manager = await getAnalytics('30d');
     expect(manager.total).toBe(plain.total);
     expect(manager.series).toEqual(plain.series);
+    asStaff();
+    const staff = await getAnalytics('30d');
+    expect(staff.series).toEqual(plain.series);
   });
 
   it('compares with the period before only when that period was tracked', async () => {

@@ -8,7 +8,6 @@ export const profileModule: ModuleManifest = {
   icon: Settings,
   group: 'more',
   moreSection: 'settings',
-  ownerOnly: false,
   routes: ['profile'],
   href: '/profile',
   summary: 'Your name and password',

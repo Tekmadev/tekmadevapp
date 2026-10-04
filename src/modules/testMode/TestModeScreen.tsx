@@ -8,7 +8,8 @@ import { sessionKeys } from '@/api/endpoints/session';
 import { purgeTestData, rebuildTestCatalog, testModeKeys, testModeQuery } from '@/api/endpoints/testMode';
 import { errorMessage, MESSAGES } from '@/api/errors';
 import type { TestModeStatus } from '@/api/schemas/testMode';
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import { useCan } from '@/auth/permissions';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { openInBrowser } from '@/components/automation/ApprovalBlocks';
 import { useJobRunner } from '@/components/automation/useJobRunner';
 import { Button } from '@/components/Button';
@@ -37,23 +38,26 @@ import {
 import { CatalogSection, DataSection, PurchasesSection, SetupSection, TestCardCard } from './TestModeSections';
 
 /**
- * Test mode (brief 8.15, owner only). The owner buys Webline on the real site
- * against the Stripe sandbox; test mode is a browser cookie, so the app opens
- * the website's test mode page in a Custom Tab and shows the test card. Below:
- * the sandbox status from the API (keys, webhook secret, catalog per product),
- * the test rows on record, "Rebuild test catalog" (a long job), "Delete all
- * test data" (hold to confirm) and the latest test purchases.
+ * Test mode (brief 8.15; `testmode.view`, owners and managers). The owner buys
+ * Webline on the real site against the Stripe sandbox; test mode is a browser
+ * cookie, so the app opens the website's test mode page in a Custom Tab and
+ * shows the test card. Below: the sandbox status from the API (keys, webhook
+ * secret, catalog per product), the test rows on record, "Rebuild test
+ * catalog" (a long job), "Delete all test data" (hold to confirm) and the
+ * latest test purchases. Rebuild and Delete need `testmode.write`; without it
+ * they are left out.
  */
 export function TestModeScreen() {
   return (
-    <OwnerOnly>
+    <RequireCapability cap="testmode.view">
       <TestModeBody />
-    </OwnerOnly>
+    </RequireCapability>
   );
 }
 
 function TestModeBody() {
   const { colors } = useTheme();
+  const canWrite = useCan('testmode.write');
   const queryClient = useQueryClient();
   const online = useIsOnline();
   const query = useQuery(testModeQuery());
@@ -117,8 +121,17 @@ function TestModeBody() {
           <ErrorState compact error={query.error} onRetry={() => query.refetch()} style={styles.refetchError} />
         ) : null}
         <SetupSection status={status} />
-        <CatalogSection status={status} rebuilding={rebuilding} startedAt={job.startedAt} onRebuild={() => void rebuild()} />
-        <DataSection status={status} canDelete={online && hasTestData(status)} onDelete={() => setConfirmPurge(true)} />
+        <CatalogSection
+          status={status}
+          rebuilding={rebuilding}
+          startedAt={job.startedAt}
+          onRebuild={canWrite ? () => void rebuild() : undefined}
+        />
+        <DataSection
+          status={status}
+          canDelete={online && hasTestData(status)}
+          onDelete={canWrite ? () => setConfirmPurge(true) : undefined}
+        />
         <PurchasesSection purchases={status.recentPurchases} meta={meta.data} />
       </>
     );
@@ -157,7 +170,7 @@ function TestModeBody() {
         {body}
       </Screen>
       <ConfirmSheet
-        visible={confirmPurge}
+        visible={confirmPurge && canWrite}
         onClose={() => setConfirmPurge(false)}
         title="Delete all test data?"
         message={status ? purgeConfirmMessage(status.counts) : ''}

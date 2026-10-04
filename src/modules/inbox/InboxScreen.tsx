@@ -7,7 +7,9 @@ import { StyleSheet, View } from 'react-native';
 import { notificationKeys } from '@/api/endpoints/notifications';
 import { MESSAGES } from '@/api/errors';
 import type { NotificationCategory, NotificationFilter, NotificationItem } from '@/api/schemas/notifications';
-import { useRole } from '@/auth/session';
+import { useCan, useCapabilities } from '@/auth/permissions';
+import { RequireCapability } from '@/auth/RequireCapability';
+import { useMe } from '@/auth/session';
 import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
@@ -23,7 +25,7 @@ import { InlineLoader } from '@/loader/InlineLoader';
 import { HeaderSearchButton } from '@/modules/search/HeaderSearchButton';
 
 import { InboxFilters } from './InboxFilters';
-import { INBOX_COPY, inboxSubtitle, isOpenAction, newestInstant, parseFilterParam, type InboxEntry } from './logic';
+import { INBOX_COPY, inboxSubtitle, isOpenAction, newestInstant, parseFilterParam, readableCategories, type InboxEntry } from './logic';
 import { destinationOf, openLink } from './navigation';
 import { NotificationActionsSheet } from './NotificationActionsSheet';
 import { NotificationDetailSheet } from './NotificationDetailSheet';
@@ -40,16 +42,29 @@ const ENTER_WINDOW_MS = 700;
 /**
  * The Inbox (brief 8.4): one shared staff inbox of real-world events. A pushed
  * screen opened from the bell in every tab header (owner decision: not a tab).
+ * Needs `notifications.view` (every role by default); without it there is no
+ * bell, and a link that still lands here goes back, or Home.
  */
 export function InboxScreen() {
+  return (
+    <RequireCapability cap="notifications.view" fallback="/">
+      <Inbox />
+    </RequireCapability>
+  );
+}
+
+function Inbox() {
   const params = useLocalSearchParams<{ filter?: string }>();
   const qc = useQueryClient();
-  const role = useRole();
-  const isOwner = role === 'owner';
+  // Links open what this person may open (their GET /me capabilities); categories and test rows follow them too.
+  const me = useMe();
+  const caps = useCapabilities();
+  const categories = readableCategories((cap) => caps.includes(cap));
+  const canIncludeTest = useCan('testdata.view');
   const online = useIsOnline();
   const includeTestPref = usePrefs((s) => s.inboxIncludeTest);
   const setIncludeTest = usePrefs((s) => s.setInboxIncludeTest);
-  const includeTest = isOwner && includeTestPref;
+  const includeTest = canIncludeTest && includeTestPref;
 
   // The segment follows the route param (Home links to ?filter=action), and the person after that.
   const paramFilter = parseFilterParam(params.filter);
@@ -60,8 +75,8 @@ export function InboxScreen() {
     if (paramFilter) setFilter(paramFilter);
   }
   const [chosenCategory, setCategory] = useState<NotificationCategory | null>(null);
-  // Owner-only categories never apply to a manager, whatever was picked before.
-  const category = chosenCategory && !isOwner && (chosenCategory === 'audience' || chosenCategory === 'team') ? null : chosenCategory;
+  // A category this person does not read never applies, whatever was picked before (a role change).
+  const category = chosenCategory && !categories.includes(chosenCategory) ? null : chosenCategory;
 
   const { query, items, entries, sticky, summary: listSummary, queryKey } = useInboxList({ filter, category, includeTest });
   const badgeQuery = useQuery(inboxSummaryQuery({ pushLive: usePushLive() }));
@@ -103,7 +118,7 @@ export function InboxScreen() {
 
   const openItem = (item: NotificationItem) => {
     if (!item.is_read && online) actions.markRead([item.id]);
-    const destination = destinationOf(item, role);
+    const destination = destinationOf(item, me);
     if (destination) openLink(destination);
     else showDetail(online ? { ...item, is_read: true } : item);
   };
@@ -221,7 +236,8 @@ export function InboxScreen() {
             needsAction={summary?.needsAction ?? null}
             category={category}
             onCategory={setCategory}
-            isOwner={isOwner}
+            categories={categories}
+            canIncludeTest={canIncludeTest}
             includeTest={includeTest}
             onIncludeTest={setIncludeTest}
           />
@@ -235,10 +251,10 @@ export function InboxScreen() {
         visible={detail?.open ?? false}
         onClose={() => setDetail((d) => (d ? { ...d, open: false } : d))}
         online={online}
-        canOpen={(item) => destinationOf(item, role) !== null}
+        canOpen={(item) => destinationOf(item, me) !== null}
         onOpen={(item) => {
           setDetail((d) => (d ? { ...d, open: false } : d));
-          const destination = destinationOf(item, role);
+          const destination = destinationOf(item, me);
           if (destination) openLink(destination);
         }}
         onToggleResolved={toggleResolved}

@@ -78,7 +78,11 @@ function decodeJwtPayload(token: string): Record<string, unknown> | undefined {
 
 type Resolved = { staff: MockStaff } | { status: 401 | 403 };
 
-/** Who is calling: a mock token "mock.<userId>.<expiresAtMs>" or a real Supabase JWT. */
+/**
+ * Who is calling: a mock token "mock.<userId>.<expiresAtMs>" or a real Supabase
+ * JWT. Owners, managers and staff are all staff here (MOCK_ACCOUNTS); what
+ * each may do is decided per route with requireCap (./permissions.ts).
+ */
 function resolveCaller(authorization: string | undefined): Resolved {
   const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : undefined;
   if (!token) return { status: 401 };
@@ -144,9 +148,8 @@ export const mockTransport: Transport = async (request) => {
     }
     staff = caller.staff;
   }
-  const user = staff ?? { id: 'anon', email: '', name: null, role: 'manager' as const, locked: false };
-
-  if (r.ownerOnly && user.role !== 'owner') return fail(403, 'owner_only', 'That section is owner only.');
+  // Routes without auth (none in v1) run with the narrowest role.
+  const user: MockStaff = staff ?? { id: 'anon', email: '', name: null, role: 'staff', locked: false };
 
   const failure = controls.failNext.find((f) => request.path.startsWith(f.pathPrefix));
   if (failure || controls.failAll) {
@@ -171,8 +174,6 @@ export const mockTransport: Transport = async (request) => {
     body: request.body && typeof request.body === 'object' ? (request.body as Record<string, unknown>) : {},
     headers: request.headers,
     user,
-    role: user.role,
-    isOwner: user.role === 'owner',
   };
 
   let result: ApiResponse;

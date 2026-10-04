@@ -1,6 +1,7 @@
 import type { NewTeamMemberInput } from '@/api/endpoints/team';
-import type { TeamMember, TeamMeta } from '@/api/schemas/team';
+import type { TeamMember } from '@/api/schemas/team';
 import type { Role } from '@/api/types';
+import { roleCopy } from '@/auth/capabilities';
 import type { Tone } from '@/design/tokens';
 import { formatShortDate, relativeTime } from '@/lib/dates';
 import { env } from '@/lib/env';
@@ -26,6 +27,7 @@ export const TEAM_COPY = {
   removeButton: 'Remove from team',
   locked: 'Set by the server environment. This owner cannot be removed.',
   self: 'This is you. Another owner can remove you.',
+  selfNotOwner: 'This is you. An owner can remove you.',
   passwordHelp: '8 or more characters. They change it after signing in.',
   passwordShort: 'The temporary password must be at least 8 characters.',
   emailInvalid: 'Enter a valid email.',
@@ -35,29 +37,31 @@ export const TEAM_COPY = {
 export const NAME_MAX = 80;
 export const TEMP_PASSWORD_MIN = 8;
 
-type RoleInfo = TeamMeta['teamRoles'][number];
+export type RoleOption = { value: Role; label: string; help: string; tone: Tone };
 
-/** The brief's words, used until GET /meta has loaded (or if it never does). */
-export const FALLBACK_ROLES: readonly RoleInfo[] = [
-  {
-    value: 'manager',
-    label: 'Manager',
-    help: 'Works on Overview, Inbox, Analytics, Leads, Free tools, Clients and Subscriptions',
-    tone: 'neutral',
-  },
-  { value: 'owner', label: 'Owner', help: 'Full access, can manage the team', tone: 'gold' },
-];
+/** The add sheet's order: the narrowest role first, so the default gives the least access. */
+const ROLE_ORDER: readonly Role[] = ['staff', 'manager', 'owner'];
 
-/** The role list from GET /meta, else the brief's. Manager first: the least access is the default. */
-export function teamRoles(fromMeta: readonly RoleInfo[] | undefined): readonly RoleInfo[] {
-  return fromMeta && fromMeta.length > 0 ? fromMeta : FALLBACK_ROLES;
+/**
+ * Every role with its badge and help line (owner decision 2026-10-03): Owner
+ * gold, Manager neutral, Staff muted. From the app's role table, not GET
+ * /meta `teamRoles`, which still sends the old Manager line.
+ */
+export const TEAM_ROLES: readonly RoleOption[] = ROLE_ORDER.map((value) => ({ value, ...roleCopy(value) }));
+
+/**
+ * The roles someone may give in "Add a team member" (they hold `team.write`):
+ * Staff and Manager, and Owner only with `team.owners`. Managers never make owners.
+ */
+export function addableRoles(canMakeOwners: boolean): readonly RoleOption[] {
+  return canMakeOwners ? TEAM_ROLES : TEAM_ROLES.filter((r) => r.value !== 'owner');
 }
 
-/** Label and tone for a role badge: Owner gold, Manager neutral. */
-export function roleBadge(roles: readonly RoleInfo[], role: Role): { label: string; tone: Tone } {
-  const found = roles.find((r) => r.value === role) ?? FALLBACK_ROLES.find((r) => r.value === role);
-  if (found) return { label: found.label, tone: found.tone };
-  return role === 'owner' ? { label: 'Owner', tone: 'gold' } : { label: 'Manager', tone: 'neutral' };
+/** "an Owner", "a Manager", "Staff": for "You now have access to Tekmadev Admin as ...". */
+export function roleWithArticle(role: Role): string {
+  const { label } = roleCopy(role);
+  if (role === 'staff') return label;
+  return role === 'owner' ? `an ${label}` : `a ${label}`;
 }
 
 /** Name, else the email. */
@@ -79,9 +83,22 @@ export function isSelf(member: Pick<TeamMember, 'email'>, myEmail: string | null
   return !!myEmail && member.email.trim().toLowerCase() === myEmail.trim().toLowerCase();
 }
 
-/** Owners set by the server environment are locked, and nobody removes themselves (the server refuses both). */
-export function canRemove(member: Pick<TeamMember, 'email' | 'envOwner'>, myEmail: string | null | undefined): boolean {
-  return !member.envOwner && !isSelf(member, myEmail);
+/**
+ * Whether to offer Remove: only to someone who may remove members
+ * (`team.remove`, owners), never for an owner set by the server environment
+ * (locked) and never for yourself (the server refuses both).
+ */
+export function canRemove(
+  member: Pick<TeamMember, 'email' | 'envOwner'>,
+  myEmail: string | null | undefined,
+  mayRemove: boolean,
+): boolean {
+  return mayRemove && !member.envOwner && !isSelf(member, myEmail);
+}
+
+/** The note on your own row: an owner is told another owner can remove them, anyone else that an owner can. */
+export function selfNote(mayRemove: boolean): string {
+  return mayRemove ? TEAM_COPY.self : TEAM_COPY.selfNotOwner;
 }
 
 /** The hold sheet's message: what happens, then the brief's warning. */
@@ -93,12 +110,14 @@ export function removedMessage(member: Pick<TeamMember, 'name' | 'email'>): stri
   return `Removed ${memberName(member)} from the team.`;
 }
 
+const RANK: Record<Role, number> = { owner: 1, manager: 2, staff: 3 };
+
 /**
  * Where a new member goes in the cached list, in the server's order: env owners,
- * other owners, then managers, oldest first in each group.
+ * other owners, managers, then staff, oldest first in each group.
  */
 export function insertMember(list: readonly TeamMember[], member: TeamMember): TeamMember[] {
-  const rank = (m: TeamMember) => (m.envOwner ? 0 : m.role === 'owner' ? 1 : 2);
+  const rank = (m: TeamMember) => (m.envOwner ? 0 : RANK[m.role]);
   return [...list.filter((m) => m.email !== member.email), member].sort(
     (a, b) => rank(a) - rank(b) || a.addedAt.localeCompare(b.addedAt),
   );
@@ -175,9 +194,9 @@ export function generateTempPassword(randomBytes: (count: number) => Uint8Array)
 }
 
 /** What the share sheet sends to the new member. */
-export function shareCredentialsText(input: { email: string; password: string; roleLabel: string }): string {
+export function shareCredentialsText(input: { email: string; password: string; role: Role }): string {
   return [
-    `You now have access to Tekmadev Admin as ${input.roleLabel === 'Owner' ? 'an' : 'a'} ${input.roleLabel}.`,
+    `You now have access to Tekmadev Admin as ${roleWithArticle(input.role)}.`,
     '',
     `Email: ${input.email}`,
     `Temporary password: ${input.password}`,

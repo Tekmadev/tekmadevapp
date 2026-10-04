@@ -31,8 +31,9 @@ import {
 
 /**
  * The notifications domain through the real mock transport: envelope, schemas,
- * keyset paging, per-user read state and mutes, shared resolution, audience
- * rules for managers, test rows, and the documented validation errors.
+ * keyset paging, per-user read state and mutes, shared resolution, who reads
+ * which category (capabilities: staff read Leads and Clients only), test rows,
+ * and the documented validation errors.
  */
 
 let token = '';
@@ -41,6 +42,9 @@ const asOwner = () => {
 };
 const asManager = () => {
   token = `mock.usr_mgr01.${Date.now() + 3_600_000}`;
+};
+const asStaff = () => {
+  token = `mock.usr_staff01.${Date.now() + 3_600_000}`;
 };
 
 beforeAll(() => {
@@ -141,26 +145,46 @@ describe('GET /notifications', () => {
     expect(second.items.some((i) => first.items.some((f) => f.id === i.id))).toBe(false);
   });
 
-  it('includes test rows only for owners who ask', async () => {
+  it('includes test rows only for people with testdata.view who ask', async () => {
     asOwner();
     const withTest = (await allPages({ filter: 'all', includeTest: true })).flatMap((p) => p.items);
     expect(withTest.filter((i) => i.is_test).length).toBeGreaterThanOrEqual(3);
+    const without = (await allPages({ filter: 'all' })).flatMap((p) => p.items);
+    expect(without.some((i) => i.is_test)).toBe(false);
 
     asManager();
     const manager = (await allPages({ filter: 'all', includeTest: true })).flatMap((p) => p.items);
-    expect(manager.some((i) => i.is_test)).toBe(false);
+    expect(manager.filter((i) => i.is_test).length).toBeGreaterThanOrEqual(3);
+
+    asStaff();
+    const staff = (await allPages({ filter: 'all', includeTest: true })).flatMap((p) => p.items);
+    expect(staff.some((i) => i.is_test)).toBe(false);
   });
 
-  it('never shows owner-audience rows to managers', async () => {
+  it('managers read every category, owner-audience rows included', async () => {
     asManager();
-    const pages = await allPages({ filter: 'all' });
-    const items = pages.flatMap((p) => p.items);
+    const items = (await allPages({ filter: 'all' })).flatMap((p) => p.items);
     expect(items.length).toBeGreaterThan(30);
-    expect(items.some((i) => i.category === 'audience' || i.category === 'team')).toBe(false);
+    expect(items.some((i) => i.category === 'audience')).toBe(true);
+    expect(items.some((i) => i.category === 'team')).toBe(true);
+    expect(items.some((i) => OWNER_ONLY_EVENTS.includes(i.event_key))).toBe(true);
+  });
+
+  it('staff read Leads and Clients only, with a matching summary', async () => {
+    asStaff();
+    const items = (await allPages({ filter: 'all' })).flatMap((p) => p.items);
+    expect(items.length).toBeGreaterThan(0);
+    expect(new Set(items.map((i) => i.category))).toEqual(new Set(['leads', 'clients']));
     expect(items.some((i) => OWNER_ONLY_EVENTS.includes(i.event_key))).toBe(false);
-    // Asking for an owner category is not an error, it is simply empty.
-    const team = await getNotifications({ filter: 'all', category: 'team' });
-    expect(team.items).toHaveLength(0);
+    // Asking for a category they do not read is not an error, it is simply empty.
+    for (const category of ['sales', 'billing', 'audience', 'team', 'system'] as const) {
+      expect((await getNotifications({ filter: 'all', category })).items).toHaveLength(0);
+    }
+    const summary = await getNotificationSummary();
+    const action = (await allPages({ filter: 'action' })).flatMap((p) => p.items);
+    expect(summary.needsAction).toBe(action.length);
+    const unread = (await allPages({ filter: 'unread' })).flatMap((p) => p.items);
+    expect(summary.unread).toBe(unread.length);
   });
 
   it('filters by unread, needs action and category, consistent with the summary', async () => {
@@ -199,7 +223,7 @@ describe('GET /notifications', () => {
 });
 
 describe('GET /notifications/:id', () => {
-  it('opens a visible row and hides owner rows from managers', async () => {
+  it("opens a row in the caller's categories and hides the rest (404)", async () => {
     asOwner();
     const list = await getNotifications({ filter: 'all', category: 'system', includeTest: true });
     const stripe = list.items.find((i) => i.event_key === 'system.stripe_webhook_failing');
@@ -210,6 +234,9 @@ describe('GET /notifications/:id', () => {
     expect(detail.id).toBe(stripe.id);
 
     asManager();
+    expect((await getNotification(stripe.id)).id).toBe(stripe.id);
+
+    asStaff();
     const hidden = await apiError(getNotification(stripe.id));
     expect(hidden.status).toBe(404);
     const unknown = await apiError(getNotification('ntf_nope'));
@@ -250,9 +277,9 @@ describe('read state', () => {
 
   it('ignores ids the caller cannot see', async () => {
     asOwner();
-    const owners = await getNotifications({ filter: 'all', category: 'team' });
-    asManager();
-    const result = await markNotificationsRead([owners.items[0].id, 'ntf_missing']);
+    const team = await getNotifications({ filter: 'all', category: 'team' });
+    asStaff();
+    const result = await markNotificationsRead([team.items[0].id, 'ntf_missing']);
     expect(result.items).toHaveLength(0);
   });
 
@@ -371,7 +398,7 @@ describe('POST /notifications/:id/resolve', () => {
 });
 
 describe('preferences', () => {
-  it('lists every category for owners and hides Team and Audience from managers', async () => {
+  it('lists the categories the caller reads: all seven for owners and managers, Leads and Clients for staff', async () => {
     asOwner();
     const owner = await getNotificationPrefs();
     expect(zNotificationPrefs.safeParse(owner).success).toBe(true);
@@ -380,7 +407,12 @@ describe('preferences', () => {
 
     asManager();
     const manager = await getNotificationPrefs();
-    expect(manager.map((p) => p.category)).toEqual(['leads', 'sales', 'billing', 'clients', 'system']);
+    expect(manager.map((p) => p.category)).toEqual(['leads', 'sales', 'billing', 'clients', 'audience', 'team', 'system']);
+
+    asStaff();
+    const staff = await getNotificationPrefs();
+    expect(zNotificationPrefs.safeParse(staff).success).toBe(true);
+    expect(staff.map((p) => p.category)).toEqual(['leads', 'clients']);
   });
 
   it('makes a category quiet for the caller only, and quiet rows stop counting', async () => {
@@ -416,12 +448,19 @@ describe('preferences', () => {
     await updateNotificationPref('leads', { muted: false, push: true });
   });
 
-  it('is owner only for Team and Audience, and validates input', async () => {
-    asManager();
+  it('refuses a category the role does not read, and validates input', async () => {
+    asStaff();
     const team = await apiError(updateNotificationPref('team', { muted: true }));
-    expect(team.status).toBe(403);
-    const audience = await apiError(updateNotificationPref('audience', { push: false }));
-    expect(audience.status).toBe(403);
+    expect([team.status, team.code, team.message]).toEqual([403, 'forbidden', 'Your role cannot do that.']);
+    const sales = await apiError(updateNotificationPref('sales', { push: false }));
+    expect([sales.status, sales.code]).toEqual([403, 'forbidden']);
+    expect(await updateNotificationPref('clients', { push: false })).toEqual({ category: 'clients', label: 'Clients', muted: false, push: false });
+    await updateNotificationPref('clients', { push: true });
+
+    asManager();
+    const audience = await updateNotificationPref('audience', { push: false });
+    expect(audience.category).toBe('audience');
+    await updateNotificationPref('audience', { push: true });
 
     asOwner();
     const unknown = await apiError(api.patch('/notifications/prefs/marketing', { muted: true }));

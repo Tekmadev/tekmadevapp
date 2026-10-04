@@ -4,6 +4,7 @@ import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 
 import type { OverviewAttention } from '@/api/schemas/overview';
+import { useCapabilities } from '@/auth/permissions';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
@@ -32,13 +33,15 @@ const ICONS: Record<AttentionKey, LucideIcon> = {
 
 /**
  * "Needs you" (brief 8.3 item 2): one card per thing waiting on someone, zero
- * counts hidden. Each opens the list behind its count. When nothing is
- * waiting, a calm line with a soft gold check takes the row's place.
+ * counts hidden, and only work this person can act on (staff never see the CRM
+ * review or intake review cards). Each opens the list behind its count. When
+ * nothing is waiting, a calm line with a soft gold check takes the row's place.
  */
 export function NeedsYou({ attention, countFromZero }: { attention: OverviewAttention; countFromZero: boolean }) {
   const gutter = useGutter();
   const size = useAttentionCardSize();
-  const cards = attentionCards(attention);
+  const caps = useCapabilities();
+  const cards = attentionCards(attention, (cap) => caps.includes(cap));
 
   return (
     <Section title="Needs you">

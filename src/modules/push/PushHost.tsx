@@ -8,7 +8,8 @@ import { notificationKeys, notificationQuery } from '@/api/endpoints/notificatio
 import { ApiError, errorMessage } from '@/api/errors';
 import type { NotificationItem } from '@/api/schemas/notifications';
 import { useAppLock } from '@/auth/lock/lockStore';
-import { useRole, useSession } from '@/auth/session';
+import { useCapabilities } from '@/auth/permissions';
+import { useMe, useSession } from '@/auth/session';
 import { INBOX } from '@/lib/deeplinks';
 import { useIsOnline } from '@/lib/connectivity';
 import { notice } from '@/lib/notice';
@@ -56,12 +57,14 @@ function useAppLocked(): { locked: boolean; atStart: boolean } {
  * arrive while the app is open as toasts, registers this phone (and again when
  * the token, the app version or the permission changes), and opens tapped
  * pushes: marked read, then the mapped screen, held while the app is locked.
- * A push with no link (or a link this role cannot open) opens the Inbox with
- * the row's detail sheet. It also asks once, after sign-in, to turn push on.
+ * A push with no link (or a link this person may not open) opens the Inbox
+ * with the row's detail sheet. It also asks once, after sign-in, to turn push
+ * on. The Android channels follow the categories the person may read.
  */
 export function PushHost() {
   const qc = useQueryClient();
-  const role = useRole();
+  const me = useMe();
+  const capabilities = useCapabilities();
   const pathname = usePathname();
   const online = useIsOnline();
   const actions = useInboxActions();
@@ -76,7 +79,6 @@ export function PushHost() {
   // Start: channels, the foreground handler, taps (cold start and warm), token changes, registration.
   useEffect(() => {
     resumeRegistration();
-    void ensureChannels();
     const removeHandler = installForegroundHandler();
     const removeResponses = installResponseListener();
     const tokens = Notifications.addPushTokenListener(onDevicePushToken);
@@ -93,6 +95,11 @@ export function PushHost() {
       setPushAppLocked(false);
     };
   }, []);
+
+  // The channels for the categories this person may read, again whenever their capabilities change.
+  useEffect(() => {
+    void ensureChannels();
+  }, [capabilities]);
 
   // Setup failed for want of a connection: try again by itself once back online.
   useEffect(() => {
@@ -127,7 +134,7 @@ export function PushHost() {
     const id = rowIdOf(payload);
     // Like a row tap in the Inbox: read at once (optimistic), only when the write can go out.
     if (id && online) actions.markRead([id]);
-    const route = pushRoute(payload, role);
+    const route = pushRoute(payload, me);
     if (route.kind === 'screen') {
       openLink(route.link);
       return;
@@ -174,10 +181,10 @@ export function PushHost() {
         visible={detail?.open ?? false}
         onClose={closeDetail}
         online={online}
-        canOpen={(item) => destinationOf(item, role) !== null}
+        canOpen={(item) => destinationOf(item, me) !== null}
         onOpen={(item) => {
           closeDetail();
-          const destination = destinationOf(item, role);
+          const destination = destinationOf(item, me);
           if (destination) openLink(destination);
         }}
         onToggleResolved={(item) => actions.setResolved(item.id, isOpenAction(item))}

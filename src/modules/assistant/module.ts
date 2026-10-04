@@ -8,7 +8,7 @@ export const assistantModule: ModuleManifest = {
   icon: Sparkles,
   group: 'more',
   moreSection: 'app',
-  ownerOnly: true,
+  // No capability of its own yet: the server turns the feature on per person.
   feature: 'assistant',
   hidden: true,
   routes: ['assistant'],

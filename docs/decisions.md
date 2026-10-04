@@ -334,7 +334,7 @@ Recorded by the engineers who built each area. The mock API decisions describe h
 - Sign-out messages show once as a neutral ink note in the same slot where errors appear in signal red. The screen also catches a message that arrives while it sits under the boot splash.
 - The hero mark is 96dp, top-left, with the form pushed toward the bottom for thumb reach. Content is capped at 440dp wide, and the keyboard offset keeps "Sign in" visible while typing.
 - The hero mark only fades in; everything else uses `enterPull`. On a cold start signed out, the screen mounts under the boot splash, so the splash fade reveals the already-settled form.
-- The "Mock accounts" chips (Owner, Manager) load their values lazily from `fixtures/staff.ts`, so no credentials are written in the screen.
+- The "Mock accounts" chips (Owner, Manager, Staff) load their values lazily from `fixtures/staff.ts`, so no credentials are written in the screen.
 - Reset sheet: title "Reset your password", subtitle "Enter your email. We'll send a link to set a new one.", button "Send reset link" / "Sending". After sending it shows the brief's exact message and a "Done" button.
 - The biometric offer appears only when the phone has a sensor and an enrolled fingerprint, 900ms after sign-in.
   - It is marked as offered the moment it shows, so dismissing it also counts as an answer.
@@ -540,3 +540,17 @@ I need no changes in files I do not own.
 - Every APK build bumps the version: semver name (patch for fixes, minor for features) and versionCode +1 (`npm run apk -- patch|minor|major`).
 - The brief is kept in sync with the website's copy (tekmadev3/docs/mobile-admin/PROMPT.md); update prompts are applied and logged here.
 
+## Roles and capabilities (owner decision 2026-10-03)
+
+- Three roles: owner, manager, staff. Everything is shown or hidden by capability (`useCan`, `RequireCapability`, module and quick action `capability`), never by role. GET /me `capabilities` wins; without it the role's row in `src/auth/capabilities.ts` is used. The mock's copy (`src/api/mock/permissions.ts`) is checked against it by a test.
+- A 403 for an owner-only capability is `owner_only` "That section is owner only." (toast and back); any other is `forbidden` "Your role cannot do that.", shown where the action was and the screen stays.
+- Write controls a role lacks are left out, never greyed: no button only ever answers 403. Read-only empty states drop their call to create ("No posts yet.", "No links yet.", "No coupons yet.").
+- Home for staff: three KPI cards (no Active subs, the third spans the row), no Recent subscriptions, and only the "Needs you" cards they can act on. The skeletons draw the same layout.
+- Customers and Marketing show only the sections a person may open; a link to a hidden section opens the first allowed one. With a single Marketing section the tab switcher is a spacer of the same height.
+- Client detail for staff: no Billing card, Go live, Edit, trash, CRM tab or member actions; onboarding shows a read-only summary; tasks, access requests, approval requests, call logging and notes stay.
+- "Create client from this lead" needs `leads.convert` and `clients.create` (staff: no button).
+- Blog without `blog.write` opens a read-only post (Preview only, View live and Share link). Pricing without `pricing.write` is read only; coupons share with `coupons.share`.
+- Team: Staff is the default role in the add sheet; Owner is offered only with `team.owners`; Remove only with `team.remove`, never on a locked env owner or yourself. Role badges and help come from the app's table: Owner gold, Manager neutral, Staff muted.
+- Inbox chips, notification settings rows and Android channels follow `inbox.<category>`; channels a person cannot read are deleted. Staff get "Get pushes for new leads?".
+- Search: screens follow the registry; records are filtered by the server before the top 20 are cut, so staff get a full page.
+- Deep links also map the web's /admin/blog/new (`blog.write`), /admin/blog/:id/preview, /admin/clients/templates and /admin/email/templates. Anything a person cannot open lands in the Inbox; the Inbox itself, when not allowed, sends them Home.

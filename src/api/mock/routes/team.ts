@@ -1,18 +1,28 @@
 import { env } from '@/lib/env';
 
 import type { Team, TeamMember, TeamRemoveResult } from '../../schemas/team';
+import type { Role } from '../../types';
 import { MOCK_ACCOUNTS, type MockAccount } from '../fixtures/staff';
 import { ENV_OWNER_ADDED_AT, SEEDED_SIGN_INS } from '../fixtures/team';
+import { requireCap } from '../permissions';
 import { fail, isEmail, mockId, notFound, nowIso, ok, str, type MockRoute } from '../router';
 
 /**
- * Mock routes for the "team" domain (owner only). The team is the mock staff
- * list itself, so a member added here can sign in with the temporary password,
- * and a removed member's next request answers 401.
+ * Mock routes for the "team" domain (owner decision 2026-10-03): the list
+ * needs `team.view` and adding `team.write` (owners and managers); making an
+ * owner also needs `team.owners` and removing needs `team.remove` (owners
+ * only: a manager gets 403 `owner_only`). Env owners are never removed (422
+ * `owner`, like the server). The team is the mock staff list itself, so a
+ * member added here can sign in with the temporary password, and a removed
+ * member's next request answers 401.
  */
 
 const NAME_MAX = 80;
 const PASSWORD_MIN = 8;
+const ROLES: readonly Role[] = ['owner', 'manager', 'staff'];
+const isRole = (value: unknown): value is Role => typeof value === 'string' && (ROLES as readonly string[]).includes(value);
+/** The server's order: env owners first, then owners, managers and staff. */
+const RANK: Record<Role, number> = { owner: 1, manager: 2, staff: 3 };
 
 /** Owners set by the server environment: the fixture owner, plus EXPO_PUBLIC_MOCK_OWNER_EMAILS. */
 const isEnvOwner = (account: MockAccount) => account.role === 'owner' && account.locked;
@@ -35,9 +45,9 @@ function extraEnvOwners(): TeamMember[] {
     .map((email) => ({ email, name: null, role: 'owner', lastSignInAt: null, addedAt: ENV_OWNER_ADDED_AT, envOwner: true }));
 }
 
-/** Env owners, then other owners, then managers; oldest first inside each group. */
+/** Env owners, then other owners, managers, then staff; oldest first inside each group. */
 function teamList(): Team {
-  const rank = (m: TeamMember) => (m.envOwner ? 0 : m.role === 'owner' ? 1 : 2);
+  const rank = (m: TeamMember) => (m.envOwner ? 0 : RANK[m.role]);
   return [...extraEnvOwners(), ...MOCK_ACCOUNTS.map(present)].sort(
     (a, b) => rank(a) - rank(b) || a.addedAt.localeCompare(b.addedAt),
   );
@@ -49,17 +59,23 @@ export const routes: MockRoute[] = [
   {
     method: 'GET',
     path: '/team',
-    ownerOnly: true,
     latency: 'fast',
-    handler: () => ok<Team>(teamList()),
+    handler: ({ user }) => requireCap(user, 'team.view') ?? ok<Team>(teamList()),
   },
   {
     method: 'POST',
     path: '/team',
-    ownerOnly: true,
     // Creates a sign-in account on the auth server.
     latency: 'slow',
-    handler: ({ body }) => {
+    handler: ({ body, user }) => {
+      const denied = requireCap(user, 'team.write');
+      if (denied) return denied;
+      // Managers add managers and staff; only an owner makes an owner.
+      if (body.role === 'owner') {
+        const notOwner = requireCap(user, 'team.owners');
+        if (notOwner) return notOwner;
+      }
+
       const errors: FieldError[] = [];
 
       let name: string | null = null;
@@ -83,9 +99,9 @@ export const routes: MockRoute[] = [
       }
 
       const role = body.role;
-      if (role !== 'owner' && role !== 'manager') errors.push({ code: 'role', message: 'Pick Owner or Manager.', field: 'role' });
+      if (!isRole(role)) errors.push({ code: 'role', message: 'Pick Owner, Manager or Staff.', field: 'role' });
 
-      if (errors.length > 0 || (role !== 'owner' && role !== 'manager')) {
+      if (errors.length > 0 || !isRole(role)) {
         const fields: Record<string, string> = {};
         for (const e of errors) fields[e.field] = e.message;
         const first = errors[0];
@@ -116,9 +132,11 @@ export const routes: MockRoute[] = [
   {
     method: 'DELETE',
     path: '/team/:email',
-    ownerOnly: true,
     latency: 'normal',
     handler: ({ params, user }) => {
+      // Owners only: a manager gets 403 `owner_only`, even for an env owner.
+      const denied = requireCap(user, 'team.remove');
+      if (denied) return denied;
       const email = params.email.trim().toLowerCase();
       if (env.mockOwnerEmails.includes(email)) return fail(422, 'owner', 'The owner cannot be removed.');
       const index = MOCK_ACCOUNTS.findIndex((a) => a.email === email);

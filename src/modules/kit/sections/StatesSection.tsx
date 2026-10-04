@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ApiError, MESSAGES } from '@/api/errors';
+import { FORBIDDEN_MESSAGE } from '@/auth/capabilities';
 import { Button } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
@@ -17,6 +18,8 @@ import { Caption, Demo } from '../kitLayout';
 import { failAfter } from '../sampleData';
 
 const OWNER_ONLY = new ApiError({ status: 403, code: 'owner_only', message: MESSAGES.ownerOnly });
+/** A capability other roles hold too (staff refused a manager's action). */
+const FORBIDDEN = new ApiError({ status: 403, code: 'forbidden', message: FORBIDDEN_MESSAGE });
 
 export function StatesDemos() {
   const online = useIsOnline();
@@ -54,6 +57,7 @@ export function StatesDemos() {
 
       <Demo title="Error, compact" note="For one failed card inside a working screen; shows the API's own message.">
         <ErrorState error={OWNER_ONLY} compact onRetry={() => failAfter(800, MESSAGES.ownerOnly)} />
+        <ErrorState error={FORBIDDEN} compact />
         <ErrorState message={MESSAGES.timeout} compact retrying onRetry={() => undefined} />
         <Caption>The second one is retrying from outside (a query already refetching).</Caption>
       </Demo>

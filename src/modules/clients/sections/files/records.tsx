@@ -50,7 +50,12 @@ export function RecordRow({ children, onPress, accessibilityLabel, accessibility
       </PressableScale>
     );
   }
-  return <View style={styles.row}>{children}</View>;
+  // Read only: one TalkBack stop that reads the whole row when a label is given.
+  return (
+    <View style={styles.row} accessible={accessibilityLabel !== undefined} accessibilityLabel={accessibilityLabel}>
+      {children}
+    </View>
+  );
 }
 
 /** Title on the left (wraps), status badge on the right: the badge always has text, never colour alone. */

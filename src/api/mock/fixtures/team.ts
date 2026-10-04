@@ -15,20 +15,26 @@ import { hoursAgo, minutesAgo } from '../router';
 export const SEEDED_SIGN_INS: Record<string, string> = {
   usr_owner01: minutesAgo(14),
   usr_mgr01: hoursAgo(26),
+  usr_staff01: hoursAgo(3),
 };
 
 /** When an env owner who is not a fixture account (EXPO_PUBLIC_MOCK_OWNER_EMAILS) was "added". */
 export const ENV_OWNER_ADDED_AT = '2025-11-03T15:12:44.513220Z';
 
-/** This domain's slice of the GET /meta fixture (composed in fixtures/meta.ts). */
+/**
+ * This domain's slice of the GET /meta fixture (composed in fixtures/meta.ts):
+ * the role copy of the owner decision of 2026-10-03, narrowest role first
+ * (docs/api-requests/team.md).
+ */
 export const metaFixture: TeamMeta = {
   teamRoles: [
     {
-      value: 'manager',
-      label: 'Manager',
-      help: 'Works on Overview, Inbox, Analytics, Leads, Free tools, Clients and Subscriptions',
-      tone: 'neutral',
+      value: 'staff',
+      label: 'Staff',
+      help: 'Leads and outreach, analytics and onboarding help. Marketing, pricing and coupons are view only. No money.',
+      tone: 'muted',
     },
-    { value: 'owner', label: 'Owner', help: 'Full access, can manage the team', tone: 'gold' },
+    { value: 'manager', label: 'Manager', help: 'Everything except removing team members or making owners.', tone: 'neutral' },
+    { value: 'owner', label: 'Owner', help: 'Full access, can manage the team.', tone: 'gold' },
   ],
 };

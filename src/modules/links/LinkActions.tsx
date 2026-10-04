@@ -6,6 +6,7 @@ import { deleteLink, linkKeys, setLinkActive } from '@/api/endpoints/links';
 import { overviewKeys } from '@/api/endpoints/overview';
 import { MESSAGES } from '@/api/errors';
 import type { ShortLink } from '@/api/schemas/links';
+import { useCan } from '@/auth/permissions';
 import { ConfirmSheet } from '@/components/ConfirmSheet';
 import { ActionSheet, type ActionSheetItem } from '@/components/sheet/ActionSheet';
 import { reportSubmitError } from '@/components/SubmitGroup';
@@ -13,7 +14,7 @@ import { haptics } from '@/design/haptics';
 import { useIsOnline } from '@/lib/connectivity';
 import { notice } from '@/lib/notice';
 
-import { LINK_COPY, removeLink, shareUrlOf, shortLinkText, upsertLink } from './logic';
+import { LINK_COPY, linkMenuActions, removeLink, shareUrlOf, shortLinkText, upsertLink } from './logic';
 import { copyLink, shareLink } from './share';
 
 /** Which sheet is open for which link: the actions menu, or a hold-to-confirm. */
@@ -67,10 +68,12 @@ export type LinkSheetsProps = {
  * The sheets behind a link's actions: the long-press / overflow menu (Copy
  * link, Share, QR code, Disable or Enable, Delete), the Disable confirm (it
  * returns 404 at once) and the Delete confirm with the brief's consequence.
- * Enabling needs no confirm: it only brings the link back.
+ * Enabling needs no confirm: it only brings the link back. Without
+ * `links.write` the menu is Copy link, Share and QR code only.
  */
 export function LinkSheets({ sheet, onChange, onDeleted }: LinkSheetsProps) {
   const online = useIsOnline();
+  const canWrite = useCan('links.write');
   const { setActive, remove } = useLinkMutations();
   const close = () => onChange(null);
 
@@ -87,23 +90,33 @@ export function LinkSheets({ sheet, onChange, onDeleted }: LinkSheetsProps) {
         reportSubmitError(error);
       });
     };
-    const items: ActionSheetItem[] = [
-      { label: 'Copy link', icon: Copy, onPress: () => void copyLink(url) },
-      { label: 'Share', icon: Share2, onPress: () => void shareLink(url) },
-      { label: 'QR code', icon: QrCode, hint: 'Full screen, to scan, save or share', onPress: () => openQr(link) },
-      link.active
-        ? {
+    const items = linkMenuActions(link, canWrite).map((action): ActionSheetItem => {
+      switch (action) {
+        case 'copy':
+          return { label: 'Copy link', icon: Copy, onPress: () => void copyLink(url) };
+        case 'share':
+          return { label: 'Share', icon: Share2, onPress: () => void shareLink(url) };
+        case 'qr':
+          return { label: 'QR code', icon: QrCode, hint: 'Full screen, to scan, save or share', onPress: () => openQr(link) };
+        case 'disable':
+          return {
             label: 'Disable link',
             icon: Ban,
             hint: offlineHint ?? 'It returns 404 at once',
             disabled: !online,
             onPress: () => onChange({ link, kind: 'disable' }),
-          }
-        : { label: 'Enable link', icon: Power, hint: offlineHint ?? 'It works again at once', disabled: !online, onPress: enable },
-      { label: 'Delete link', icon: Trash2, destructive: true, hint: offlineHint, disabled: !online, onPress: () => onChange({ link, kind: 'delete' }) },
-    ];
+          };
+        case 'enable':
+          return { label: 'Enable link', icon: Power, hint: offlineHint ?? 'It works again at once', disabled: !online, onPress: enable };
+        case 'delete':
+          return { label: 'Delete link', icon: Trash2, destructive: true, hint: offlineHint, disabled: !online, onPress: () => onChange({ link, kind: 'delete' }) };
+      }
+    });
     return <ActionSheet visible onClose={close} title={title} subtitle={link.label ?? link.destination} items={items} />;
   }
+
+  // The confirms are only reachable through write actions; never draw one without the capability.
+  if (!canWrite) return null;
 
   if (kind === 'disable') {
     return (

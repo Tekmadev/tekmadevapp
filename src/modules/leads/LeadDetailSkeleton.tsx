@@ -5,10 +5,10 @@ import { radius, space } from '@/design/tokens';
 
 /**
  * The lead while its first load runs (shown only after showAfterMs): badges,
- * the four contact actions, the main button and the Details card, at roughly
- * their real sizes.
+ * the four contact actions, the main button (left out for people who cannot
+ * create a client) and the Details card, at roughly their real sizes.
  */
-export function LeadDetailSkeleton({ withTitle }: { withTitle: boolean }) {
+export function LeadDetailSkeleton({ withTitle, withButton = true }: { withTitle: boolean; withButton?: boolean }) {
   return (
     <SkeletonGroup style={styles.wrap}>
       {withTitle ? null : <Skeleton width="62%" height={34} style={styles.title} />}
@@ -24,7 +24,7 @@ export function LeadDetailSkeleton({ withTitle }: { withTitle: boolean }) {
           </View>
         ))}
       </View>
-      <Skeleton height={48} style={styles.pill} />
+      {withButton ? <Skeleton height={48} style={styles.pill} /> : null}
       <Skeleton width="30%" height={22} style={styles.sectionTitle} />
       <Skeleton shape="block" height={232} style={styles.card} />
     </SkeletonGroup>

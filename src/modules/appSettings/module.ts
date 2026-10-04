@@ -8,14 +8,13 @@ export const appSettingsModule: ModuleManifest = {
   icon: SlidersHorizontal,
   group: 'more',
   moreSection: 'app',
-  ownerOnly: false,
   routes: ['settings/index', 'settings/notifications'],
   href: '/settings',
   summary: 'Appearance, notifications, security',
   searchable: {
     screens: [
       { title: 'App settings', keywords: ['theme', 'dark mode', 'appearance', 'security', 'biometric'], href: '/settings' },
-      { title: 'Notification settings', keywords: ['push', 'quiet'], href: '/settings/notifications' },
+      { title: 'Notification settings', keywords: ['push', 'quiet'], href: '/settings/notifications', capability: 'notifications.view' },
     ],
   },
 };

@@ -25,6 +25,9 @@ const asOwner = () => {
 const asManager = () => {
   token = `mock.usr_mgr01.${Date.now() + 3_600_000}`;
 };
+const asStaff = () => {
+  token = `mock.usr_staff01.${Date.now() + 3_600_000}`;
+};
 
 let keySeq = 0;
 const key = () => `test-links-${(keySeq += 1)}`;
@@ -71,11 +74,18 @@ describe('meta fragment', () => {
   });
 });
 
-describe('owner only', () => {
-  it('answers 403 to a manager on every links endpoint', async () => {
+describe('capabilities', () => {
+  it('lets staff read links and clicks, and refuses every write (links.write)', async () => {
+    asStaff();
+    expect((await getLinks()).length).toBeGreaterThan(0);
+    expect((await getLinkClicks({})).items.length).toBeGreaterThan(0);
+    const calls: Promise<unknown>[] = [createLink({ slug: 'nope' }, key()), setLinkActive('lnk_insta0001', false), deleteLink('lnk_insta0001')];
+    for (const call of calls) expect(await apiError(call)).toMatchObject({ status: 403, code: 'forbidden' });
+  });
+
+  it('lets a manager read', async () => {
     asManager();
-    const calls: Promise<unknown>[] = [getLinks(), createLink({ slug: 'nope' }, key()), setLinkActive('lnk_insta0001', false), deleteLink('lnk_insta0001'), getLinkClicks({})];
-    for (const call of calls) expect((await apiError(call)).status).toBe(403);
+    expect((await getLinks()).length).toBeGreaterThan(0);
   });
 });
 

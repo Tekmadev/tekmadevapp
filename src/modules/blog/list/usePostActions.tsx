@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { ExternalLink, EyeOff, Pencil, Send, Share2, Trash2 } from 'lucide-react-native';
+import { BookOpen, ExternalLink, EyeOff, Pencil, Send, Share2, Trash2 } from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
 import { Platform, Share } from 'react-native';
 
@@ -19,18 +19,20 @@ import {
   dropRow,
   liveUrl,
   patchRow,
+  postMenuActions,
   publishMessage,
   rowFromPost,
   statusBadge,
   trashMessage,
   unpublishMessage,
+  type PostAccess,
 } from './logic';
 
 type ConfirmKind = 'publish' | 'unpublish' | 'trash';
 type Confirming = { kind: ConfirmKind; row: PostRow };
 
 export type PostActions = {
-  /** Tap: the editor. */
+  /** Tap: the editor (the read-only post view without `blog.write`). */
   open: (row: PostRow) => void;
   /** Long press or "More actions": every action in a sheet. */
   more: (row: PostRow) => void;
@@ -44,12 +46,14 @@ export type PostActions = {
 
 const openEditor = (row: PostRow) => router.push({ pathname: '/blog/[id]', params: { id: row.id } });
 
-function shareLink(row: PostRow) {
-  const url = liveUrl(row.slug);
+/** The system share sheet with a post's live link. */
+export function sharePostUrl(url: string) {
   // iOS shares a URL as a link; Android only reads `message`.
   const content = Platform.OS === 'ios' ? { url } : { message: url };
   Share.share(content).catch(() => notice.err(MESSAGES.generic));
 }
+
+const shareLink = (row: PostRow) => sharePostUrl(liveUrl(row.slug));
 
 /**
  * Every write the Blog list offers, with its confirm step: publish and
@@ -57,8 +61,10 @@ function shareLink(row: PostRow) {
  * server, then puts the returned post in the cache (the row and the editor's
  * copy) and refetches the lists, since a status change moves a post between
  * filters. Trash also refetches categories (their post counts drop).
+ * The sheet only lists what `access` allows (postMenuActions): without
+ * `blog.write` it is Open, View live and Share link.
  */
-export function usePostActions(meta: BlogMeta | undefined): PostActions {
+export function usePostActions(meta: BlogMeta | undefined, access: PostAccess): PostActions {
   const queryClient = useQueryClient();
   const online = useIsOnline();
   const { colors } = useTheme();
@@ -117,22 +123,30 @@ export function usePostActions(meta: BlogMeta | undefined): PostActions {
   const menuItems = (row: PostRow): ActionSheetItem[] => {
     const live = row.status === 'published';
     const offlineHint = online ? undefined : MESSAGES.offline;
-    const items: ActionSheetItem[] = [
-      { label: 'Edit', icon: Pencil, onPress: () => openEditor(row) },
-      live
-        ? { label: 'Unpublish', icon: EyeOff, hint: offlineHint ?? 'Takes it off the site', disabled: !online, onPress: () => ask('unpublish', row) }
-        : { label: 'Publish', icon: Send, hint: offlineHint ?? 'Live on tekmadev.com', disabled: !online, onPress: () => ask('publish', row) },
-    ];
-    if (live) items.push({ label: 'View live', icon: ExternalLink, onPress: () => viewLive(row) });
-    items.push({
-      label: 'Share link',
-      icon: Share2,
-      disabled: !live,
-      hint: live ? undefined : BLOG_COPY.shareFirst,
-      onPress: () => shareLink(row),
+    return postMenuActions(row, access).map((action): ActionSheetItem => {
+      switch (action) {
+        case 'edit':
+          return { label: 'Edit', icon: Pencil, onPress: () => openEditor(row) };
+        case 'read':
+          return { label: 'Open', icon: BookOpen, hint: 'Read the post', onPress: () => openEditor(row) };
+        case 'unpublish':
+          return { label: 'Unpublish', icon: EyeOff, hint: offlineHint ?? 'Takes it off the site', disabled: !online, onPress: () => ask('unpublish', row) };
+        case 'publish':
+          return { label: 'Publish', icon: Send, hint: offlineHint ?? 'Live on tekmadev.com', disabled: !online, onPress: () => ask('publish', row) };
+        case 'viewLive':
+          return { label: 'View live', icon: ExternalLink, onPress: () => viewLive(row) };
+        case 'share':
+          return {
+            label: 'Share link',
+            icon: Share2,
+            disabled: !live,
+            hint: live ? undefined : access.canWrite ? BLOG_COPY.shareFirst : BLOG_COPY.shareNotLive,
+            onPress: () => shareLink(row),
+          };
+        case 'trash':
+          return { label: 'Move to trash', icon: Trash2, destructive: true, disabled: !online, hint: offlineHint, onPress: () => ask('trash', row) };
+      }
     });
-    items.push({ label: 'Move to trash', icon: Trash2, destructive: true, disabled: !online, hint: offlineHint, onPress: () => ask('trash', row) });
-    return items;
   };
 
   const confirm = async () => {

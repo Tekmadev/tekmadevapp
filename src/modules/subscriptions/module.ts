@@ -7,7 +7,7 @@ export const subscriptionsModule: ModuleManifest = {
   title: 'Subscriptions',
   icon: CreditCard,
   group: 'customers',
-  ownerOnly: false,
+  capability: 'billing.view',
   routes: ['(tabs)/customers'],
   href: { pathname: '/customers', params: { segment: 'subscriptions' } },
   searchable: {

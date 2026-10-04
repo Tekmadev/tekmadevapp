@@ -8,7 +8,7 @@ export const adsModule: ModuleManifest = {
   icon: Megaphone,
   group: 'more',
   moreSection: 'insights',
-  ownerOnly: true,
+  capability: 'ads.view',
   routes: ['ads/index', 'ads/[campaignId]'],
   href: '/ads',
   summary: 'Meta spend and what it brought in',

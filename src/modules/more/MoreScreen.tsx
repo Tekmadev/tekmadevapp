@@ -2,12 +2,13 @@ import { router, useFocusEffect } from 'expo-router';
 import { ChartLine, ChevronRight, LogOut, SlidersHorizontal, Smartphone, Wallet, type LucideIcon } from 'lucide-react-native';
 import { Fragment, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { type EntryExitAnimationFunction } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 
 import { sessionKeys } from '@/api/endpoints/session';
 import { ApiError, errorMessage } from '@/api/errors';
 import { queryClient } from '@/api/query';
 import type { Me } from '@/api/schemas/session';
+import { roleCopy } from '@/auth/permissions';
 import { session, useMe } from '@/auth/session';
 import { Avatar } from '@/components/Avatar';
 import { Badge } from '@/components/Badge';
@@ -38,9 +39,6 @@ const SECTION_ICONS: Record<MoreSection, LucideIcon> = {
   app: Smartphone,
 };
 
-/** enterPull, typed for `entering` (motion.ts declares a wider return type, as SignInScreen notes). */
-const pull = (index: number) => enterPull(index) as EntryExitAnimationFunction;
-
 /** Rows inside a card: the divider starts where the row text does. */
 const ROW_TEXT_INSET = 72;
 /** /me is refreshed on focus at most this often (role, flags and name rarely change). */
@@ -67,7 +65,7 @@ function refreshMeIfStale() {
   session.refreshMe().catch(() => undefined);
 }
 
-/** Pull to refresh: who am I, my role and the feature flags that shape this menu. */
+/** Pull to refresh: who am I, my role, capabilities and the feature flags that shape this menu. */
 async function refreshMe() {
   try {
     await session.refreshMe();
@@ -88,7 +86,7 @@ async function signOut() {
 
 /**
  * The More tab: the full menu (owner decision: no side drawer), generated from
- * the module registry and filtered by role and feature flags. A profile card
+ * the module registry and filtered by capability and feature flags. A profile card
  * on top, then Insights, Sales, Settings and App, then Sign out and the version.
  */
 export function MoreScreen() {
@@ -111,18 +109,18 @@ export function MoreScreen() {
     <>
       <Screen title="More" headerRight={<TabHeaderActions />} onRefresh={refreshMe} queryKey={sessionKeys.me}>
         {me ? (
-          <Animated.View entering={pull(0)} style={styles.block}>
+          <Animated.View entering={enterPull(0)} style={styles.block}>
             <ProfileCard me={me} />
           </Animated.View>
         ) : null}
 
         {sections.map((section, index) => (
-          <Animated.View key={section.id} entering={pull(first + index)} style={styles.block}>
+          <Animated.View key={section.id} entering={enterPull(first + index)} style={styles.block}>
             <MenuSection section={section} />
           </Animated.View>
         ))}
 
-        <Animated.View entering={pull(first + sections.length)} style={styles.block}>
+        <Animated.View entering={enterPull(first + sections.length)} style={styles.block}>
           <Card padded={false}>
             <ListRow
               title="Sign out"
@@ -157,8 +155,8 @@ export function MoreScreen() {
 
 function ProfileCard({ me }: { me: Me }) {
   const name = me.user.name?.trim() || null;
-  const owner = me.role === 'owner';
-  const roleLabel = owner ? 'Owner' : 'Manager';
+  // Owner gold, Manager neutral, Staff muted.
+  const { label: roleLabel, tone: roleTone } = roleCopy(me.role);
   const display = name ?? me.user.email;
 
   return (
@@ -180,7 +178,7 @@ function ProfileCard({ me }: { me: Me }) {
               {me.user.email}
             </Text>
           ) : null}
-          <Badge label={roleLabel} tone={owner ? 'gold' : 'neutral'} style={styles.role} />
+          <Badge label={roleLabel} tone={roleTone} style={styles.role} />
         </View>
         <Icon icon={ChevronRight} size={18} color="ink4" />
       </View>

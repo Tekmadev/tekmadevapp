@@ -9,7 +9,7 @@ import { clientKeys, clientsInfiniteQuery, clientsMetaQuery, type ClientListPara
 import { sessionKeys } from '@/api/endpoints/session';
 import { MESSAGES } from '@/api/errors';
 import type { ClientList, ClientListStatus, ClientRow } from '@/api/schemas/clients';
-import { useIsOwner } from '@/auth/session';
+import { useCan } from '@/auth/permissions';
 import { Chip } from '@/components/Chip';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
@@ -61,13 +61,14 @@ export type ClientsSegmentProps = {
 
 /**
  * The Clients list (brief 8.5, GET /clients): stat cards, search (server side,
- * debounced), status chips (Active by default), the owner's Test toggle, a
+ * debounced), status chips (Active by default), the Test toggle (only with
+ * `testdata.view`), a
  * quick filter from Home, and row cards with infinite scroll. A failed read is
  * an ErrorState with Retry, never an empty list; cached rows stay on screen
  * offline under the banner.
  */
 export function ClientsSegment({ chrome, view, onViewChange }: ClientsSegmentProps) {
-  const isOwner = useIsOwner();
+  const canTest = useCan('testdata.view');
   const online = useIsOnline();
   const reduceMotion = useReduceMotion();
 
@@ -90,7 +91,7 @@ export function ClientsSegment({ chrome, view, onViewChange }: ClientsSegmentPro
   const viewInfo = view ? VIEW_INFO[view] : null;
   // With a quick filter the list spans every status, like the Home count it came from.
   const status: ClientListStatus = statusChoice ?? (view ? 'all' : 'active');
-  const params: ClientListParams = { status, q, includeTest: isOwner && testOn, attention: viewInfo?.attention ?? null };
+  const params: ClientListParams = { status, q, includeTest: canTest && testOn, attention: viewInfo?.attention ?? null };
 
   const list = useInfiniteQuery({ ...clientsInfiniteQuery(params), placeholderData: keepPreviousData });
   const meta = useQuery(clientsMetaQuery());
@@ -146,7 +147,7 @@ export function ClientsSegment({ chrome, view, onViewChange }: ClientsSegmentPro
           returnKeyType="search"
           containerStyle={styles.search}
         />
-        {isOwner ? <Chip label="Test" icon={FlaskConical} role="checkbox" selected={testOn} onPress={() => setTestOn((on) => !on)} /> : null}
+        {canTest ? <Chip label="Test" icon={FlaskConical} role="checkbox" selected={testOn} onPress={() => setTestOn((on) => !on)} /> : null}
       </View>
       <FilterChips
         items={LIST_STATUS_CHIPS}

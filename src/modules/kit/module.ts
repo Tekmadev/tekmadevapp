@@ -8,7 +8,6 @@ export const kitModule: ModuleManifest = {
   icon: Shapes,
   group: 'more',
   moreSection: 'app',
-  ownerOnly: false,
   hidden: true,
   routes: ['kit'],
   href: '/kit',

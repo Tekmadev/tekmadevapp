@@ -10,6 +10,7 @@ import { ApiError, errorMessage, fieldErrors } from '@/api/errors';
 import { queryClient as appQueryClient } from '@/api/query';
 import type { Me } from '@/api/schemas/session';
 import { changePassword, hasPasswordErrors, PASSWORD_COPY, validateNewPassword, type PasswordErrors } from '@/auth/password';
+import { roleCopy } from '@/auth/permissions';
 import { session, useMe, useSession } from '@/auth/session';
 import { Avatar } from '@/components/Avatar';
 import { Badge } from '@/components/Badge';
@@ -27,8 +28,6 @@ import { enterPull, useReduceMotion } from '@/design/motion';
 import { space } from '@/design/tokens';
 import { connectivity } from '@/lib/connectivity';
 import { notice } from '@/lib/notice';
-import { useTeamRoles } from '@/modules/team/hooks';
-import { roleBadge } from '@/modules/team/logic';
 
 import { DISPLAY_NAME_MAX, isNameChanged, nameSavedMessage, nameToSave, PROFILE_COPY } from './logic';
 
@@ -100,13 +99,13 @@ function ProfileBody({ me }: { me: Me }) {
 }
 
 function IdentityCard({ me }: { me: Me }) {
-  const roles = useTeamRoles();
-  const badge = roleBadge(roles, me.role);
+  // Owner gold, Manager neutral, Staff muted (the app's role table, like the More screen).
+  const badge = roleCopy(me.role);
   const name = me.user.name?.trim() || null;
   const display = name ?? me.user.email;
 
   return (
-    <Card accessibilityLabel={[display, name ? me.user.email : null, badge.label].filter(Boolean).join(', ')}>
+    <Card accessibilityLabel={[display, name ? me.user.email : null, `Role: ${badge.label}`].filter(Boolean).join(', ')}>
       <View style={styles.identity} importantForAccessibility="no-hide-descendants">
         <Avatar name={display} size="lg" />
         <View style={styles.identityText}>

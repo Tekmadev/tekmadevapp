@@ -7,8 +7,9 @@ import type { HttpMethod, Page, Role } from '../types';
  * MockRoute objects; `index.ts` matches requests against all of them.
  *
  * Mock handlers must behave like the real server contract (section 11):
- * same envelope, same status codes, same error codes and messages, same owner-only
- * rules (403 for managers), cursors that must be passed back verbatim, and
+ * same envelope, same status codes, same error codes and messages, the same
+ * capability checks (403 `owner_only` or `forbidden`, see ./permissions.ts),
+ * cursors that must be passed back verbatim, and
  * mutations that return the full updated entity and change the in-memory data so
  * lists and details stay consistent.
  */
@@ -30,9 +31,8 @@ export type MockContext = {
   /** Parsed JSON body (unknown shape: validate what you read). */
   body: Record<string, unknown>;
   headers: Record<string, string>;
+  /** The caller. What they may do is decided per route with requireCap (./permissions.ts), never by role. */
   user: MockStaff;
-  role: Role;
-  isOwner: boolean;
 };
 
 export type MockResult = { status: number; body: unknown };
@@ -44,8 +44,6 @@ export type MockRoute = {
   method: HttpMethod;
   /** Path pattern below the API base, e.g. "/clients/:id/calls". */
   path: string;
-  /** 403 "owner only" for managers, exactly like the server. */
-  ownerOnly?: boolean;
   /** Set false only for routes that work without a session (none in v1). */
   auth?: boolean;
   latency?: Latency;

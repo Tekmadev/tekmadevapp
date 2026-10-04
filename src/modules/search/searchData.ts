@@ -4,8 +4,7 @@ import { BadgePercent, Building2, FileText, Link2, Mail, UserRound, type LucideI
 
 import { search, sessionKeys } from '@/api/endpoints/session';
 import type { SearchResultType } from '@/api/schemas/session';
-import type { Role } from '@/api/types';
-import { mapAdminUrl, toHref } from '@/lib/deeplinks';
+import { mapAdminUrl, toHref, type LinkViewer } from '@/lib/deeplinks';
 
 import { MORE_SECTIONS, moduleById, searchableScreens } from '../registry';
 import type { ModuleGroup, ModuleManifest, Visibility } from '../types';
@@ -40,8 +39,8 @@ function screenSubtitle(m: ModuleManifest, title: string): string {
 }
 
 /**
- * Screens this person can open, from the registry (already filtered by role and
- * feature flags). Hidden modules (Kit, Assistant) never appear.
+ * Screens this person can open, from the registry (already filtered by
+ * capability and feature flags). Hidden modules (Kit, Assistant) never appear.
  */
 export function searchScreensFor(v: Visibility): SearchScreen[] {
   const seen = new Set<string>();
@@ -101,10 +100,11 @@ export function searchQuery(q: string) {
 }
 
 /**
- * A record's web admin path as an app route. The mapper's table only produces
- * routes that exist under app/ (a deep link test checks every one), and sends
- * anything unknown or owner-only (for a manager) to the Inbox.
+ * A record's web admin path as an app route, for this viewer (their profile or
+ * capability list). The mapper's table only produces routes that exist under
+ * app/ (a deep link test checks every one), and sends anything unknown or not
+ * allowed to the Inbox.
  */
-export function adminHref(url: string, role: Role | null): Href {
-  return toHref(mapAdminUrl(url, role)) as Href;
+export function adminHref(url: string, viewer: LinkViewer): Href {
+  return toHref(mapAdminUrl(url, viewer)) as Href;
 }

@@ -63,8 +63,9 @@ import {
 
 /**
  * The clients domain through the real mock transport: envelope, schemas, paging,
- * owner-only rules, the documented error codes and messages, and writes that
- * show up in the next read.
+ * who may do what (capabilities: managers do nearly everything, staff help with
+ * onboarding and never see money), the documented error codes and messages,
+ * and writes that show up in the next read.
  */
 
 let token = '';
@@ -73,6 +74,9 @@ const asOwner = () => {
 };
 const asManager = () => {
   token = `mock.usr_mgr01.${Date.now() + 3_600_000}`;
+};
+const asStaff = () => {
+  token = `mock.usr_staff01.${Date.now() + 3_600_000}`;
 };
 
 let keySeq = 0;
@@ -224,13 +228,18 @@ describe('GET /clients', () => {
     expect([bad.status, bad.code]).toEqual([400, 'status']);
   });
 
-  it('shows test clients only to owners who ask', async () => {
+  it('shows test clients only to people with testdata.view who ask', async () => {
     expect((await allRows({ status: 'all' })).some((r) => r.isTest)).toBe(false);
     const withTest = await allRows({ status: 'all', includeTest: true });
     expect(withTest.find((r) => r.id === TEST_CLIENT)?.isTest).toBe(true);
 
     asManager();
-    expect((await allRows({ status: 'all', includeTest: true })).some((r) => r.isTest)).toBe(false);
+    expect((await allRows({ status: 'all', includeTest: true })).find((r) => r.id === TEST_CLIENT)?.isTest).toBe(true);
+
+    asStaff();
+    const staff = await allRows({ status: 'all', includeTest: true });
+    expect(staff.length).toBeGreaterThan(0);
+    expect(staff.some((r) => r.isTest)).toBe(false);
   });
 });
 
@@ -256,10 +265,19 @@ describe('GET /clients/:id', () => {
     expect(b.activity.nextCursor).toEqual(expect.any(String));
   });
 
-  it('never sends the CRM mapping key to a manager', async () => {
+  it('sends the CRM mapping key and billing only with clients.crm and clients.billing', async () => {
     asManager();
-    const b = await bundle(ACME);
-    expect('crmLocation' in b).toBe(false);
+    const manager = await bundle(ACME);
+    expect(manager.crmLocation?.locationId).toEqual(expect.any(String));
+    expect(manager.billing?.subscription?.status).toBe('active');
+
+    asStaff();
+    const staff = await bundle(ACME);
+    expect('crmLocation' in staff).toBe(false);
+    // Money stays on the server: null, never a made-up record.
+    expect(staff.billing).toBeNull();
+    expect(staff.calls.length).toBe(manager.calls.length);
+    expect(staff.onboarding?.tasks.length).toBe(manager.onboarding?.tasks.length);
   });
 
   it('pages the activity timeline and ends on a short page', async () => {
@@ -288,10 +306,12 @@ describe('GET /clients/:id', () => {
     expect(items.some((a) => a.kind === 'note')).toBe(true);
   });
 
-  it('answers 404 for unknown clients, and for test clients to managers', async () => {
+  it('answers 404 for unknown clients, and for test clients without testdata.view', async () => {
     expect((await apiError(getClient('cl_nobody'))).status).toBe(404);
     await bundle(TEST_CLIENT);
     asManager();
+    await bundle(TEST_CLIENT);
+    asStaff();
     expect((await apiError(getClient(TEST_CLIENT))).status).toBe(404);
   });
 });
@@ -585,10 +605,10 @@ describe('calls and the guarantee', () => {
 });
 
 describe('PUT /clients/:id/crm-location', () => {
-  it('is owner only', async () => {
-    asManager();
+  it('needs clients.crm (staff are refused)', async () => {
+    asStaff();
     const e = await apiError(saveCrmLocation(ACME, { locationId: 'aCmEpLuMb7Hx2KqW9rTz', calendarIds: [] }));
-    expect(e.status).toBe(403);
+    expect([e.status, e.code, e.message]).toEqual([403, 'forbidden', 'Your role cannot do that.']);
   });
 
   it('returns each documented mapping error', async () => {
@@ -688,8 +708,10 @@ describe('activity', () => {
 });
 
 describe('checklist templates', () => {
-  it('are owner only', async () => {
+  it('need clients.templates: managers may, staff are refused', async () => {
     asManager();
+    expect((await getOnboardingTemplates()).length).toBeGreaterThan(0);
+    asStaff();
     expect((await apiError(getOnboardingTemplates())).status).toBe(403);
     expect((await apiError(saveOnboardingTemplate('welcome-call', { title: 'x', stage: 'welcome', owner: 'tekmadev', kind: 'meeting' }))).status).toBe(403);
     expect((await apiError(deleteOnboardingTemplate('welcome-call'))).status).toBe(403);
@@ -736,8 +758,8 @@ describe('checklist templates', () => {
 });
 
 describe('DELETE /clients/:id', () => {
-  it('is owner only, and a trashed client disappears everywhere', async () => {
-    asManager();
+  it('needs clients.trash, and a trashed client disappears everywhere', async () => {
+    asStaff();
     expect((await apiError(deleteClient('cl_waterdown_d'))).status).toBe(403);
 
     asOwner();
@@ -747,5 +769,72 @@ describe('DELETE /clients/:id', () => {
     expect((await apiError(getClient('cl_waterdown_d'))).status).toBe(404);
     expect((await allRows({ status: 'all' })).some((r) => r.id === 'cl_waterdown_d')).toBe(false);
     expect((await getClients({})).stats.leads).toBe(1);
+  });
+});
+
+describe('staff (capabilities, owner decision 2026-10-03)', () => {
+  it('are refused every client write they do not hold, with "Your role cannot do that." and nothing changed', async () => {
+    const before = await bundle(ACME);
+    const run = before.onboarding?.run;
+    const intake = before.intake;
+    const grant = before.accessGrants[0];
+    const call = before.calls[0];
+    const member = before.members[0];
+    if (!run || !intake || !grant || !call || !member) throw new Error('ACME should have a run, an intake, a grant, a call and a member');
+
+    asStaff();
+    const refused = [
+      createClient({ businessName: 'Staff Made Co', email: 'hello@staffmade.test', sendInvite: false }, key()),
+      updateClient(ACME, { legalName: 'Nope Inc.' }),
+      goLive(ACME),
+      updateOnboarding(run.id, { blocked: false }),
+      completeOnboarding(run.id),
+      reviewIntake(intake.id),
+      updateAccessGrant(grant.id, { status: 'verified' }),
+      reviewCall(call.id, true),
+      updateCall(call.id, { notes: 'Edited by staff.' }),
+      addMember(ACME, { email: 'staff-added@acmeplumbing.test' }, key()),
+      updateMember(member.id, { status: 'disabled' }),
+      sendMemberLink(member.id),
+    ];
+    for (const attempt of refused) {
+      const e = await apiError(attempt);
+      expect([e.status, e.code, e.message]).toEqual([403, 'forbidden', 'Your role cannot do that.']);
+    }
+
+    asOwner();
+    const after = await bundle(ACME);
+    expect(after.client).toEqual(before.client);
+    expect(after.onboarding?.run).toEqual(before.onboarding?.run);
+    expect(after.intake).toEqual(before.intake);
+    expect(after.calls).toEqual(before.calls);
+    expect(after.members).toEqual(before.members);
+  });
+
+  it('may help with onboarding: tasks, access and approval requests, booked calls and activity', async () => {
+    const run = (await bundle(ACME)).onboarding?.run;
+    if (!run) throw new Error('expected a run');
+
+    asStaff();
+    const added = await addOnboardingTask(run.id, { title: 'Send the yard photos', owner: 'client', kind: 'general', required: false, stage: 'intake' }, key());
+    expect(zTaskResult.safeParse(added).success).toBe(true);
+    expect((await updateTaskStatus(added.task.id, 'done')).task.status).toBe('done');
+
+    const grant = await requestAccess(ACME, { provider: 'google_analytics', note: 'Add staff@tekmadev.test as a viewer.' }, key());
+    expect(zAccessGrant.safeParse(grant).success).toBe(true);
+
+    const approval = await requestApproval(ACME, { title: 'Service area banner', kind: 'design' }, key());
+    expect(zApproval.safeParse(approval).success).toBe(true);
+
+    const logged = await logCall(ACME, { contactName: 'Marie Tremblay', phone: '+16135550188', status: 'confirmed' }, key());
+    expect(zCallResult.safeParse(logged).success).toBe(true);
+
+    const note = await postClientActivity(ACME, { kind: 'note', text: 'Asked for the yard photos.' }, key());
+    expect(zActivity.safeParse(note).success).toBe(true);
+
+    const b = await bundle(ACME);
+    expect(b.billing).toBeNull();
+    // Several writes can land in the same millisecond, so only check the note is on the timeline.
+    expect(b.activity.items.some((a) => a.id === note.id)).toBe(true);
   });
 });

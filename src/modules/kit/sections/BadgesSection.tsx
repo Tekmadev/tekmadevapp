@@ -1,6 +1,7 @@
-import { CircleCheck, Globe, Star, Zap } from 'lucide-react-native';
+import { CircleCheck, Globe, Lock, Zap } from 'lucide-react-native';
 import { useState } from 'react';
 
+import { ROLE_COPY, ROLES } from '@/auth/capabilities';
 import { Badge } from '@/components/Badge';
 import { Chip } from '@/components/Chip';
 import { FilterChips, type FilterChipItem } from '@/components/FilterChips';
@@ -78,9 +79,16 @@ export function BadgesDemos() {
         </Wrap>
         <Wrap>
           <Badge label="Live" tone="ok" icon={CircleCheck} size="md" />
-          <Badge label="Owner" tone="gold" icon={Star} size="md" />
           <Badge label="Blocked" tone="signal" size="md" dot />
-          <Badge label="Manager" size="md" />
+        </Wrap>
+      </Demo>
+
+      <Demo title="Role badges" note="Owner gold, Manager neutral, Staff muted. An owner set by the server shows a lock.">
+        <Wrap>
+          {ROLES.map((role) => (
+            <Badge key={role} label={ROLE_COPY[role].label} tone={ROLE_COPY[role].tone} />
+          ))}
+          <Badge label={ROLE_COPY.owner.label} tone={ROLE_COPY.owner.tone} icon={Lock} />
         </Wrap>
       </Demo>
 

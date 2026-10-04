@@ -38,6 +38,8 @@ type RecentLeadsProps = {
   now: Date;
   /** When the overview was fetched: the age the seeded lead detail gets. */
   updatedAt: number;
+  /** "View all" and the rows open Leads and the lead (`leads.view`); without it the rows are read only. */
+  canOpen: boolean;
 };
 
 /**
@@ -45,7 +47,7 @@ type RecentLeadsProps = {
  * campaign. A row opens the lead; the overview already holds the full lead, so
  * the detail opens from cache while it refreshes.
  */
-export function RecentLeads({ leads, meta, now, updatedAt }: RecentLeadsProps) {
+export function RecentLeads({ leads, meta, now, updatedAt, canOpen }: RecentLeadsProps) {
   const queryClient = useQueryClient();
   const rows = leads.slice(0, RECENT_ROWS);
 
@@ -58,7 +60,7 @@ export function RecentLeads({ leads, meta, now, updatedAt }: RecentLeadsProps) {
   return (
     <Section
       title="Recent leads"
-      action={{ onPress: () => router.push({ pathname: '/customers', params: { segment: 'leads' } }), accessibilityHint: 'Opens Leads' }}
+      action={canOpen ? { onPress: () => router.push({ pathname: '/customers', params: { segment: 'leads' } }), accessibilityHint: 'Opens Leads' } : undefined}
     >
       <Card padded={false}>
         {rows.length === 0 ? (
@@ -77,8 +79,8 @@ export function RecentLeads({ leads, meta, now, updatedAt }: RecentLeadsProps) {
                   avatar={{ name: title }}
                   badge={{ label: status.label, tone: status.tone }}
                   background="surface"
-                  onPress={() => open(lead)}
-                  accessibilityHint="Opens the lead"
+                  onPress={canOpen ? () => open(lead) : undefined}
+                  accessibilityHint={canOpen ? 'Opens the lead' : undefined}
                 />
               </Fragment>
             );
@@ -93,18 +95,28 @@ type RecentSubscriptionsProps = {
   subscriptions: readonly Subscription[];
   meta: Meta | undefined;
   now: Date;
+  /** "View all" opens Subscriptions (`billing.view`); without it the section has no action. */
+  canOpenAll: boolean;
 };
 
-/** "Recent subscriptions": when, email, tier, status badge and amount (integer cents, never rounded). */
-export function RecentSubscriptions({ subscriptions, meta, now }: RecentSubscriptionsProps) {
+/**
+ * "Recent subscriptions": when, email, tier, status badge and amount (integer
+ * cents, never rounded). Home renders it only for people with
+ * `overview.revenue`; staff never get the rows from the server.
+ */
+export function RecentSubscriptions({ subscriptions, meta, now, canOpenAll }: RecentSubscriptionsProps) {
   const rows = subscriptions.slice(0, RECENT_ROWS);
   return (
     <Section
       title="Recent subscriptions"
-      action={{
-        onPress: () => router.push({ pathname: '/customers', params: { segment: 'subscriptions' } }),
-        accessibilityHint: 'Opens Subscriptions',
-      }}
+      action={
+        canOpenAll
+          ? {
+              onPress: () => router.push({ pathname: '/customers', params: { segment: 'subscriptions' } }),
+              accessibilityHint: 'Opens Subscriptions',
+            }
+          : undefined
+      }
     >
       <Card padded={false}>
         {rows.length === 0 ? (

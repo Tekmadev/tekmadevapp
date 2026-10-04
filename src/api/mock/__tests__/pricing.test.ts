@@ -14,7 +14,7 @@ import {
 /**
  * Pricing routes through the real mock transport: GET /pricing, plan and
  * product saves (Stripe sync, the partial Stripe failure), sales tax, the
- * `input` validation code and owner-only 403s. GET /pricing is not paged.
+ * `input` validation code and capability 403s. GET /pricing is not paged.
  */
 
 let token: string | null = null;
@@ -24,6 +24,9 @@ const asOwner = () => {
 };
 const asManager = () => {
   token = tokenFor('usr_mgr01');
+};
+const asStaff = () => {
+  token = tokenFor('usr_staff01');
 };
 
 beforeAll(() => {
@@ -75,23 +78,28 @@ describe('GET /pricing', () => {
     expect(parsed.data?.pricingProductStatuses.map((s) => s.value)).toEqual(['selling', 'paused', 'not_in_stripe']);
   });
 
-  it('is owner only', async () => {
-    asManager();
+  it('lets staff read and refuses their saves (pricing.write)', async () => {
+    asStaff();
+    expect(plan(await getPricing(), 'grow').monthly).toBe(99_700);
     for (const call of [
-      getPricing(),
       updatePlan('grow', { monthly: 100 }),
       updateProduct('webline', { active: false }),
       setSalesTax('live', false),
     ]) {
       const e = await apiError(call);
-      expect([e.status, e.code, e.message]).toEqual([403, 'owner_only', 'That section is owner only.']);
+      expect([e.status, e.code]).toEqual([403, 'forbidden']);
     }
     asOwner();
-    // Nothing changed for the manager's attempts.
+    // Nothing changed for the refused attempts.
     const data = await getPricing();
     expect(plan(data, 'grow').monthly).toBe(99_700);
     expect(data.products[0].active).toBe(true);
     expect(data.salesTax.setting.live).toBe(true);
+  });
+
+  it('lets a manager read', async () => {
+    asManager();
+    expect(plan(await getPricing(), 'grow').monthly).toBe(99_700);
   });
 });
 

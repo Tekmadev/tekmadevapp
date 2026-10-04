@@ -1,3 +1,5 @@
+import { ROLE_CAPABILITIES } from '@/auth/capabilities';
+
 import type { Visibility } from '../../types';
 import { adminHref, RESULT_TYPES, searchScreensFor, suggestedScreens } from '../searchData';
 
@@ -6,12 +8,20 @@ jest.mock('lucide-react-native', () => new Proxy({}, { get: (_target, name) => (
 
 const OWNER: Visibility = { role: 'owner', features: [] };
 const MANAGER: Visibility = { role: 'manager', features: [] };
+const STAFF: Visibility = { role: 'staff', features: [] };
 
 const titlesFor = (v: Visibility) => searchScreensFor(v).map((s) => s.title);
 
-/** Owner-only modules' screens (brief section 1: managers never see these, not even in search). */
-const OWNER_ONLY = [
-  'Ads',
+/** Every screen search can jump to (hidden modules excluded). */
+const EVERY_SCREEN = [
+  'Overview',
+  'Inbox',
+  'Clients',
+  'New client',
+  'Leads',
+  'Free tools',
+  'Subscriptions',
+  'One-time orders',
   'Blog',
   'Blog categories',
   'Email',
@@ -20,8 +30,27 @@ const OWNER_ONLY = [
   'Links',
   'CRM sync',
   'Contact inspector',
+  'Analytics',
+  'Ads',
   'Pricing',
   'Coupons',
+  'Loader',
+  'Test mode',
+  'Team',
+  'Profile',
+  'App settings',
+  'Notification settings',
+];
+
+/** Screens staff never see, not even in search (owner decision 2026-10-03). */
+const NOT_FOR_STAFF = [
+  'New client',
+  'Subscriptions',
+  'One-time orders',
+  'Subscribers',
+  'CRM sync',
+  'Contact inspector',
+  'Ads',
   'Loader',
   'Test mode',
   'Team',
@@ -29,16 +58,24 @@ const OWNER_ONLY = [
 
 describe('searchScreensFor', () => {
   it('gives owners every screen, including the brief examples', () => {
-    const titles = titlesFor(OWNER);
-    expect(titles).toEqual(expect.arrayContaining(['Pricing', 'Loader', ...OWNER_ONLY]));
+    expect([...titlesFor(OWNER)].sort()).toEqual([...EVERY_SCREEN].sort());
   });
 
-  it('never gives managers an owner-only screen', () => {
-    const titles = titlesFor(MANAGER);
-    for (const t of OWNER_ONLY) expect(titles).not.toContain(t);
-    expect(titles).toEqual(
-      expect.arrayContaining(['Overview', 'Inbox', 'Clients', 'New client', 'Leads', 'Free tools', 'Subscriptions', 'Analytics', 'Profile']),
-    );
+  it('gives managers the same screens as owners', () => {
+    expect(titlesFor(MANAGER)).toEqual(titlesFor(OWNER));
+  });
+
+  it('gives staff leads, clients, analytics and view-only marketing and sales, nothing else', () => {
+    const titles = titlesFor(STAFF);
+    for (const t of NOT_FOR_STAFF) expect(titles).not.toContain(t);
+    expect([...titles].sort()).toEqual(EVERY_SCREEN.filter((t) => !NOT_FOR_STAFF.includes(t)).sort());
+  });
+
+  it("follows the server's capability list over the role", () => {
+    const titles = titlesFor({ role: 'staff', features: [], capabilities: ['leads.view', 'team.view'] });
+    expect(titles).toEqual(expect.arrayContaining(['Leads', 'Team', 'Profile', 'App settings']));
+    expect(titles).not.toContain('Clients');
+    expect(titles).not.toContain('Pricing');
   });
 
   it('gives nothing when nobody is signed in', () => {
@@ -69,23 +106,27 @@ describe('searchScreensFor', () => {
 describe('suggestedScreens', () => {
   it('picks the usual jumps this person can open', () => {
     expect(suggestedScreens(searchScreensFor(OWNER)).map((s) => s.title)).toEqual(['Inbox', 'New client', 'Pricing', 'Coupons']);
-    expect(suggestedScreens(searchScreensFor(MANAGER)).map((s) => s.title)).toEqual(['Inbox', 'New client', 'Leads', 'App settings']);
+    expect(suggestedScreens(searchScreensFor(MANAGER)).map((s) => s.title)).toEqual(['Inbox', 'New client', 'Pricing', 'Coupons']);
+    expect(suggestedScreens(searchScreensFor(STAFF)).map((s) => s.title)).toEqual(['Inbox', 'Pricing', 'Coupons', 'Leads']);
   });
 });
 
 describe('adminHref', () => {
+  const staff = ROLE_CAPABILITIES.staff;
+
   it('maps record urls to app routes', () => {
-    expect(adminHref('/admin/clients/cl_123', 'manager')).toBe('/clients/cl_123');
-    expect(adminHref('/admin/clients/cl_123#calls', 'owner')).toBe('/clients/cl_123?section=calls');
-    expect(adminHref('/admin/leads/ld_9', 'manager')).toBe('/leads/ld_9');
-    expect(adminHref('/admin/blog/post_1', 'owner')).toBe('/blog/post_1');
-    expect(adminHref('/admin/coupons', 'owner')).toBe('/coupons');
+    expect(adminHref('/admin/clients/cl_123', staff)).toBe('/clients/cl_123');
+    expect(adminHref('/admin/clients/cl_123#calls', ROLE_CAPABILITIES.owner)).toBe('/clients/cl_123?section=calls');
+    expect(adminHref('/admin/leads/ld_9', staff)).toBe('/leads/ld_9');
+    expect(adminHref('/admin/blog/post_1', staff)).toBe('/blog/post_1');
+    expect(adminHref('/admin/coupons', { role: 'manager' })).toBe('/coupons');
   });
 
-  it('sends owner-only and unknown urls to the Inbox', () => {
-    expect(adminHref('/admin/coupons', 'manager')).toBe('/inbox');
-    expect(adminHref('/admin/somewhere-new', 'owner')).toBe('/inbox');
-    expect(adminHref('not a url', 'owner')).toBe('/inbox');
+  it('sends what this person may not open, and unknown urls, to the Inbox', () => {
+    expect(adminHref('/admin/email/subscribers/es_1', staff)).toBe('/inbox');
+    expect(adminHref('/admin/coupons', ['leads.view'])).toBe('/inbox');
+    expect(adminHref('/admin/somewhere-new', ROLE_CAPABILITIES.owner)).toBe('/inbox');
+    expect(adminHref('not a url', ROLE_CAPABILITIES.owner)).toBe('/inbox');
   });
 });
 

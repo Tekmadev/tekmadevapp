@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { Bell } from 'lucide-react-native';
 import { StyleSheet, View } from 'react-native';
 
+import { useCan } from '@/auth/permissions';
 import { Icon } from '@/components/Icon';
 import { badgeCountLabel, tabAccessibilityLabel } from '@/components/parts/logic';
 import { PressableScale } from '@/components/PressableScale';
@@ -16,14 +17,17 @@ import { inboxSummaryQuery, usePushLive } from './queries';
  * The bell in the top right of every tab header (owner decision: the Inbox is
  * not a tab). The unread count shows as a gold pill, red when a critical item
  * is unread, "99+" above 99. The summary query polls every 45s in the foreground.
+ * Without `notifications.view` there is no bell (and no polling).
  */
 export function InboxBellButton() {
   const { colors } = useTheme();
-  const summary = useQuery(inboxSummaryQuery({ pushLive: usePushLive() }));
+  const canView = useCan('notifications.view');
+  const summary = useQuery({ ...inboxSummaryQuery({ pushLive: usePushLive() }), enabled: canView });
   const unread = summary.data?.unread ?? 0;
   const critical = (summary.data?.criticalUnread ?? 0) > 0;
   const label = badgeCountLabel(unread);
 
+  if (!canView) return null;
   return (
     <PressableScale
       accessibilityLabel={tabAccessibilityLabel('Inbox', unread)}

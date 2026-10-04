@@ -58,6 +58,7 @@ import {
   type ClientRecord,
   type RunRecord,
 } from '../fixtures/clients';
+import { mockCan, requireCap } from '../permissions';
 import { bool, fail, isEmail, matches, mockId, notFound, nowIso, num, ok, paginate, str, torontoDate, type MockContext, type MockResult, type MockRoute } from '../router';
 
 /**
@@ -65,8 +66,14 @@ import { bool, fail, isEmail, matches, mockId, notFound, nowIso, num, ok, pagina
  *
  * Every write changes the in-memory fixtures and returns the full entity, and
  * the derived numbers (stage, progress, pace, review badges) are recomputed on
- * read, so the list, the detail bundle and Home always agree. Test clients are
- * invisible to managers (404), exactly like the rest of test mode.
+ * read, so the list, the detail bundle and Home always agree.
+ *
+ * Every route checks its capability first (before validation and before a
+ * 404), like the server's route wrapper: reads need `clients.view`, each write
+ * its own `clients.*` capability (src/api/mock/permissions.ts). Test clients
+ * need `testdata.view` (404 otherwise, exactly like the rest of test mode). The
+ * bundle leaves out what the caller may not see: `billing` is null without
+ * `clients.billing`, and the `crmLocation` key is absent without `clients.crm`.
  */
 
 const REQUIRED = 'Business name and a valid email are required.';
@@ -211,10 +218,13 @@ type Actor = Activity['actor'];
 const actorOf = (ctx: MockContext): Actor => ({ kind: 'staff', name: ctx.user.name, email: ctx.user.email });
 const nameOf = (ctx: MockContext) => ctx.user.name ?? ctx.user.email;
 
-/** A live (not deleted) client the caller may see: managers never see test clients. */
+/** Test clients, test rows: only with `testdata.view`. */
+const seesTest = (ctx: MockContext) => mockCan(ctx.user, 'testdata.view');
+
+/** A live (not deleted) client the caller may see: test clients only with `testdata.view`. */
 function findClient(ctx: MockContext, id: string | undefined): ClientRecord | undefined {
   const c = id ? clientById(id) : undefined;
-  if (!c || (c.isTest && !ctx.isOwner)) return undefined;
+  if (!c || (c.isTest && !seesTest(ctx))) return undefined;
   return c;
 }
 
@@ -280,11 +290,13 @@ export const routes: MockRoute[] = [
     path: '/clients',
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.view');
+      if (denied) return denied;
       const status = zClientListStatus.safeParse(ctx.query.status ?? 'active');
       if (!status.success) return fail(400, 'status', 'Unknown status filter.');
       const attention = ctx.query.attention === undefined ? null : zClientAttention.safeParse(ctx.query.attention);
       if (attention && !attention.success) return fail(400, 'attention', 'Unknown attention filter.');
-      const includeTest = ctx.isOwner && (ctx.query.test === '1' || ctx.query.test === 'true');
+      const includeTest = seesTest(ctx) && (ctx.query.test === '1' || ctx.query.test === 'true');
       const filter = status.data;
       const rows = visibleClients(includeTest)
         .filter((c) => {
@@ -307,6 +319,8 @@ export const routes: MockRoute[] = [
     path: '/clients',
     latency: 'slow',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.create');
+      if (denied) return denied;
       const { body } = ctx;
       const check = new Check();
       const businessName = str(body.businessName)?.trim() ?? '';
@@ -325,8 +339,8 @@ export const routes: MockRoute[] = [
       const actor = actorOf(ctx);
       const existing = clientsDb.clients.find((c) => !c.deletedAt && c.primaryEmail.toLowerCase() === email);
 
-      if (existing && existing.isTest && !ctx.isOwner) {
-        // Never reveal or touch a test client for a manager: treat the email as taken.
+      if (existing && existing.isTest && !seesTest(ctx)) {
+        // Never reveal or touch a test client for someone without test data: treat the email as taken.
         return fail(409, 'email_taken', 'Another client already uses that email.', { email: 'Another client already uses that email.' });
       }
 
@@ -406,8 +420,13 @@ export const routes: MockRoute[] = [
     path: '/clients/:id',
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.view');
+      if (denied) return denied;
       const c = findClient(ctx, ctx.params.id);
-      return c ? ok(bundleFor(c, ctx.isOwner)) : clientMissing();
+      if (!c) return clientMissing();
+      const bundle = bundleFor(c, mockCan(ctx.user, 'clients.crm'));
+      // Money stays on the server for anyone without clients.billing (staff): null, never a made-up record.
+      return ok(mockCan(ctx.user, 'clients.billing') ? bundle : { ...bundle, billing: null });
     },
   },
   {
@@ -415,6 +434,8 @@ export const routes: MockRoute[] = [
     path: '/clients/:id',
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.edit');
+      if (denied) return denied;
       const c = findClient(ctx, ctx.params.id);
       if (!c) return clientMissing();
       const { body } = ctx;
@@ -520,9 +541,10 @@ export const routes: MockRoute[] = [
   {
     method: 'DELETE',
     path: '/clients/:id',
-    ownerOnly: true,
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.trash');
+      if (denied) return denied;
       const c = findClient(ctx, ctx.params.id);
       if (!c) return clientMissing();
       const at = nowIso();
@@ -537,6 +559,8 @@ export const routes: MockRoute[] = [
     path: '/clients/:id/go-live',
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.go_live');
+      if (denied) return denied;
       const c = findClient(ctx, ctx.params.id);
       if (!c) return clientMissing();
       if (c.status === 'live') return fail(409, 'already_live', 'This client is already live.');
@@ -580,6 +604,8 @@ export const routes: MockRoute[] = [
     path: '/onboardings/:id',
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.onboarding');
+      if (denied) return denied;
       const found = findRun(ctx, ctx.params.id);
       if (!found) return notFound('That onboarding run');
       const { run, client: c } = found;
@@ -637,6 +663,8 @@ export const routes: MockRoute[] = [
     path: '/onboardings/:id/complete',
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.onboarding');
+      if (denied) return denied;
       const found = findRun(ctx, ctx.params.id);
       if (!found) return notFound('That onboarding run');
       if (found.run.completedAt) return fail(409, 'run_complete', RUN_COMPLETE);
@@ -649,6 +677,8 @@ export const routes: MockRoute[] = [
     path: '/onboardings/:id/tasks',
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.tasks.create');
+      if (denied) return denied;
       const found = findRun(ctx, ctx.params.id);
       if (!found) return notFound('That onboarding run');
       const { run, client: c } = found;
@@ -707,6 +737,8 @@ export const routes: MockRoute[] = [
     path: '/tasks/:id',
     latency: 'fast',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.tasks.status');
+      if (denied) return denied;
       const found = findTask(ctx, ctx.params.id);
       if (!found) return notFound('That task');
       const { task, run, client: c } = found;
@@ -735,6 +767,8 @@ export const routes: MockRoute[] = [
     path: '/intakes/:id/review',
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.intake.review');
+      if (denied) return denied;
       const found = owned(ctx, clientsDb.intakes, ctx.params.id);
       if (!found) return notFound('That intake');
       const { row: intake, client: c } = found;
@@ -765,6 +799,8 @@ export const routes: MockRoute[] = [
     path: '/clients/:id/access-grants',
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.access.request');
+      if (denied) return denied;
       const c = findClient(ctx, ctx.params.id);
       if (!c) return clientMissing();
       const { body } = ctx;
@@ -803,6 +839,8 @@ export const routes: MockRoute[] = [
     path: '/access-grants/:id',
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.access.update');
+      if (denied) return denied;
       const found = owned(ctx, clientsDb.accessGrants, ctx.params.id);
       if (!found) return notFound('That access request');
       const { row: grant, client: c } = found;
@@ -843,6 +881,8 @@ export const routes: MockRoute[] = [
     path: '/assets/:id/sign',
     latency: 'fast',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.view');
+      if (denied) return denied;
       const found = owned(ctx, clientsDb.assets, ctx.params.id);
       if (!found) return notFound('That file');
       const signed = signAsset(found.row);
@@ -858,6 +898,8 @@ export const routes: MockRoute[] = [
     path: '/clients/:id/approvals',
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.approvals.request');
+      if (denied) return denied;
       const c = findClient(ctx, ctx.params.id);
       if (!c) return clientMissing();
       const { body } = ctx;
@@ -924,6 +966,8 @@ export const routes: MockRoute[] = [
     path: '/clients/:id/calls',
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.calls.log');
+      if (denied) return denied;
       const c = findClient(ctx, ctx.params.id);
       if (!c) return clientMissing();
       const { body } = ctx;
@@ -977,6 +1021,8 @@ export const routes: MockRoute[] = [
     path: '/calls/:id',
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.calls.review');
+      if (denied) return denied;
       const found = owned(ctx, clientsDb.calls, ctx.params.id);
       if (!found) return notFound('That call');
       const { row: call, client: c } = found;
@@ -1017,6 +1063,8 @@ export const routes: MockRoute[] = [
     path: '/calls/:id/review',
     latency: 'fast',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.calls.review');
+      if (denied) return denied;
       const found = owned(ctx, clientsDb.calls, ctx.params.id);
       if (!found) return notFound('That call');
       const { row: call, client: c } = found;
@@ -1043,9 +1091,10 @@ export const routes: MockRoute[] = [
   {
     method: 'PUT',
     path: '/clients/:id/crm-location',
-    ownerOnly: true,
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.crm');
+      if (denied) return denied;
       const c = findClient(ctx, ctx.params.id);
       if (!c) return clientMissing();
       const { body } = ctx;
@@ -1111,6 +1160,8 @@ export const routes: MockRoute[] = [
     path: '/clients/:id/members',
     latency: 'slow',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.members');
+      if (denied) return denied;
       const c = findClient(ctx, ctx.params.id);
       if (!c) return clientMissing();
       const { body } = ctx;
@@ -1152,6 +1203,8 @@ export const routes: MockRoute[] = [
     path: '/members/:id',
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.members');
+      if (denied) return denied;
       const found = owned(ctx, clientsDb.members, ctx.params.id);
       if (!found) return notFound('That person');
       const { row: member, client: c } = found;
@@ -1185,6 +1238,8 @@ export const routes: MockRoute[] = [
     path: '/members/:id/invite',
     latency: 'slow',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.members');
+      if (denied) return denied;
       const found = owned(ctx, clientsDb.members, ctx.params.id);
       if (!found) return notFound('That person');
       const { row: member, client: c } = found;
@@ -1210,6 +1265,8 @@ export const routes: MockRoute[] = [
     path: '/clients/:id/activity',
     latency: 'fast',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.view');
+      if (denied) return denied;
       const c = findClient(ctx, ctx.params.id);
       return c ? ok(paginate(activityOf(c.id), ctx.query)) : clientMissing();
     },
@@ -1219,6 +1276,8 @@ export const routes: MockRoute[] = [
     path: '/clients/:id/activity',
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.activity.write');
+      if (denied) return denied;
       const c = findClient(ctx, ctx.params.id);
       if (!c) return clientMissing();
       const { body } = ctx;
@@ -1247,21 +1306,22 @@ export const routes: MockRoute[] = [
     },
   },
 
-  /* ----- checklist templates (owner) ----- */
+  /* ----- checklist templates (clients.templates) ----- */
   {
     method: 'GET',
     path: '/onboarding-templates',
-    ownerOnly: true,
     latency: 'fast',
-    handler: () =>
+    handler: (ctx) =>
+      requireCap(ctx.user, 'clients.templates') ??
       ok([...clientsDb.templates].sort((a, b) => stageIndex(a.stage) - stageIndex(b.stage) || a.sortOrder - b.sortOrder || a.key.localeCompare(b.key))),
   },
   {
     method: 'PUT',
     path: '/onboarding-templates/:key',
-    ownerOnly: true,
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.templates');
+      if (denied) return denied;
       const key = ctx.params.key ?? '';
       if (!TEMPLATE_KEY.test(key) || key.length > 60) {
         return fail(400, 'key', 'Use lowercase letters, numbers and dashes for the key.', { key: 'Use lowercase letters, numbers and dashes for the key.' });
@@ -1339,9 +1399,10 @@ export const routes: MockRoute[] = [
   {
     method: 'DELETE',
     path: '/onboarding-templates/:key',
-    ownerOnly: true,
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'clients.templates');
+      if (denied) return denied;
       const index = clientsDb.templates.findIndex((t) => t.key === ctx.params.key);
       if (index < 0) return notFound('That template');
       clientsDb.templates.splice(index, 1);

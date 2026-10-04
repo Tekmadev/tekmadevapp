@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 
 import type { ClientRow } from '@/api/schemas/clients';
+import { useCan } from '@/auth/permissions';
 import { ClientsSegment } from '@/modules/clients/ClientsSegment';
 import { toClientsView, type ClientsView } from '@/modules/clients/list/views';
 import { LogCallPicker } from '@/modules/clients/LogCallPicker';
@@ -23,10 +24,12 @@ const pickClient = (client: ClientRow) => {
  * is derived from it and closing just clears the param.
  */
 export function ClientsSegmentHost({ chrome, params }: SegmentProps) {
+  // The quick action is offered only with clients.calls.log; an old link without it just shows the list.
+  const canLogCall = useCan('clients.calls.log');
   return (
     <>
       <ClientsSegment chrome={chrome} view={toClientsView(params.view)} onViewChange={setView} />
-      <LogCallPicker visible={params.action === 'log-call'} onClose={closePicker} onPick={pickClient} />
+      <LogCallPicker visible={canLogCall && params.action === 'log-call'} onClose={closePicker} onPick={pickClient} />
     </>
   );
 }

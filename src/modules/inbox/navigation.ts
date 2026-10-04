@@ -1,8 +1,7 @@
 import { router, type Href } from 'expo-router';
 
 import type { NotificationItem } from '@/api/schemas/notifications';
-import type { Role } from '@/api/types';
-import { INBOX, mapAdminUrl, toHref, type AppLink } from '@/lib/deeplinks';
+import { INBOX, mapAdminUrl, toHref, type AppLink, type LinkViewer } from '@/lib/deeplinks';
 
 /** App routes that are tabs: going there switches tab instead of stacking a second tab bar. */
 const TAB_PATHS: ReadonlySet<string> = new Set(['/', '/customers', '/analytics', '/marketing', '/more']);
@@ -16,12 +15,14 @@ function pathnameOf(href: Href): string {
 
 /**
  * Where a row's action_url leads in the app, or null when the Inbox itself is
- * the answer (no link, an unknown path, or a page this role cannot open): the
- * detail sheet shows the row instead of pushing the Inbox onto itself.
+ * the answer (no link, an unknown path, or a page this person cannot open):
+ * the detail sheet shows the row instead of pushing the Inbox onto itself.
+ * `viewer` is the GET /me profile (its capability list wins), a capability
+ * list, or a bare role (its fallback row).
  */
-export function destinationOf(item: Pick<NotificationItem, 'action_url'>, role: Role | null): AppLink | null {
+export function destinationOf(item: Pick<NotificationItem, 'action_url'>, viewer: LinkViewer): AppLink | null {
   if (!item.action_url) return null;
-  const link = mapAdminUrl(item.action_url, role);
+  const link = mapAdminUrl(item.action_url, viewer);
   return link.pathname === INBOX.pathname ? null : link;
 }
 

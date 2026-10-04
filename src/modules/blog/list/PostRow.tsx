@@ -15,7 +15,7 @@ import { enterPull, STAGGER_MAX } from '@/design/motion';
 import { useTheme } from '@/design/theme';
 import { layout, space, type Tone } from '@/design/tokens';
 
-import { rowMetaLine, rowSpokenLabel, statusBadge } from './logic';
+import { postSwipeActions, rowMetaLine, rowSpokenLabel, statusBadge, type PostAccess } from './logic';
 
 type SwipeAction = { label: string; icon: LucideIcon; tone: Tone; onAction: () => void };
 
@@ -25,12 +25,14 @@ export type PostRowProps = {
   now: Date;
   /** Swipes and their TalkBack actions are writes: none while offline. */
   online: boolean;
+  /** `blog.write` (publish swipe, the editor) and `blog.trash` (trash swipe). Staff get neither: no swipes. */
+  access: PostAccess;
   /** Position in the list: the first rows are pulled into place with a stagger. */
   index: number;
   /** No enter animation (reduced motion, or rows that arrive with a later page). */
   still: boolean;
   onPress: (row: Row) => void;
-  /** The actions sheet (Edit, Publish, View live, Share link, Move to trash). */
+  /** The actions sheet (Edit or Open, Publish, View live, Share link, Move to trash: what `access` allows). */
   onMore: (row: Row) => void;
   onTogglePublish: (row: Row) => void;
   onTrash: (row: Row) => void;
@@ -43,9 +45,11 @@ const SWIPE_FIRE = 0.4;
  * One post on the Blog list (brief 8.11): title, then the status, "Featured"
  * and "AI draft" badges, then category, author and the update time. Tap opens
  * the editor. Swipe right publishes or unpublishes, swipe left moves it to the
- * trash (both confirm with a hold). Long press opens every action.
+ * trash (both confirm with a hold). Long press opens every action. Without
+ * `blog.write` the tap opens the read-only post view and there is no swipe;
+ * long press keeps View live and Share link.
  */
-export const PostRow = memo(function PostRow({ row, meta, now, online, index, still, onPress, onMore, onTogglePublish, onTrash }: PostRowProps) {
+export const PostRow = memo(function PostRow({ row, meta, now, online, access, index, still, onPress, onMore, onTogglePublish, onTrash }: PostRowProps) {
   const { colors } = useTheme();
   const swipeRef = useRef<SwipeableMethods>(null);
   const [width, setWidth] = useState(0);
@@ -56,13 +60,14 @@ export const PostRow = memo(function PostRow({ row, meta, now, online, index, st
   }, [row.id]);
 
   const status = statusBadge(meta, row.status);
-  const live = row.status === 'published';
-  const publishAction: SwipeAction | undefined = online
-    ? live
+  const swipes = postSwipeActions(row, access, online);
+  const publishAction: SwipeAction | undefined =
+    swipes.publish === 'unpublish'
       ? { label: 'Unpublish', icon: EyeOff, tone: 'neutral', onAction: () => onTogglePublish(row) }
-      : { label: 'Publish', icon: Send, tone: 'gold', onAction: () => onTogglePublish(row) }
-    : undefined;
-  const trashAction: SwipeAction | undefined = online
+      : swipes.publish === 'publish'
+        ? { label: 'Publish', icon: Send, tone: 'gold', onAction: () => onTogglePublish(row) }
+        : undefined;
+  const trashAction: SwipeAction | undefined = swipes.trash
     ? { label: 'Move to trash', icon: Trash2, tone: 'signal', onAction: () => onTrash(row) }
     : undefined;
 
@@ -94,7 +99,7 @@ export const PostRow = memo(function PostRow({ row, meta, now, online, index, st
       onLongPress={() => onMore(row)}
       pressedScale={0.985}
       accessibilityLabel={rowSpokenLabel(row, meta, now)}
-      accessibilityHint="Opens the editor"
+      accessibilityHint={access.canWrite ? 'Opens the editor' : 'Opens the post'}
       accessibilityActions={a11yActions}
       onAccessibilityAction={onA11yAction}
       style={[styles.row, { backgroundColor: colors.bg }]}

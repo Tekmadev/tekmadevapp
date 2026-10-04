@@ -5,6 +5,7 @@ import { View } from 'react-native';
 
 import { toolKeys, toolSubmissionQuery } from '@/api/endpoints/tools';
 import { ApiError, MESSAGES } from '@/api/errors';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { ErrorState } from '@/components/ErrorState';
 import { Screen } from '@/components/Screen';
 import { Section } from '@/components/Section';
@@ -29,9 +30,18 @@ import { displayName, firstParam } from './logic';
  *
  * The row from a cached list fills the top straight away; only the sections
  * wait for the detail. A 404 means the submission is gone: it says so even
- * when something was cached.
+ * when something was cached. Needs `tools.view` (an old link opened by
+ * someone without it goes back with the server's message).
  */
 export function SubmissionDetailScreen() {
+  return (
+    <RequireCapability cap="tools.view">
+      <SubmissionDetail />
+    </RequireCapability>
+  );
+}
+
+function SubmissionDetail() {
   const params = useLocalSearchParams<{ id: string }>();
   const id = firstParam(params.id);
   const queryClient = useQueryClient();

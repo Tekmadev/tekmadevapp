@@ -5,8 +5,8 @@ import {
   type NotificationCategory,
   type NotificationSeverity,
 } from '@/api/schemas/notifications';
-import type { Role } from '@/api/types';
-import { INBOX, mapAdminUrl, type AppLink } from '@/lib/deeplinks';
+import { can, type Capability, type CapabilityHolder } from '@/auth/capabilities';
+import { INBOX, mapAdminUrl, type AppLink, type LinkViewer } from '@/lib/deeplinks';
 import { CATEGORY_LABELS } from '@/modules/inbox/logic';
 
 /**
@@ -24,12 +24,16 @@ import { CATEGORY_LABELS } from '@/modules/inbox/logic';
 export const PUSH_COPY = {
   offerTitle: 'Get pushes for new leads and sales?',
   offerBody: 'Your phone tells you the moment a lead, a sale or a problem comes in. Pick the categories in Settings, Notifications.',
+  /** For someone who gets no Sales pushes (staff). */
+  offerTitleNoSales: 'Get pushes for new leads?',
+  offerBodyNoSales: 'Your phone tells you the moment a lead comes in or a client needs you. Pick the categories in Settings, Notifications.',
   turnOn: 'Turn on',
   turningOn: 'Turning on',
   notNow: 'Not now',
   turnedOn: 'Push is on for this phone.',
   off: 'Push is off on this phone',
   offHelp: 'Allow notifications to get a push for new leads, sales and problems. The Inbox keeps everything either way.',
+  offHelpNoSales: 'Allow notifications to get a push for new leads and client updates. The Inbox keeps everything either way.',
   askHint: 'Asks to allow notifications',
   settingsHint: 'Opens this app in your phone settings',
   settingUp: 'Setting up push on this phone',
@@ -44,6 +48,32 @@ export const PUSH_COPY = {
   fallbackTitle: 'New notification',
   mockLocalTest: 'Mock API: this phone also shows a local test now, in the shade and here.',
 } as const;
+
+/* ------------------------------------------------------------------ */
+/* Who gets which categories                                           */
+/* ------------------------------------------------------------------ */
+
+/** The capability that lets someone read a notification category ("inbox.leads"). */
+export function categoryCapability(category: NotificationCategory): Capability {
+  return `inbox.${category}`;
+}
+
+/**
+ * The notification categories someone may read, in the brief's order: one
+ * `inbox.<category>` capability each (owners and managers: all seven; staff:
+ * Leads and Clients). The server only pushes these, so only these get an
+ * Android channel and a row in Settings, Notifications.
+ */
+export function readableCategories(holder: CapabilityHolder): NotificationCategory[] {
+  return NOTIFICATION_CATEGORIES.filter((category) => can(holder, categoryCapability(category)));
+}
+
+/** The push pitch, worded for what this person actually gets: Sales pushes or not. */
+export function pushPitch(categories: readonly NotificationCategory[]): { title: string; body: string; offHelp: string } {
+  return categories.includes('sales')
+    ? { title: PUSH_COPY.offerTitle, body: PUSH_COPY.offerBody, offHelp: PUSH_COPY.offHelp }
+    : { title: PUSH_COPY.offerTitleNoSales, body: PUSH_COPY.offerBodyNoSales, offHelp: PUSH_COPY.offHelpNoSales };
+}
 
 /* ------------------------------------------------------------------ */
 /* Android channels                                                    */
@@ -95,6 +125,11 @@ export const PUSH_CHANNELS: readonly PushChannel[] = NOTIFICATION_CATEGORIES.fla
     critical: true,
   },
 ]);
+
+/** The channels for these categories (each with its critical variant), in the brief's order. */
+export function channelsFor(categories: readonly NotificationCategory[]): PushChannel[] {
+  return PUSH_CHANNELS.filter((channel) => categories.includes(channel.category));
+}
 
 /* ------------------------------------------------------------------ */
 /* Payload                                                             */
@@ -161,12 +196,13 @@ export type PushRoute =
   | { kind: 'inbox'; link: AppLink; detailId: string | null };
 
 /**
- * Where a tap goes (brief sections 7 and 9). The link is mapped for this
- * role; a missing, unknown or forbidden link opens the Inbox with the row's
- * detail sheet, like tapping a row without a destination in the Inbox.
+ * Where a tap goes (brief sections 7 and 9). The link is mapped for the
+ * signed-in person's capabilities (their GET /me); a missing, unknown or
+ * forbidden link opens the Inbox with the row's detail sheet, like tapping a
+ * row without a destination in the Inbox.
  */
-export function pushRoute(payload: PushPayload, role: Role | null): PushRoute {
-  const link = payload.url ? mapAdminUrl(payload.url, role) : INBOX;
+export function pushRoute(payload: PushPayload, viewer: LinkViewer): PushRoute {
+  const link = payload.url ? mapAdminUrl(payload.url, viewer) : INBOX;
   if (link.pathname !== INBOX.pathname) return { kind: 'screen', link };
   return { kind: 'inbox', link, detailId: rowIdOf(payload) };
 }

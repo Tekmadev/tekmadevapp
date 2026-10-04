@@ -53,7 +53,7 @@ beforeEach(() => {
     getAccessToken: jest.fn<Promise<string | null>, []>(async () => 'token-1'),
     refresh: jest.fn<Promise<string | null>, []>(async () => 'token-2'),
     sessionEnded: jest.fn<void, [string]>(),
-    ownerOnly: jest.fn<void, []>(),
+    ownerOnly: jest.fn<void, [string]>(),
     upgradeRequired: jest.fn<void, []>(),
   };
   setAuthBridge(bridge);
@@ -191,7 +191,18 @@ describe('apiRequest: 403', () => {
     expect(e.isOwnerOnly).toBe(true);
     expect(e.message).toBe('That section is owner only.');
     expect(bridge.ownerOnly).toHaveBeenCalledTimes(1);
+    expect(bridge.ownerOnly).toHaveBeenCalledWith('owner_only');
     expect(bridge.refresh).not.toHaveBeenCalled();
+  });
+
+  it('a role limit (forbidden) keeps its own copy and tells the bridge its code', async () => {
+    respond(failBody(403, 'forbidden', 'Your role cannot do that.'));
+    const e = await failure(apiRequest('DELETE', '/leads/ld_1'));
+    expect(e.status).toBe(403);
+    expect(e.isForbidden).toBe(true);
+    expect(e.isOwnerOnly).toBe(false);
+    expect(e.message).toBe('Your role cannot do that.');
+    expect(bridge.ownerOnly).toHaveBeenCalledWith('forbidden');
   });
 
   it('rawAuthErrors skips the bridge and keeps the server code (sign-in shows its own copy)', async () => {

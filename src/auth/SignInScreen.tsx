@@ -6,6 +6,7 @@ import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { create } from 'zustand';
 
+import type { Role } from '@/api/types';
 import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
 import { Grain } from '@/components/Grain';
@@ -121,7 +122,7 @@ export function SignInScreen() {
     },
   });
 
-  const fillMockAccount = (role: 'owner' | 'manager') => {
+  const fillMockAccount = (role: Role) => {
     // Lazy, like mockAuth: fixture data stays out of the startup path.
     import('@/api/mock/fixtures/staff')
       .then(({ MOCK_ACCOUNTS }) => {
@@ -238,6 +239,7 @@ export function SignInScreen() {
               <View style={styles.chips}>
                 <Chip label="Owner" role="button" disabled={form.busy} onPress={() => fillMockAccount('owner')} />
                 <Chip label="Manager" role="button" disabled={form.busy} onPress={() => fillMockAccount('manager')} />
+                <Chip label="Staff" role="button" disabled={form.busy} onPress={() => fillMockAccount('staff')} />
               </View>
             </Animated.View>
           ) : null}

@@ -2,10 +2,12 @@ import { formatCents } from '@/lib/money';
 
 import type { PlanUpdateResult, Pricing, PricingPlan, PricingProduct, ProductUpdateResult, SalesTax } from '../../schemas/pricing';
 import { pricingState, productStatus, resortPlans, salesTaxSnapshot, STRIPE_FAIL_CENTS } from '../fixtures/pricing';
+import { requireCap } from '../permissions';
 import { bool, fail, notFound, ok, type MockResult, type MockRoute } from '../router';
 
 /**
- * Mock routes for the "pricing" domain (owner only). Saving a price "creates a
+ * Mock routes for the "pricing" domain (`pricing.view` reads, `pricing.write`
+ * saves, requireCap in each handler like the server). Saving a price "creates a
  * new Stripe price and archives the old one"; saving STRIPE_FAIL_CENTS ($999.99)
  * makes the fake Stripe refuse that one price, so the partial failure copy can
  * be seen. Every write returns the full updated entity.
@@ -76,16 +78,16 @@ export const routes: MockRoute[] = [
   {
     method: 'GET',
     path: '/pricing',
-    ownerOnly: true,
     latency: 'normal',
-    handler: () => ok(snapshot()),
+    handler: ({ user }) => requireCap(user, 'pricing.view') ?? ok(snapshot()),
   },
   {
     method: 'PATCH',
     path: '/pricing/plans/:id',
-    ownerOnly: true,
     latency: 'slow',
-    handler: ({ params, body }) => {
+    handler: ({ params, body, user }) => {
+      const denied = requireCap(user, 'pricing.write');
+      if (denied) return denied;
       const plan = pricingState.plans.find((p) => p.id === params.id);
       if (!plan) return notFound('That plan');
 
@@ -128,9 +130,10 @@ export const routes: MockRoute[] = [
   {
     method: 'PATCH',
     path: '/pricing/products/:id',
-    ownerOnly: true,
     latency: 'slow',
-    handler: ({ params, body }) => {
+    handler: ({ params, body, user }) => {
+      const denied = requireCap(user, 'pricing.write');
+      if (denied) return denied;
       const product = pricingState.products.find((p) => p.id === params.id);
       if (!product) return notFound('That product');
 
@@ -214,9 +217,10 @@ export const routes: MockRoute[] = [
   {
     method: 'PUT',
     path: '/pricing/sales-tax',
-    ownerOnly: true,
     latency: 'slow',
-    handler: ({ body }) => {
+    handler: ({ body, user }) => {
+      const denied = requireCap(user, 'pricing.write');
+      if (denied) return denied;
       const mode = body.mode;
       const on = bool(body.on);
       if ((mode !== 'live' && mode !== 'test') || on === undefined) {

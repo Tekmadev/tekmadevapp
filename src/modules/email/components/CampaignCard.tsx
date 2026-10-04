@@ -25,6 +25,8 @@ export type CampaignCardProps = {
   /** The Pause / Resume call is running for this campaign. */
   toggling: boolean;
   online: boolean;
+  /** `email.campaigns.write`: the Active switch and Delete. Without it the card only reads. */
+  canWrite: boolean;
   onToggle: (campaign: Campaign, active: boolean) => void;
   onDelete: (campaign: Campaign) => void;
   /** Position in the list: the first cards are pulled into place with a stagger. */
@@ -48,8 +50,10 @@ function Count({ label, value }: { label: string; value: number }) {
  * sends (this app never sends email). Name, status badge (active gold, paused
  * muted), the key in mono (tap to copy), subject, note, opens and clicks, the
  * Pause / Resume switch with its note, and Delete (HoldToConfirm upstream).
+ * Without `email.campaigns.write` the switch and Delete are left out (the
+ * badge still says Active or Paused).
  */
-export const CampaignCard = memo(function CampaignCard({ campaign, meta, toggling, online, onToggle, onDelete, index, still }: CampaignCardProps) {
+export const CampaignCard = memo(function CampaignCard({ campaign, meta, toggling, online, canWrite, onToggle, onDelete, index, still }: CampaignCardProps) {
   const badge = campaignStatusBadge(meta, campaign.active);
   // While the call runs the switch already shows where it is going, with the loader on the thumb.
   const shown = toggling ? !campaign.active : campaign.active;
@@ -93,27 +97,31 @@ export const CampaignCard = memo(function CampaignCard({ campaign, meta, togglin
           <Count label="Clicks" value={campaign.clicks} />
         </View>
 
-        <Divider style={styles.divider} />
-        <SwitchRow
-          label="Active"
-          description={EMAIL_COPY.pauseNote}
-          value={shown}
-          pending={toggling}
-          disabled={!online}
-          onValueChange={(next) => onToggle(campaign, next)}
-        />
-        <View style={styles.actions}>
-          <Button
-            label="Delete"
-            icon={Trash2}
-            variant="ghost"
-            size="sm"
-            disabled={!online || toggling}
-            accessibilityLabel={`Delete ${campaign.name}`}
-            accessibilityHint={online ? 'Asks you to hold to confirm' : 'You are offline'}
-            onPress={() => onDelete(campaign)}
-          />
-        </View>
+        {canWrite ? (
+          <>
+            <Divider style={styles.divider} />
+            <SwitchRow
+              label="Active"
+              description={EMAIL_COPY.pauseNote}
+              value={shown}
+              pending={toggling}
+              disabled={!online}
+              onValueChange={(next) => onToggle(campaign, next)}
+            />
+            <View style={styles.actions}>
+              <Button
+                label="Delete"
+                icon={Trash2}
+                variant="ghost"
+                size="sm"
+                disabled={!online || toggling}
+                accessibilityLabel={`Delete ${campaign.name}`}
+                accessibilityHint={online ? 'Asks you to hold to confirm' : 'You are offline'}
+                onPress={() => onDelete(campaign)}
+              />
+            </View>
+          </>
+        ) : null}
       </Card>
     </Animated.View>
   );

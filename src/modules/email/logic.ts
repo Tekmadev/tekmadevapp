@@ -24,6 +24,8 @@ import { finalizeSlug, slugifyLive } from '@/lib/text';
 
 export const EMAIL_COPY = {
   campaignsEmpty: "No campaigns yet. Add one, then use its key in the template's tracking links.",
+  /** Without `email.campaigns.write`: nothing to add. */
+  campaignsEmptyReadOnly: 'No campaigns yet.',
   engagementEmpty: 'No opens or clicks yet. They appear here as soon as a sent email is opened or a link is clicked.',
   pauseNote: 'Pausing is a label only. Opens and clicks are still counted.',
   deleteCampaign: 'Counters reset if you add this key again. Past opens and clicks stay on record.',

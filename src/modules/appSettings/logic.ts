@@ -1,6 +1,5 @@
 import {
   NOTIFICATION_CATEGORIES,
-  OWNER_ONLY_CATEGORIES,
   type NotificationCategory,
   type NotificationPref,
   type NotificationPrefs,
@@ -92,7 +91,8 @@ export function testPushMessage(sent: number, toThisPhone: boolean): string {
 
 export type PrefField = 'muted' | 'push';
 
-export type CategoryMeta = { value: NotificationCategory; label: string; ownerOnly: boolean };
+/** A category from GET /meta: its order and label (who may read it comes from `inbox.<category>`). */
+export type CategoryMeta = { value: NotificationCategory; label: string };
 
 /** The fallback when GET /meta has not loaded: the brief's names. */
 const FALLBACK_LABELS: Record<NotificationCategory, string> = {
@@ -107,18 +107,22 @@ const FALLBACK_LABELS: Record<NotificationCategory, string> = {
 
 /**
  * The rows to show, in the order GET /meta lists the categories (else the
- * brief's order), labelled from meta (else the server's row label). Managers
- * never get Audience or Team, even if a row slipped through.
+ * brief's order), labelled from meta (else the server's row label). Only the
+ * categories this person may read (`inbox.<category>`, see readableCategories
+ * in src/modules/push/logic.ts), even if the server sent another row.
  */
-export function prefRows(prefs: NotificationPrefs, meta: readonly CategoryMeta[] | undefined, isOwner: boolean): NotificationPref[] {
+export function prefRows(
+  prefs: NotificationPrefs,
+  meta: readonly CategoryMeta[] | undefined,
+  readable: readonly NotificationCategory[],
+): NotificationPref[] {
   const order: NotificationCategory[] = meta?.length ? meta.map((m) => m.value) : [...NOTIFICATION_CATEGORIES];
   for (const c of NOTIFICATION_CATEGORIES) if (!order.includes(c)) order.push(c);
-  const ownerOnly = (c: NotificationCategory) => meta?.find((m) => m.value === c)?.ownerOnly ?? OWNER_ONLY_CATEGORIES.includes(c);
   const rows: NotificationPref[] = [];
   for (const category of order) {
     const pref = prefs.find((p) => p.category === category);
     if (!pref) continue;
-    if (!isOwner && ownerOnly(category)) continue;
+    if (!readable.includes(category)) continue;
     const label = meta?.find((m) => m.value === category)?.label || pref.label || FALLBACK_LABELS[category];
     rows.push({ ...pref, label });
   }

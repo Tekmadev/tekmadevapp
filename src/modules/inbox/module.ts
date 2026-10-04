@@ -7,7 +7,7 @@ export const inboxModule: ModuleManifest = {
   title: 'Inbox',
   icon: Bell,
   group: 'inbox',
-  ownerOnly: false,
+  capability: 'notifications.view',
   routes: ['inbox'],
   href: '/inbox',
   quickActions: [

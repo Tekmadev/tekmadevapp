@@ -1,9 +1,10 @@
 import type { Href } from 'expo-router';
 
 import type { Me } from '@/api/schemas/session';
+import type { Role } from '@/api/types';
 import { useSession } from '@/auth/session';
 
-import { moreMenu, plusSheetActions } from '../../registry';
+import { currentVisibility, moreMenu, plusSheetActions, visibleTabs } from '../../registry';
 import type { Visibility } from '../../types';
 import { hrefToPath, onQuickAction, shortcutItems } from '../shortcuts';
 
@@ -12,11 +13,13 @@ jest.mock('lucide-react-native', () => new Proxy({}, { get: (_target, name) => (
 
 const OWNER: Visibility = { role: 'owner', features: [] };
 const MANAGER: Visibility = { role: 'manager', features: [] };
+const STAFF: Visibility = { role: 'staff', features: [] };
 
-function signInAs(role: 'owner' | 'manager') {
+function signInAs(role: Role, capabilities?: string[]) {
   const me: Me = {
     user: { id: `usr_${role}`, email: `${role}@example.com`, name: null },
     role,
+    capabilities,
     features: [],
     timezone: 'America/Toronto',
     loader: {},
@@ -50,8 +53,12 @@ describe('shortcutItems', () => {
     ]);
   });
 
-  it('never gives managers an owner-only shortcut', () => {
-    expect(shortcutItems(MANAGER, undefined).map((i) => i.id)).toEqual(['inbox', 'new-client', 'analytics']);
+  it('gives managers the same shortcuts as owners', () => {
+    expect(shortcutItems(MANAGER, undefined)).toEqual(shortcutItems(OWNER, undefined));
+  });
+
+  it('gives staff only Inbox and Analytics (no New client, no Write a post)', () => {
+    expect(shortcutItems(STAFF, undefined).map((i) => i.id)).toEqual(['inbox', 'analytics']);
   });
 
   it('gives nothing when signed out, and respects the launcher limit', () => {
@@ -68,11 +75,19 @@ describe('onQuickAction', () => {
     expect(onQuickAction({ id: 'write-post', title: 'Write a post', params: { href: '/blog/new' } })).toBe(false);
   });
 
-  it('stops an owner shortcut for a manager, and anything unknown', () => {
-    signInAs('manager');
+  it('stops a shortcut this person may not use, and anything unknown', () => {
+    signInAs('staff');
     expect(onQuickAction({ id: 'write-post', title: 'Write a post', params: { href: '/blog/new' } })).toBe(true);
+    expect(onQuickAction({ id: 'new-client', title: 'New client', params: { href: '/clients/new' } })).toBe(true);
     expect(onQuickAction({ id: 'nope', title: 'Nope', params: { href: '/team' } })).toBe(true);
     expect(onQuickAction({ id: 'inbox', title: 'Inbox', params: { href: '/inbox' } })).toBe(false);
+  });
+
+  it("follows the server's capability list from /me", () => {
+    signInAs('owner', ['notifications.view', 'analytics.view']);
+    expect(onQuickAction({ id: 'write-post', title: 'Write a post', params: { href: '/blog/new' } })).toBe(true);
+    expect(onQuickAction({ id: 'analytics', title: 'Analytics', params: { href: '/analytics' } })).toBe(false);
+    expect(currentVisibility().capabilities).toEqual(['notifications.view', 'analytics.view']);
   });
 });
 
@@ -87,8 +102,12 @@ describe('plusSheetActions', () => {
     ]);
   });
 
-  it('gives managers only New client and Log a booked call', () => {
-    expect(plusSheetActions(MANAGER).map((a) => a.title)).toEqual(['New client', 'Log a booked call']);
+  it('gives managers all five too', () => {
+    expect(plusSheetActions(MANAGER).map((a) => a.title)).toEqual(plusSheetActions(OWNER).map((a) => a.title));
+  });
+
+  it('gives staff only Log a booked call', () => {
+    expect(plusSheetActions(STAFF).map((a) => a.title)).toEqual(['Log a booked call']);
   });
 });
 
@@ -104,9 +123,21 @@ describe('moreMenu', () => {
     ]);
   });
 
-  it('gives managers only what they may open (no Insights, no Sales)', () => {
-    expect(shape(MANAGER)).toEqual([
+  it('gives managers the same menu as owners', () => {
+    expect(shape(MANAGER)).toEqual(shape(OWNER));
+  });
+
+  it('gives staff Sales (view only), Profile and App settings, no Insights', () => {
+    expect(shape(STAFF)).toEqual([
+      ['Sales', ['Pricing', 'Coupons']],
       ['Settings', ['Profile']],
+      ['App', ['App settings']],
+    ]);
+  });
+
+  it("follows the server's capability list over the role", () => {
+    expect(shape({ role: 'staff', features: [], capabilities: ['team.view'] })).toEqual([
+      ['Settings', ['Team', 'Profile']],
       ['App', ['App settings']],
     ]);
   });
@@ -115,5 +146,19 @@ describe('moreMenu', () => {
     const titles = moreMenu({ role: 'owner', features: ['assistant'] }).flatMap((s) => s.modules.map((m) => m.title));
     expect(titles).not.toContain('Assistant');
     expect(titles).not.toContain('Kit');
+  });
+});
+
+describe('visibleTabs', () => {
+  const ids = (v: Visibility) => visibleTabs(v).map((t) => t.id);
+
+  it('gives every role the five tabs (Marketing is view only for staff)', () => {
+    expect(ids(OWNER)).toEqual(['home', 'customers', 'analytics', 'marketing', 'more']);
+    expect(ids(MANAGER)).toEqual(['home', 'customers', 'analytics', 'marketing', 'more']);
+    expect(ids(STAFF)).toEqual(['home', 'customers', 'analytics', 'marketing', 'more']);
+  });
+
+  it('drops a tab with nothing this person may see', () => {
+    expect(ids({ role: 'staff', features: [], capabilities: ['overview.view', 'leads.view'] })).toEqual(['home', 'customers', 'more']);
   });
 });

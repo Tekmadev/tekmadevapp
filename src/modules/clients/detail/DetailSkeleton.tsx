@@ -1,14 +1,19 @@
 import { StyleSheet, View } from 'react-native';
 
+import { useCan } from '@/auth/permissions';
 import { Skeleton, SkeletonGroup } from '@/components/Skeleton';
 import { radius, space } from '@/design/tokens';
 
 /**
  * Client detail while the first load runs (shown only after showAfterMs):
- * the contact line, badges, the two actions, the 2 by 2 stat cards, the tab
- * row and the start of a section, at roughly their real sizes.
+ * the contact line, badges, the two actions, the 2 by 2 stat cards (three
+ * without `clients.billing`, like the loaded grid), the tab row and the start
+ * of a section, at roughly their real sizes.
  */
 export function DetailSkeleton({ withTitle }: { withTitle: boolean }) {
+  const seesBilling = useCan('clients.billing');
+  // Without clients.go_live only Open portal shows, at its own width.
+  const mayGoLive = useCan('clients.go_live');
   return (
     <SkeletonGroup style={styles.wrap}>
       {withTitle ? null : <Skeleton width="62%" height={34} style={styles.title} />}
@@ -18,8 +23,8 @@ export function DetailSkeleton({ withTitle }: { withTitle: boolean }) {
         <Skeleton width={72} height={28} style={styles.pill} />
       </View>
       <View style={styles.row}>
-        <Skeleton height={48} style={[styles.pill, styles.flex]} />
-        <Skeleton height={48} style={[styles.pill, styles.flex]} />
+        {mayGoLive ? <Skeleton height={48} style={[styles.pill, styles.flex]} /> : null}
+        {mayGoLive ? <Skeleton height={48} style={[styles.pill, styles.flex]} /> : <Skeleton width={164} height={48} style={styles.pill} />}
       </View>
       <View style={styles.grid}>
         <View style={styles.row}>
@@ -28,7 +33,7 @@ export function DetailSkeleton({ withTitle }: { withTitle: boolean }) {
         </View>
         <View style={styles.row}>
           <Skeleton shape="block" height={112} style={[styles.card, styles.flex]} />
-          <Skeleton shape="block" height={112} style={[styles.card, styles.flex]} />
+          {seesBilling ? <Skeleton shape="block" height={112} style={[styles.card, styles.flex]} /> : null}
         </View>
       </View>
       <View style={styles.row}>

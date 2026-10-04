@@ -26,6 +26,7 @@ import {
   type PostRecord,
 } from '../fixtures/blog';
 import { renderMarkdown, slugify } from '../markdown';
+import { requireCap } from '../permissions';
 import {
   bool,
   fail,
@@ -46,7 +47,8 @@ import {
 
 /**
  * Mock routes for the "blog" domain (contract section 11, Marketing > Blog).
- * Owner only. Saves slugify on the server, keep slugs unique across every post
+ * `blog.view` reads (render too), `blog.write` writes, `blog.trash` trashes
+ * (requireCap in each handler, like the server). Saves slugify on the server, keep slugs unique across every post
  * (the trash included), record a revision, and return the full post.
  * Rules the contract does not spell out are written up in docs/api-requests/blog.md.
  */
@@ -289,9 +291,10 @@ export const routes: MockRoute[] = [
   {
     method: 'GET',
     path: '/blog/posts',
-    ownerOnly: true,
     latency: 'normal',
-    handler: ({ query }) => {
+    handler: ({ query, user }) => {
+      const denied = requireCap(user, 'blog.view');
+      if (denied) return denied;
       let status: PostStatus | undefined;
       if (query.status) {
         const parsed = zPostStatus.safeParse(query.status);
@@ -308,9 +311,10 @@ export const routes: MockRoute[] = [
   {
     method: 'POST',
     path: '/blog/posts',
-    ownerOnly: true,
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'blog.write');
+      if (denied) return denied;
       const write = readWrite(ctx.body, true);
       if (isResult(write)) return write;
       const title = write.patch.title ?? '';
@@ -359,9 +363,10 @@ export const routes: MockRoute[] = [
   {
     method: 'GET',
     path: '/blog/posts/:id',
-    ownerOnly: true,
     latency: 'fast',
-    handler: ({ params }) => {
+    handler: ({ params, user }) => {
+      const denied = requireCap(user, 'blog.view');
+      if (denied) return denied;
       const record = findLivePost(params.id);
       return record ? ok(toPostDetail(record)) : postMissing();
     },
@@ -369,9 +374,10 @@ export const routes: MockRoute[] = [
   {
     method: 'PATCH',
     path: '/blog/posts/:id',
-    ownerOnly: true,
     latency: 'normal',
     handler: (ctx) => {
+      const denied = requireCap(ctx.user, 'blog.write');
+      if (denied) return denied;
       const record = findLivePost(ctx.params.id);
       if (!record) return postMissing();
       const write = readWrite(ctx.body, false);
@@ -398,9 +404,10 @@ export const routes: MockRoute[] = [
   {
     method: 'DELETE',
     path: '/blog/posts/:id',
-    ownerOnly: true,
     latency: 'normal',
-    handler: ({ params }) => {
+    handler: ({ params, user }) => {
+      const denied = requireCap(user, 'blog.trash');
+      if (denied) return denied;
       const record = findLivePost(params.id);
       if (!record) return postMissing();
       record.trashedAt = nowIso();
@@ -410,10 +417,11 @@ export const routes: MockRoute[] = [
   {
     method: 'POST',
     path: '/blog/posts/:id/publish',
-    ownerOnly: true,
     // Publishing refreshes the public site.
     latency: 'slow',
-    handler: ({ params }) => {
+    handler: ({ params, user }) => {
+      const denied = requireCap(user, 'blog.write');
+      if (denied) return denied;
       const record = findLivePost(params.id);
       if (!record) return postMissing();
       const at = nowIso();
@@ -426,9 +434,10 @@ export const routes: MockRoute[] = [
   {
     method: 'POST',
     path: '/blog/posts/:id/status',
-    ownerOnly: true,
     latency: 'normal',
-    handler: ({ params, body }) => {
+    handler: ({ params, body, user }) => {
+      const denied = requireCap(user, 'blog.write');
+      if (denied) return denied;
       const record = findLivePost(params.id);
       if (!record) return postMissing();
       const status = zPostStatus.safeParse(body.status);
@@ -443,9 +452,10 @@ export const routes: MockRoute[] = [
   {
     method: 'POST',
     path: '/blog/render',
-    ownerOnly: true,
     latency: 'fast',
-    handler: ({ body }) => {
+    handler: ({ body, user }) => {
+      const denied = requireCap(user, 'blog.view');
+      if (denied) return denied;
       const markdown = body.markdown;
       if (typeof markdown !== 'string') return fail(400, 'markdown', 'Send the Markdown to render.', { markdown: 'Send the Markdown to render.' });
       return ok(renderMarkdown(markdown));
@@ -454,9 +464,10 @@ export const routes: MockRoute[] = [
   {
     method: 'POST',
     path: '/blog/media',
-    ownerOnly: true,
     latency: 'fast',
-    handler: ({ body }) => {
+    handler: ({ body, user }) => {
+      const denied = requireCap(user, 'blog.write');
+      if (denied) return denied;
       // The type is checked first, then the size. The bytes never come here.
       const type = str(body.type)?.trim().toLowerCase() ?? '';
       if (!isMediaType(type)) return fail(400, 'type', MEDIA_TYPE_ERROR);
@@ -481,16 +492,16 @@ export const routes: MockRoute[] = [
   {
     method: 'GET',
     path: '/blog/categories',
-    ownerOnly: true,
     latency: 'fast',
-    handler: () => ok([...blogCategories].sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' })).map(toCategory)),
+    handler: ({ user }) => requireCap(user, 'blog.view') ?? ok([...blogCategories].sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' })).map(toCategory)),
   },
   {
     method: 'POST',
     path: '/blog/categories',
-    ownerOnly: true,
     latency: 'fast',
-    handler: ({ body }) => {
+    handler: ({ body, user }) => {
+      const denied = requireCap(user, 'blog.write');
+      if (denied) return denied;
       const name = readCategoryName(body);
       if (typeof name !== 'string') return name;
       if (blogCategories.some((c) => sameName(c.name, name))) return fail(409, 'category_dup', CATEGORY_DUP, { name: CATEGORY_DUP });
@@ -505,9 +516,10 @@ export const routes: MockRoute[] = [
   {
     method: 'PATCH',
     path: '/blog/categories/:id',
-    ownerOnly: true,
     latency: 'fast',
-    handler: ({ params, body }) => {
+    handler: ({ params, body, user }) => {
+      const denied = requireCap(user, 'blog.write');
+      if (denied) return denied;
       const record = findCategory(params.id);
       if (!record) return categoryMissing();
       const name = readCategoryName(body);
@@ -523,9 +535,10 @@ export const routes: MockRoute[] = [
   {
     method: 'DELETE',
     path: '/blog/categories/:id',
-    ownerOnly: true,
     latency: 'normal',
-    handler: ({ params }) => {
+    handler: ({ params, user }) => {
+      const denied = requireCap(user, 'blog.write');
+      if (denied) return denied;
       const index = blogCategories.findIndex((c) => c.id === params.id);
       if (index < 0) return categoryMissing();
       // Posts keep everything but lose the category (trashed ones too).
@@ -537,8 +550,7 @@ export const routes: MockRoute[] = [
   {
     method: 'GET',
     path: '/blog/authors',
-    ownerOnly: true,
     latency: 'fast',
-    handler: () => ok(BLOG_AUTHORS),
+    handler: ({ user }) => requireCap(user, 'blog.view') ?? ok(BLOG_AUTHORS),
   },
 ];

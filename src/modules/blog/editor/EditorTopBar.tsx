@@ -20,11 +20,13 @@ export type EditorTopBarProps = {
   /** The status badge, or null when it shows under the title instead (see useBadgeFitsBar). */
   status: { label: string; tone: Tone } | null;
   previewing: boolean;
-  onTogglePreview: () => void;
+  /** The Preview / "Back to writing" button. Left out on the read-only post view (it is always the preview). */
+  onTogglePreview?: () => void;
   onBack: () => void;
   /** The gold hairline (refetching, a status change running). */
   progress: boolean;
-  save: ReactNode;
+  /** Save, when this person may save (`blog.write`). */
+  save?: ReactNode;
   menu: ReactNode;
 };
 
@@ -50,7 +52,8 @@ export function useTopBarInset(): number {
  * The editor's collapsing top bar: back, the status badge, the title once it
  * scrolls away, Preview, Save and the overflow menu. It slides up out of the
  * way while writing and comes back on the first scroll up; the status bar
- * strip above it stays put.
+ * strip above it stays put. The read-only post view uses it without Preview
+ * and Save.
  */
 export function EditorTopBar({
   hidden,
@@ -84,13 +87,15 @@ export function EditorTopBar({
           progress={progress}
           headerRight={
             <View style={styles.right}>
-              <IconButton
-                icon={previewing ? PencilLine : Eye}
-                accessibilityLabel={previewing ? 'Back to writing' : 'Preview'}
-                onPress={onTogglePreview}
-                color={previewing ? 'gold' : 'ink2'}
-              />
-              {save}
+              {onTogglePreview ? (
+                <IconButton
+                  icon={previewing ? PencilLine : Eye}
+                  accessibilityLabel={previewing ? 'Back to writing' : 'Preview'}
+                  onPress={onTogglePreview}
+                  color={previewing ? 'gold' : 'ink2'}
+                />
+              ) : null}
+              {save ?? null}
               {menu}
             </View>
           }

@@ -5,11 +5,11 @@ import { useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
-import { sessionKeys } from '@/api/endpoints/session';
 import { teamKeys, teamQuery } from '@/api/endpoints/team';
 import { MESSAGES } from '@/api/errors';
-import type { TeamMember, TeamMeta } from '@/api/schemas/team';
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import type { TeamMember } from '@/api/schemas/team';
+import { roleCopy, useCan } from '@/auth/permissions';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { useMe } from '@/auth/session';
 import { ConfirmSheet } from '@/components/ConfirmSheet';
 import { Divider } from '@/components/Divider';
@@ -27,32 +27,34 @@ import { useRefreshOnFocus } from '@/modules/customers/useRefreshOnFocus';
 import { useMinuteClock } from '@/modules/overview/hooks';
 
 import { AddTeamMemberSheet } from './AddTeamMemberSheet';
-import { useRemoveMember, useTeamRoles } from './hooks';
-import { canRemove, isSelf, lastSignInText, memberMeta, memberName, removeMessage, roleBadge, TEAM_COPY } from './logic';
+import { useRemoveMember } from './hooks';
+import { addableRoles, canRemove, isSelf, lastSignInText, memberMeta, memberName, removeMessage, TEAM_COPY } from './logic';
 import { TeamMemberSheet } from './TeamMemberSheet';
-
-type RoleInfo = TeamMeta['teamRoles'][number];
 
 /** Rows line up their dividers with the text after the 40dp avatar. */
 const ROW_TEXT_INSET = 72;
 /** Room under the last row so the floating add button never covers it. */
 const FAB_CLEARANCE = 56 + space[4] * 2;
+/** Without the add button: the usual space under a list. */
+const LIST_END = space[6];
 
 const memberKey = (m: TeamMember) => m.email;
 const Separator = () => <Divider inset={ROW_TEXT_INSET} />;
 
 /**
- * Team (brief 8.16, owner only): everyone who can sign in to the admin, owners
- * first. Each row shows name, email, role badge (Owner gold, Manager neutral),
- * last sign in or "never", and when they were added. Owners set by the server
- * environment carry a lock and cannot be removed. The gold button adds a team
- * member; tap a row for details and Remove, or swipe it left to remove.
+ * Team (brief 8.16; `team.view`, owners and managers): everyone who can sign
+ * in to the admin, owners first. Each row shows name, email, role badge (Owner
+ * gold, Manager neutral, Staff muted), last sign in or "never", and when they
+ * were added. Owners set by the server environment carry a lock and are never
+ * removed. With `team.write` the gold button adds a team member (Owner is a
+ * choice only with `team.owners`). With `team.remove` (owners only) a row's
+ * sheet and a left swipe offer Remove; a manager sees no Remove at all.
  */
 export function TeamScreen() {
   return (
-    <OwnerOnly>
+    <RequireCapability cap="team.view">
       <TeamBody />
-    </OwnerOnly>
+    </RequireCapability>
   );
 }
 
@@ -62,9 +64,11 @@ function TeamBody() {
   const online = useIsOnline();
   const reduceMotion = useReduceMotion();
   const now = useMinuteClock();
-  const roles = useTeamRoles();
+  const mayAdd = useCan('team.write');
+  const mayRemove = useCan('team.remove');
+  const mayMakeOwners = useCan('team.owners');
   const query = useQuery(teamQuery());
-  useRefreshOnFocus([teamKeys.all, sessionKeys.meta]);
+  useRefreshOnFocus([teamKeys.all]);
   const remove = useRemoveMember();
 
   const [adding, setAdding] = useState(false);
@@ -75,7 +79,8 @@ function TeamBody() {
   const team = query.data;
   const latest = (m: TeamMember | null) => (m ? (team?.find((x) => x.email === m.email) ?? m) : null);
   const openMember = latest(opened);
-  const removeTarget = latest(removing);
+  // Remove is only offered with `team.remove`; losing it (a role change) also closes the hold sheet.
+  const removeTarget = mayRemove ? latest(removing) : null;
 
   const onRefresh = async () => {
     // Offline a refetch would wait for the connection with the black hole spinning; the banner already explains.
@@ -93,11 +98,11 @@ function TeamBody() {
     <MemberItem
       member={item}
       index={index}
-      roles={roles}
       myEmail={myEmail}
       now={now}
       still={reduceMotion}
       swipe={online}
+      mayRemove={mayRemove}
       onOpen={setOpened}
       onRemove={setRemoving}
     />
@@ -130,25 +135,27 @@ function TeamBody() {
         renderItem={renderItem}
         keyExtractor={memberKey}
         ItemSeparatorComponent={Separator}
-        extraData={[roles, myEmail, now, reduceMotion, online]}
+        extraData={[myEmail, now, reduceMotion, online, mayRemove]}
         ListHeaderComponent={header}
         ListEmptyComponent={empty ? <View>{empty}</View> : null}
-        ListFooterComponent={<View style={styles.footer} />}
+        ListFooterComponent={<View style={mayAdd ? styles.footerFab : styles.footer} />}
         onRefresh={onRefresh}
         refetching={query.isFetching && team !== undefined}
         // The banner says "showing what was loaded at ..."; with nothing loaded the ErrorState says it instead.
         offlineBanner={team !== undefined}
         queryKey={teamKeys.list()}
       />
-      <Fab icon={UserPlus} onPress={() => setAdding(true)} accessibilityLabel={TEAM_COPY.add} accessibilityHint="Opens the form" />
+      {mayAdd ? (
+        <Fab icon={UserPlus} onPress={() => setAdding(true)} accessibilityLabel={TEAM_COPY.add} accessibilityHint="Opens the form" />
+      ) : null}
 
-      {adding ? <AddTeamMemberSheet roles={roles} onClose={() => setAdding(false)} /> : null}
+      {adding && mayAdd ? <AddTeamMemberSheet roles={addableRoles(mayMakeOwners)} onClose={() => setAdding(false)} /> : null}
       {openMember ? (
         <TeamMemberSheet
           key={openMember.email}
           member={openMember}
-          roles={roles}
           myEmail={myEmail}
+          mayRemove={mayRemove}
           onRemove={setRemoving}
           onClose={() => setOpened(null)}
         />
@@ -169,23 +176,24 @@ function TeamBody() {
 type MemberItemProps = {
   member: TeamMember;
   index: number;
-  roles: readonly RoleInfo[];
   myEmail: string | null;
   now: Date;
   still: boolean;
   /** Swipe to remove (hidden offline: the hold sheet would only say "You are offline"). */
   swipe: boolean;
+  /** The signed-in person may remove members (`team.remove`). */
+  mayRemove: boolean;
   onOpen: (member: TeamMember) => void;
   onRemove: (member: TeamMember) => void;
 };
 
-function MemberItem({ member, index, roles, myEmail, now, still, swipe, onOpen, onRemove }: MemberItemProps) {
+function MemberItem({ member, index, myEmail, now, still, swipe, mayRemove, onOpen, onRemove }: MemberItemProps) {
   const animate = !still && index < STAGGER_MAX;
-  const badge = roleBadge(roles, member.role);
+  const badge = roleCopy(member.role);
   const self = isSelf(member, myEmail);
   const subtitle = [member.name ? member.email : null, self ? 'You' : null].filter(Boolean).join(' · ');
   const meta = memberMeta(member, now);
-  const removable = canRemove(member, myEmail);
+  const removable = canRemove(member, myEmail, mayRemove);
 
   const spoken = [
     memberName(member),
@@ -221,5 +229,6 @@ function MemberItem({ member, index, roles, myEmail, now, still, swipe, onOpen, 
 const styles = StyleSheet.create({
   gutter: { paddingHorizontal: layout.gutter },
   refetchError: { marginBottom: space[4] },
-  footer: { height: FAB_CLEARANCE },
+  footer: { height: LIST_END },
+  footerFab: { height: FAB_CLEARANCE },
 });

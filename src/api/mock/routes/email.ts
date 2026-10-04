@@ -14,11 +14,14 @@ import {
   toCampaign,
   toSubscriberDetail,
 } from '../fixtures/email';
+import { requireCap } from '../permissions';
 import { bool, fail, matches, mockId, notFound, nowIso, ok, paginate, str, type MockResult, type MockRoute } from '../router';
 
 /**
  * Mock routes for the "email" domain (contract section 11, Marketing > Email).
- * Owner only. Campaigns are tracking registrations (this app never sends email);
+ * `email.view` reads the overview and templates, `email.campaigns.write`
+ * changes campaigns, `email.subscribers.view` / `.write` guard subscriber
+ * records (requireCap in each handler, like the server). Campaigns are tracking registrations (this app never sends email);
  * unsubscribes and erasures queue the matching push to the CRM.
  * Rules the contract does not spell out are in docs/api-requests/email.md.
  */
@@ -43,16 +46,16 @@ export const routes: MockRoute[] = [
   {
     method: 'GET',
     path: '/email/overview',
-    ownerOnly: true,
     latency: 'normal',
-    handler: () => ok(emailOverview()),
+    handler: ({ user }) => requireCap(user, 'email.view') ?? ok(emailOverview()),
   },
   {
     method: 'POST',
     path: '/email/campaigns',
-    ownerOnly: true,
     latency: 'normal',
-    handler: ({ body }) => {
+    handler: ({ body, user }) => {
+      const denied = requireCap(user, 'email.campaigns.write');
+      if (denied) return denied;
       // The form lowercases live; the server does too, then validates.
       const key = str(body.key)?.trim().toLowerCase() ?? '';
       const name = str(body.name)?.trim() ?? '';
@@ -79,9 +82,10 @@ export const routes: MockRoute[] = [
   {
     method: 'PATCH',
     path: '/email/campaigns/:id',
-    ownerOnly: true,
     latency: 'fast',
-    handler: ({ params, body }) => {
+    handler: ({ params, body, user }) => {
+      const denied = requireCap(user, 'email.campaigns.write');
+      if (denied) return denied;
       const record = emailCampaigns.find((c) => c.id === params.id);
       if (!record) return campaignMissing();
       const active = bool(body.active);
@@ -94,9 +98,10 @@ export const routes: MockRoute[] = [
   {
     method: 'DELETE',
     path: '/email/campaigns/:id',
-    ownerOnly: true,
     latency: 'normal',
-    handler: ({ params }) => {
+    handler: ({ params, user }) => {
+      const denied = requireCap(user, 'email.campaigns.write');
+      if (denied) return denied;
       const index = emailCampaigns.findIndex((c) => c.id === params.id);
       if (index < 0) return campaignMissing();
       // Past opens and clicks stay in the log; only the registration goes.
@@ -107,16 +112,16 @@ export const routes: MockRoute[] = [
   {
     method: 'GET',
     path: '/email/templates',
-    ownerOnly: true,
     latency: 'fast',
-    handler: () => ok(emailTemplates),
+    handler: ({ user }) => requireCap(user, 'email.view') ?? ok(emailTemplates),
   },
   {
     method: 'GET',
     path: '/email/subscribers',
-    ownerOnly: true,
     latency: 'normal',
-    handler: ({ query }) => {
+    handler: ({ query, user }) => {
+      const denied = requireCap(user, 'email.subscribers.view');
+      if (denied) return denied;
       let status: SubscriberStatus | undefined;
       if (query.status) {
         const parsed = zSubscriberStatus.safeParse(query.status);
@@ -132,9 +137,10 @@ export const routes: MockRoute[] = [
   {
     method: 'GET',
     path: '/email/subscribers/:id',
-    ownerOnly: true,
     latency: 'fast',
-    handler: ({ params }) => {
+    handler: ({ params, user }) => {
+      const denied = requireCap(user, 'email.subscribers.view');
+      if (denied) return denied;
       const record = findSubscriber(params.id);
       return record ? ok(toSubscriberDetail(record)) : subscriberMissing();
     },
@@ -142,9 +148,10 @@ export const routes: MockRoute[] = [
   {
     method: 'POST',
     path: '/email/subscribers/:id/unsubscribe',
-    ownerOnly: true,
     latency: 'normal',
-    handler: ({ params }): MockResult => {
+    handler: ({ params, user }): MockResult => {
+      const denied = requireCap(user, 'email.subscribers.write');
+      if (denied) return denied;
       const record = findSubscriber(params.id);
       if (!record) return subscriberMissing();
       if (record.status !== 'active') return fail(409, 'not_active', 'Only active subscribers can be unsubscribed.');
@@ -162,9 +169,10 @@ export const routes: MockRoute[] = [
   {
     method: 'DELETE',
     path: '/email/subscribers/:id',
-    ownerOnly: true,
     latency: 'slow',
-    handler: ({ params }) => {
+    handler: ({ params, user }) => {
+      const denied = requireCap(user, 'email.subscribers.write');
+      if (denied) return denied;
       const index = subscribers.findIndex((s) => s.id === params.id);
       if (index < 0) return subscriberMissing();
       // Seeded failure: the erasure cannot be queued, so nothing is deleted.

@@ -2,6 +2,7 @@ import { StyleSheet, View } from 'react-native';
 
 import type { ClientBundle } from '@/api/schemas/clients';
 import type { Meta } from '@/api/schemas/meta';
+import { useCan } from '@/auth/permissions';
 import { StatCard } from '@/components/StatCard';
 import { space } from '@/design/tokens';
 import type { ClientSection } from '@/lib/deeplinks';
@@ -29,8 +30,14 @@ function Stat({ model, section, onOpenSection }: { model: StatModel; section?: C
   );
 }
 
-/** Stage, Checklist, Booked calls and Billing in a 2 by 2 grid. Money shows for managers too, like the web. */
+/**
+ * Stage, Checklist, Booked calls and Billing in a 2 by 2 grid. Billing (money)
+ * needs `clients.billing`: without it (staff) the card is left out and Booked
+ * calls spans the second row. The skeleton draws the same grid, so nothing
+ * moves when the bundle lands.
+ */
 export function ClientStatCards({ bundle, meta, onOpenSection }: ClientStatCardsProps) {
+  const seesBilling = useCan('clients.billing');
   const labels: StatLabels = {
     stages: meta?.onboardingStages,
     subscriptionStatuses: meta?.billingSubscriptionStatuses,
@@ -44,7 +51,7 @@ export function ClientStatCards({ bundle, meta, onOpenSection }: ClientStatCards
       </View>
       <View style={styles.row}>
         <Stat model={callsStat(bundle.guarantee)} section="calls" onOpenSection={onOpenSection} />
-        <Stat model={billingStat(bundle.billing, labels)} onOpenSection={onOpenSection} />
+        {seesBilling ? <Stat model={billingStat(bundle.billing, labels)} onOpenSection={onOpenSection} /> : null}
       </View>
     </View>
   );

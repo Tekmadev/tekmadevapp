@@ -9,7 +9,7 @@ import { Linking, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { linksMetaQuery, linksQuery } from '@/api/endpoints/links';
 import { MESSAGES } from '@/api/errors';
 import type { LinksMeta, ShortLink } from '@/api/schemas/links';
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { Badge } from '@/components/Badge';
 import { ErrorState } from '@/components/ErrorState';
 import { PendingButton } from '@/components/PendingButton';
@@ -170,9 +170,9 @@ function QrSkeleton() {
  */
 export function LinkQrScreen() {
   return (
-    <OwnerOnly>
+    <RequireCapability cap="links.view">
       <LinkQr />
-    </OwnerOnly>
+    </RequireCapability>
   );
 }
 

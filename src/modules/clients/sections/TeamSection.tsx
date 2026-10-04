@@ -1,6 +1,7 @@
 import { UserPlus } from 'lucide-react-native';
 import { Fragment, useState } from 'react';
 
+import { useCan } from '@/auth/permissions';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Divider } from '@/components/Divider';
@@ -18,10 +19,12 @@ import { memberName, memberTimeline } from './team/teamText';
 /**
  * Team (brief 8.5, section 9): the client's portal users. Each row shows who,
  * their status, title and role, and when they were invited, joined and last
- * seen. Tap a person for role, status and the invite or reset link.
+ * seen. Tap a person for role, status and the invite or reset link. Adding
+ * and changing people needs `clients.members`; without it the list is read only.
  */
 export function TeamSection({ clientId, bundle }: SectionProps) {
   const labels = useClientLabels();
+  const canManage = useCan('clients.members');
   const { members, client } = bundle;
   const [adding, setAdding] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -30,7 +33,7 @@ export function TeamSection({ clientId, bundle }: SectionProps) {
   return (
     <Section
       title="Team"
-      right={<Button label="Add a person" icon={UserPlus} size="sm" variant="secondary" onPress={() => setAdding(true)} />}
+      right={canManage ? <Button label="Add a person" icon={UserPlus} size="sm" variant="secondary" onPress={() => setAdding(true)} /> : undefined}
     >
       {members.length === 0 ? (
         <EmptyState compact message="No one has portal access yet." />
@@ -50,8 +53,8 @@ export function TeamSection({ clientId, bundle }: SectionProps) {
                   meta={memberTimeline(m)}
                   avatar={{ name: m.name ?? m.email }}
                   badge={{ label: labelOf(labels.memberStatuses, m.status), tone: toneOf(labels.memberStatuses, m.status) }}
-                  onPress={() => setOpenId(m.id)}
-                  accessibilityHint="Opens role, status and the invite link"
+                  onPress={canManage ? () => setOpenId(m.id) : undefined}
+                  accessibilityHint={canManage ? 'Opens role, status and the invite link' : undefined}
                 />
               </Fragment>
             );
@@ -59,10 +62,10 @@ export function TeamSection({ clientId, bundle }: SectionProps) {
         </Card>
       )}
 
-      {adding ? (
+      {adding && canManage ? (
         <AddMemberSheet clientId={clientId} businessName={client.businessName} labels={labels} onClose={() => setAdding(false)} />
       ) : null}
-      {open ? <MemberSheet key={open.id} clientId={clientId} member={open} labels={labels} onClose={() => setOpenId(null)} /> : null}
+      {open && canManage ? <MemberSheet key={open.id} clientId={clientId} member={open} labels={labels} onClose={() => setOpenId(null)} /> : null}
     </Section>
   );
 }

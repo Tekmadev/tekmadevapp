@@ -9,6 +9,7 @@ import { daysAgo, type MockStaff } from '../router';
  *   Owner:   owner@tekmadev.test   / tekmadev-owner
  *   Manager: manager@tekmadev.test / tekmadev-manager
  *   Manager: alexandra@tekmadev.test / tekmadev-manager-2 (invited, never signed in)
+ *   Staff:   staff@tekmadev.test   / tekmadev-staff
  *   Not staff (portal client): client@acmeplumbing.test / tekmadev-client
  */
 export type MockAccount = MockStaff & { password: string; lastSignInAt: string | null; addedAt: string };
@@ -44,6 +45,17 @@ export const MOCK_ACCOUNTS: MockAccount[] = [
     password: 'tekmadev-manager-2',
     lastSignInAt: null,
     addedAt: daysAgo(6, -3),
+  },
+  {
+    // Staff (owner decision 2026-10-03): leads, outreach, analytics and onboarding help, never money.
+    id: 'usr_staff01',
+    email: 'staff@tekmadev.test',
+    name: 'Noah Lavoie',
+    role: 'staff',
+    locked: false,
+    password: 'tekmadev-staff',
+    lastSignInAt: null,
+    addedAt: '2026-08-11T13:05:51.770412Z',
   },
 ];
 

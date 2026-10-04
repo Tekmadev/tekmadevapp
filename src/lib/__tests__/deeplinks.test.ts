@@ -2,6 +2,8 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
+import type { Role } from '@/api/types';
+import { capabilitiesOf, ROLE_CAPABILITIES, type Capability, type CapabilitySource } from '@/auth/capabilities';
 import {
   CLIENT_SECTIONS,
   INBOX,
@@ -14,63 +16,135 @@ import {
 const HOME: AppLink = { pathname: '/' };
 const segment = (pathname: string, value: string): AppLink => ({ pathname, params: { segment: value } });
 
-/** Brief section 7, row by row: web path, app route, owner only. */
-const TABLE: [path: string, link: AppLink, ownerOnly: boolean][] = [
-  ['/admin', HOME, false],
-  ['/admin/notifications', INBOX, false],
-  ['/admin/notifications?filter=action', { pathname: '/inbox', params: { filter: 'action' } }, false],
-  ['/admin/notifications?filter=bogus', INBOX, false],
-  ['/admin/analytics?range=7d', { pathname: '/analytics', params: { range: '7d' } }, false],
-  ['/admin/leads', segment('/customers', 'leads'), false],
-  ['/admin/tools', segment('/customers', 'tools'), false],
-  ['/admin/subscriptions', segment('/customers', 'subscriptions'), false],
-  ['/admin/clients', segment('/customers', 'clients'), false],
-  ['/admin/clients/new', { pathname: '/clients/new' }, false],
-  ['/admin/clients/cl_8f3a2c', { pathname: '/clients/[id]', params: { id: 'cl_8f3a2c' } }, false],
-  ['/admin/analytics', { pathname: '/analytics' }, false],
-  ['/admin/ads', { pathname: '/ads' }, true],
-  ['/admin/email', segment('/marketing', 'email'), true],
-  ['/admin/crm', segment('/marketing', 'crm'), true],
-  ['/admin/blog', segment('/marketing', 'blog'), true],
-  ['/admin/links', segment('/marketing', 'links'), true],
-  ['/admin/blog/post_42', { pathname: '/blog/[id]', params: { id: 'post_42' } }, true],
-  ['/admin/pricing', { pathname: '/pricing' }, true],
-  ['/admin/coupons', { pathname: '/coupons' }, true],
-  ['/admin/loader', { pathname: '/loader' }, true],
-  ['/admin/test-mode', { pathname: '/test-mode' }, true],
-  ['/admin/team', { pathname: '/team' }, true],
-  ['/admin/profile', { pathname: '/profile' }, false],
+/** A GET /me profile as the server sends it: the role with its capability list. */
+const me = (role: Role, capabilities: readonly string[] = ROLE_CAPABILITIES[role]): CapabilitySource => ({ role, capabilities });
+const OWNER = me('owner');
+const MANAGER = me('manager');
+const STAFF = me('staff');
+
+/** Brief section 7, row by row: web path, app route, the capability it needs. */
+const TABLE: [path: string, link: AppLink, capability: Capability | null][] = [
+  ['/admin', HOME, 'overview.view'],
+  ['/admin/notifications', INBOX, 'notifications.view'],
+  ['/admin/notifications?filter=action', { pathname: '/inbox', params: { filter: 'action' } }, 'notifications.view'],
+  ['/admin/notifications?filter=bogus', INBOX, 'notifications.view'],
+  ['/admin/analytics?range=7d', { pathname: '/analytics', params: { range: '7d' } }, 'analytics.view'],
+  ['/admin/leads', segment('/customers', 'leads'), 'leads.view'],
+  ['/admin/tools', segment('/customers', 'tools'), 'tools.view'],
+  ['/admin/subscriptions', segment('/customers', 'subscriptions'), 'billing.view'],
+  ['/admin/clients', segment('/customers', 'clients'), 'clients.view'],
+  ['/admin/clients/new', { pathname: '/clients/new' }, 'clients.create'],
+  ['/admin/clients/cl_8f3a2c', { pathname: '/clients/[id]', params: { id: 'cl_8f3a2c' } }, 'clients.view'],
+  ['/admin/analytics', { pathname: '/analytics' }, 'analytics.view'],
+  ['/admin/ads', { pathname: '/ads' }, 'ads.view'],
+  ['/admin/email', segment('/marketing', 'email'), 'email.view'],
+  ['/admin/crm', segment('/marketing', 'crm'), 'crm.view'],
+  ['/admin/blog', segment('/marketing', 'blog'), 'blog.view'],
+  ['/admin/links', segment('/marketing', 'links'), 'links.view'],
+  ['/admin/blog/post_42', { pathname: '/blog/[id]', params: { id: 'post_42' } }, 'blog.view'],
+  ['/admin/pricing', { pathname: '/pricing' }, 'pricing.view'],
+  ['/admin/coupons', { pathname: '/coupons' }, 'coupons.view'],
+  ['/admin/loader', { pathname: '/loader' }, 'loader.view'],
+  ['/admin/test-mode', { pathname: '/test-mode' }, 'testmode.view'],
+  ['/admin/team', { pathname: '/team' }, 'team.view'],
+  ['/admin/profile', { pathname: '/profile' }, null],
 ];
 
 /** Detail paths beyond the table that notifications also carry. */
-const DETAILS: [path: string, link: AppLink, ownerOnly: boolean][] = [
-  ['/admin/leads/ld_1', { pathname: '/leads/[id]', params: { id: 'ld_1' } }, false],
-  ['/admin/tools/sub_1', { pathname: '/tools/[id]', params: { id: 'sub_1' } }, false],
-  ['/admin/email/subscribers/es_1', { pathname: '/email/subscriber/[id]', params: { id: 'es_1' } }, true],
-  ['/admin/links/ln_1', { pathname: '/links/[id]', params: { id: 'ln_1' } }, true],
+const DETAILS: [path: string, link: AppLink, capability: Capability | null][] = [
+  ['/admin/leads/ld_1', { pathname: '/leads/[id]', params: { id: 'ld_1' } }, 'leads.view'],
+  ['/admin/tools/sub_1', { pathname: '/tools/[id]', params: { id: 'sub_1' } }, 'tools.view'],
+  ['/admin/email/subscribers/es_1', { pathname: '/email/subscriber/[id]', params: { id: 'es_1' } }, 'email.subscribers.view'],
+  ['/admin/links/ln_1', { pathname: '/links/[id]', params: { id: 'ln_1' } }, 'links.view'],
+  // Web admin pages below a section (app/admin/(dashboard) on the website).
+  ['/admin/blog/new', { pathname: '/blog/[id]', params: { id: 'new' } }, 'blog.write'],
+  ['/admin/blog/post_42/preview', { pathname: '/blog/[id]', params: { id: 'post_42' } }, 'blog.view'],
+  ['/admin/clients/templates', { pathname: '/clients/templates' }, 'clients.templates'],
+  ['/admin/email/templates', { pathname: '/email/templates' }, 'email.view'],
+];
+
+const ALL = [...TABLE, ...DETAILS];
+
+/** What staff may not open (owner decision 2026-10-03: no money, no settings, view-only marketing). */
+const STAFF_BLOCKED = [
+  '/admin/subscriptions',
+  '/admin/clients/new',
+  '/admin/ads',
+  '/admin/crm',
+  '/admin/loader',
+  '/admin/test-mode',
+  '/admin/team',
+  '/admin/email/subscribers/es_1',
+  '/admin/blog/new',
+  '/admin/clients/templates',
 ];
 
 describe('mapAdminUrl: the brief table', () => {
-  it.each(TABLE)('%s for the owner', (path, link) => {
-    expect(mapAdminUrl(path, 'owner')).toEqual(link);
+  it.each(ALL)('%s for the owner', (path, link) => {
+    expect(mapAdminUrl(path, OWNER)).toEqual(link);
   });
 
-  it.each(TABLE.filter(([, , ownerOnly]) => !ownerOnly))('%s for a manager', (path, link) => {
-    expect(mapAdminUrl(path, 'manager')).toEqual(link);
+  it.each(ALL)('%s for a manager (everything but team removal and owners)', (path, link) => {
+    expect(mapAdminUrl(path, MANAGER)).toEqual(link);
   });
 
-  it.each(TABLE.filter(([, , ownerOnly]) => ownerOnly))('%s is owner only: a manager lands in the Inbox', (path) => {
-    expect(mapAdminUrl(path, 'manager')).toEqual(INBOX);
+  it.each(ALL.filter(([path]) => !STAFF_BLOCKED.includes(path)))('%s for staff', (path, link) => {
+    expect(mapAdminUrl(path, STAFF)).toEqual(link);
   });
 
-  it.each(DETAILS)('%s (detail link)', (path, link, ownerOnly) => {
-    expect(mapAdminUrl(path, 'owner')).toEqual(link);
-    expect(mapAdminUrl(path, 'manager')).toEqual(ownerOnly ? INBOX : link);
+  it.each(STAFF_BLOCKED)('%s is not for staff: they land in the Inbox', (path) => {
+    expect(mapAdminUrl(path, STAFF)).toEqual(INBOX);
   });
 
-  it('treats an unknown role (no /me yet) like a manager for owner-only paths', () => {
-    expect(mapAdminUrl('/admin/pricing', null)).toEqual(INBOX);
+  it.each(ALL.filter(([, , capability]) => capability !== null))('%s needs its capability: without it, the Inbox', (path, _link, capability) => {
+    const without = capabilitiesOf(OWNER).filter((c) => c !== capability);
+    expect(mapAdminUrl(path, without)).toEqual(INBOX);
+    expect(mapAdminUrl(path, me('owner', without))).toEqual(INBOX);
+  });
+
+  it('opens Profile for anyone signed in, whatever they hold', () => {
+    expect(mapAdminUrl('/admin/profile', me('staff', []))).toEqual({ pathname: '/profile' });
+  });
+});
+
+describe('mapAdminUrl: who is following the link', () => {
+  it("follows the server's list over the role", () => {
+    const narrowOwner = me('owner', ['leads.view', 'notifications.view']);
+    expect(mapAdminUrl('/admin/leads', narrowOwner)).toEqual(segment('/customers', 'leads'));
+    expect(mapAdminUrl('/admin/pricing', narrowOwner)).toEqual(INBOX);
+    expect(mapAdminUrl('/admin', narrowOwner)).toEqual(INBOX);
+    const wideStaff = me('staff', [...ROLE_CAPABILITIES.staff, 'team.view']);
+    expect(mapAdminUrl('/admin/team', wideStaff)).toEqual({ pathname: '/team' });
+  });
+
+  it("uses the role's fallback row when /me has no list", () => {
+    expect(mapAdminUrl('/admin/team', { role: 'manager' })).toEqual({ pathname: '/team' });
+    expect(mapAdminUrl('/admin/team', { role: 'staff' })).toEqual(INBOX);
+    expect(mapAdminUrl('/admin/team', { role: 'staff', capabilities: null })).toEqual(INBOX);
+    expect(mapAdminUrl('/admin/leads', { role: 'staff' })).toEqual(segment('/customers', 'leads'));
+  });
+
+  it('takes a bare capability list', () => {
+    expect(mapAdminUrl('/admin/coupons', ['coupons.view'])).toEqual({ pathname: '/coupons' });
+    expect(mapAdminUrl('/admin/coupons', ['coupons.write'])).toEqual(INBOX);
+    expect(mapAdminUrl('/admin/coupons', [])).toEqual(INBOX);
+  });
+
+  it('still takes a bare role (its fallback row)', () => {
+    expect(mapAdminUrl('/admin/team', 'owner')).toEqual({ pathname: '/team' });
+    expect(mapAdminUrl('/admin/team', 'manager')).toEqual({ pathname: '/team' });
+    expect(mapAdminUrl('/admin/team', 'staff')).toEqual(INBOX);
+  });
+
+  it('ignores capability names it does not know', () => {
+    expect(mapAdminUrl('/admin/team', me('staff', ['team.view.everything', 'TEAM.VIEW']))).toEqual(INBOX);
+  });
+
+  it('opens only what every role may when nobody is known yet (no /me)', () => {
     expect(mapAdminUrl('/admin/leads', null)).toEqual(segment('/customers', 'leads'));
+    expect(mapAdminUrl('/admin/pricing', undefined)).toEqual({ pathname: '/pricing' });
+    expect(mapAdminUrl('/admin/subscriptions', null)).toEqual(INBOX);
+    expect(mapAdminUrl('/admin/team', null)).toEqual(INBOX);
   });
 });
 
@@ -83,8 +157,16 @@ describe('mapAdminUrl: client sections', () => {
 
   it.each([...CLIENT_SECTIONS])('#%s scrolls to that section', (section) => {
     const expected: AppLink = { pathname: '/clients/[id]', params: { id: 'cl_1', section } };
-    expect(mapAdminUrl(`/admin/clients/cl_1#${section}`, 'owner')).toEqual(expected);
-    expect(mapAdminUrl(`/admin/clients/cl_1#${section}`, 'manager')).toEqual(expected);
+    expect(mapAdminUrl(`/admin/clients/cl_1#${section}`, OWNER)).toEqual(expected);
+    expect(mapAdminUrl(`/admin/clients/cl_1#${section}`, MANAGER)).toEqual(expected);
+  });
+
+  it.each(CLIENT_SECTIONS.filter((s) => s !== 'crm'))('#%s scrolls there for staff too', (section) => {
+    expect(mapAdminUrl(`/admin/clients/cl_1#${section}`, STAFF)).toEqual({ pathname: '/clients/[id]', params: { id: 'cl_1', section } });
+  });
+
+  it('opens the client at the top when the section is one this person cannot see (CRM for staff)', () => {
+    expect(mapAdminUrl('/admin/clients/cl_1#crm', STAFF)).toEqual({ pathname: '/clients/[id]', params: { id: 'cl_1' } });
   });
 
   it('ignores an unknown or empty hash and still opens the client', () => {
@@ -200,14 +282,20 @@ describe('registerDeepLinks', () => {
       { pattern: '/approvals', to: () => ({ pathname: '/approvals' }) },
       {
         pattern: '/approvals/:id',
-        ownerOnly: true,
+        capability: 'team.owners',
         to: ({ id }, hash) => {
           const params: Record<string, string> = { id };
           if (hash) params.step = hash;
           return { pathname: '/approvals/[id]', params };
         },
       },
-      { pattern: '/jobs/:id', to: ({ id }, _hash, search) => ({ pathname: '/jobs/[id]', params: { id, run: search.get('run') ?? '' } }) },
+      {
+        pattern: '/jobs/:id',
+        to: ({ id }, _hash, search, allowed) => ({
+          pathname: '/jobs/[id]',
+          params: { id, run: search.get('run') ?? '', ...(allowed('ads.refresh') ? { retry: '1' } : {}) },
+        }),
+      },
       // Checked before the core table, so a module can take over a path.
       { pattern: '/team', to: () => ({ pathname: '/team-v2' }) },
       {
@@ -220,17 +308,22 @@ describe('registerDeepLinks', () => {
   });
 
   it('maps paths that future modules add', () => {
-    expect(mapAdminUrl('/admin/approvals', 'manager')).toEqual({ pathname: '/approvals' });
+    expect(mapAdminUrl('/admin/approvals', 'staff')).toEqual({ pathname: '/approvals' });
     expect(mapAdminUrl('/admin/approvals/ap_1#review', 'owner')).toEqual({ pathname: '/approvals/[id]', params: { id: 'ap_1', step: 'review' } });
-    expect(mapAdminUrl('/admin/jobs/j_9?run=r2', 'manager')).toEqual({ pathname: '/jobs/[id]', params: { id: 'j_9', run: 'r2' } });
+    expect(mapAdminUrl('/admin/jobs/j_9?run=r2', 'staff')).toEqual({ pathname: '/jobs/[id]', params: { id: 'j_9', run: 'r2' } });
   });
 
-  it('honours ownerOnly on added rules', () => {
+  it('honours the capability on added rules', () => {
     expect(mapAdminUrl('/admin/approvals/ap_1', 'manager')).toEqual(INBOX);
+    expect(mapAdminUrl('/admin/approvals/ap_1', ['team.owners'])).toEqual({ pathname: '/approvals/[id]', params: { id: 'ap_1' } });
+  });
+
+  it('lets a rule ask what the viewer holds', () => {
+    expect(mapAdminUrl('/admin/jobs/j_9', 'manager')).toEqual({ pathname: '/jobs/[id]', params: { id: 'j_9', run: '', retry: '1' } });
   });
 
   it('checks added rules before the core table', () => {
-    expect(mapAdminUrl('/admin/team', 'manager')).toEqual({ pathname: '/team-v2' });
+    expect(mapAdminUrl('/admin/team', 'staff')).toEqual({ pathname: '/team-v2' });
   });
 
   it('falls back to the Inbox when a rule throws', () => {
@@ -269,7 +362,7 @@ describe('toHref', () => {
 
   it('round trips a notification URL into an app href', () => {
     expect(toHref(mapAdminUrl('https://www.tekmadev.com/admin/clients/a%20b#files', 'owner'))).toBe('/clients/a%20b?section=files');
-    expect(toHref(mapAdminUrl('/admin/pricing', 'manager'))).toBe('/inbox');
+    expect(toHref(mapAdminUrl('/admin/subscriptions', STAFF))).toBe('/inbox');
   });
 });
 
@@ -300,7 +393,7 @@ describe('every mapped route exists in app/', () => {
 
   it('has a screen for every pathname the mapper can produce', () => {
     const routes = routeFiles();
-    const produced = new Set([...TABLE, ...DETAILS].map(([path]) => mapAdminUrl(path, 'owner').pathname));
+    const produced = new Set(ALL.map(([path]) => mapAdminUrl(path, OWNER).pathname));
     for (const pathname of produced) {
       expect({ pathname, exists: routes.has(pathname) }).toEqual({ pathname, exists: true });
     }

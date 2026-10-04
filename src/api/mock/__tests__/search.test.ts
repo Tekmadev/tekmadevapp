@@ -12,7 +12,7 @@ import { zSearchResults, type SearchResult, type SearchResultType } from '@/api/
 import { mapAdminUrl } from '@/lib/deeplinks';
 
 /**
- * GET /search through the real mock transport: role filtering, ranking, the
+ * GET /search through the real mock transport: capability filtering, ranking, the
  * 20 result cap, links that open the right screen, and records created or
  * removed elsewhere showing up (or not) on the next search.
  */
@@ -23,6 +23,9 @@ const asOwner = () => {
 };
 const asManager = () => {
   token = `mock.usr_mgr01.${Date.now() + 3_600_000}`;
+};
+const asStaff = () => {
+  token = `mock.usr_staff01.${Date.now() + 3_600_000}`;
 };
 
 beforeAll(() => {
@@ -40,7 +43,6 @@ async function find(q: string): Promise<SearchResult[]> {
   return data.results;
 }
 
-const OWNER_ONLY: SearchResultType[] = ['subscriber', 'post', 'coupon', 'link'];
 /** Queries that hit every kind of record for the owner. */
 const BROAD = ['a', 'e', 'o', 'ai', 'acme', 'insta', 'mailbox', 'hvac', 'grow', 'care', 'olivia', 'test', 'hamilton', 'booked'];
 
@@ -103,33 +105,53 @@ describe('GET /search: basics', () => {
   });
 });
 
-describe('GET /search: role filtering', () => {
-  it('managers only ever get clients and leads', async () => {
-    asManager();
-    for (const q of [...BROAD, 'FALLGROW', 'tekmadev.com/insta', 'olivia.martin@mailbox.test']) {
-      for (const r of await find(q)) {
-        expect(OWNER_ONLY).not.toContain(r.type);
-        expect(['client', 'lead']).toContain(r.type);
-      }
+describe('GET /search: filtered by capability', () => {
+  it('managers find every kind of record, test clients included, like owners', async () => {
+    for (const q of ['acme', 'insta', 'sandbox bakery', 'olivia']) {
+      const owner = await find(q);
+      asManager();
+      expect(await find(q)).toEqual(owner);
+      asOwner();
     }
-    expect(await find('fallgrow')).toEqual([]);
-    expect(await find('insta')).toEqual([]);
   });
 
-  it('managers never see test clients; owners see them marked "Test"', async () => {
-    asManager();
-    expect(await find('sandbox bakery')).toEqual([]);
+  it('staff never get subscribers (email.subscribers.view), but find posts, coupons and links', async () => {
+    asStaff();
+    const seen = new Set<SearchResultType>();
+    for (const q of [...BROAD, 'FALLGROW', 'tekmadev.com/insta', 'olivia.martin@mailbox.test']) {
+      for (const r of await find(q)) seen.add(r.type);
+    }
+    expect([...seen].sort()).toEqual(['client', 'coupon', 'lead', 'link', 'post']);
+    expect((await find('olivia.martin@mailbox.test')).filter((r) => r.type === 'subscriber')).toEqual([]);
+  });
+
+  it('staff never see test clients (testdata.view); owners see them marked "Test"', async () => {
+    asStaff();
+    expect((await find('sandbox bakery')).map((r) => r.id)).not.toContain('cl_testco_0001');
     asOwner();
     const [first] = await find('sandbox bakery');
     expect(first).toMatchObject({ type: 'client', id: 'cl_testco_0001', url: '/admin/clients/cl_testco_0001' });
     expect(first.subtitle.startsWith('Test')).toBe(true);
   });
 
-  it('a manager and an owner get the same clients and leads for the same query', async () => {
-    const shared = (rs: SearchResult[]) => rs.filter((r) => r.type === 'client' || r.type === 'lead').filter((r) => r.id !== 'cl_testco_0001');
-    const owner = shared(await find('acme'));
-    asManager();
-    expect(await find('acme')).toEqual(owner);
+  it("staff get their own best matches: the owner's, minus what they may not see, first and in the same order", async () => {
+    for (const q of ['acme', 'a', 'care']) {
+      const owner = (await find(q)).filter((r) => r.type !== 'subscriber' && r.id !== 'cl_testco_0001');
+      asStaff();
+      const staff = await find(q);
+      expect(staff.slice(0, owner.length)).toEqual(owner);
+      expect(staff.some((r) => r.type === 'subscriber' || r.id === 'cl_testco_0001')).toBe(false);
+      asOwner();
+    }
+  });
+
+  it('applies the capabilities before the top 20 are cut, so staff still get a full page', async () => {
+    const owner = await find('a');
+    expect(owner).toHaveLength(20);
+    expect(owner.some((r) => r.type === 'subscriber')).toBe(true);
+    asStaff();
+    expect(await find('a')).toHaveLength(20);
+    asOwner();
   });
 });
 

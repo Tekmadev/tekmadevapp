@@ -9,7 +9,8 @@ import { notificationKeys, notificationPrefsQuery, sendTestPush } from '@/api/en
 import { sessionKeys } from '@/api/endpoints/session';
 import { ApiError, errorMessage, MESSAGES } from '@/api/errors';
 import type { NotificationPref } from '@/api/schemas/notifications';
-import { useIsOwner } from '@/auth/session';
+import { useCapabilities } from '@/auth/permissions';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { Card } from '@/components/Card';
 import { Divider } from '@/components/Divider';
 import { EmptyState } from '@/components/EmptyState';
@@ -33,6 +34,8 @@ import {
   permissionAction,
   presentLocalTest,
   PUSH_COPY,
+  pushPitch,
+  readableCategories,
   registerThisPhone,
   turnOnPush,
   usePushState,
@@ -44,17 +47,24 @@ import { usePrefMutation } from './usePrefMutation';
 
 /** Each switch column: wide enough for the 52dp switch and the "QUIET" heading at font scale 1.3. */
 const COLUMN = 64;
-/** Skeleton rows while the preferences load (the brief's seven categories). */
-const SKELETON_ROWS = 7;
-
 /**
  * App settings, Notifications (brief 8.4 "Preferences" and 8.18): per
  * category, Quiet (does not count toward unread) and Push (phone
- * notification), plus "Send a test notification". Managers never see Team or
- * Audience. The switches save at once and roll back if the server refuses.
+ * notification), plus "Send a test notification". Only the categories this
+ * person may read (`inbox.<category>`): staff see Leads and Clients. The
+ * switches save at once and roll back if the server refuses.
  */
 export function NotificationPrefsScreen() {
-  const isOwner = useIsOwner();
+  return (
+    <RequireCapability cap="notifications.view">
+      <NotificationPrefsBody />
+    </RequireCapability>
+  );
+}
+
+function NotificationPrefsBody() {
+  const capabilities = useCapabilities();
+  const readable = readableCategories(capabilities);
   const online = useIsOnline();
   const query = useQuery(notificationPrefsQuery());
   const meta = useQuery(metaQuery());
@@ -68,7 +78,7 @@ export function NotificationPrefsScreen() {
   );
 
   const data = query.data;
-  const rows = data ? prefRows(data, meta.data?.notificationCategories, isOwner) : [];
+  const rows = data ? prefRows(data, meta.data?.notificationCategories, readable) : [];
 
   const onRefresh = async () => {
     // Offline the banner already explains; a refetch would only wait for the connection.
@@ -99,7 +109,8 @@ export function NotificationPrefsScreen() {
     // Offline with nothing cached: say so, never an endless skeleton. It loads by itself once back online.
     body = <ErrorState message={MESSAGES.network} onRetry={online ? () => query.refetch() : undefined} />;
   } else {
-    body = <PrefsSkeleton />;
+    // One bone per category this person will see, so nothing moves when the rows arrive.
+    body = <PrefsSkeleton rows={Math.max(readable.length, 1)} />;
   }
 
   return (
@@ -117,7 +128,7 @@ export function NotificationPrefsScreen() {
       ) : null}
       {body}
       <Animated.View entering={enterPull(1)} style={styles.test}>
-        <PhonePushCard />
+        <PhonePushCard offHelp={pushPitch(readable).offHelp} />
       </Animated.View>
       <Animated.View entering={enterPull(2)} style={styles.testCard}>
         <TestPushCard />
@@ -179,7 +190,7 @@ function PrefsTable({ rows, disabled, onChange }: PrefsTableProps) {
 }
 
 /** Same shape as the table, so nothing moves when the rows arrive. */
-function PrefsSkeleton() {
+function PrefsSkeleton({ rows }: { rows: number }) {
   return (
     <SkeletonGroup>
       <Card padded={false}>
@@ -192,7 +203,7 @@ function PrefsSkeleton() {
             <Skeleton width={30} />
           </View>
         </View>
-        {Array.from({ length: SKELETON_ROWS }, (_, i) => (
+        {Array.from({ length: rows }, (_, i) => (
           <Fragment key={i}>
             <Divider />
             <View style={styles.row}>
@@ -284,8 +295,9 @@ function TestPushCard() {
  * Push on this phone (brief section 9): off (with "Turn on", which asks, or
  * opens the system settings when the system will not ask again), being set
  * up, set up, or failed with the reason in plain words and "Try again".
+ * `offHelp` says what pushes this person would get.
  */
-function PhonePushCard() {
+function PhonePushCard({ offHelp }: { offHelp: string }) {
   const { colors, tones } = useTheme();
   const permission = usePushState((s) => s.permission);
   const status = usePushState((s) => s.status);
@@ -310,7 +322,7 @@ function PhonePushCard() {
     icon = BellOff;
     iconColor = 'ink3';
     title = PUSH_COPY.off;
-    help = PUSH_COPY.offHelp;
+    help = offHelp;
     button = (
       <PendingButton
         label={PUSH_COPY.turnOn}

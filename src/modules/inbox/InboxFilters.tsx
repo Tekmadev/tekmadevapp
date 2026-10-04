@@ -17,19 +17,33 @@ export type InboxFiltersProps = {
   needsAction: number | null;
   category: NotificationCategory | null;
   onCategory: (category: NotificationCategory | null) => void;
-  isOwner: boolean;
+  /** The categories this person reads (`inbox.<category>`), in brief order. */
+  categories: readonly NotificationCategory[];
+  /** "Include test" is offered only with `testdata.view`. */
+  canIncludeTest: boolean;
   includeTest: boolean;
   onIncludeTest: (on: boolean) => void;
 };
 
 /**
  * Under the large title: All / Unread / Needs action ({n}), then one scrolling
- * row of category chips (Audience and Team for owners only) with the owner's
- * "Include test" toggle at the end, set apart by a hairline.
+ * row of category chips (only the categories this person reads) with the
+ * "Include test" toggle at the end for people who see test data, set apart by
+ * a hairline.
  */
-export function InboxFilters({ filter, onFilter, needsAction, category, onCategory, isOwner, includeTest, onIncludeTest }: InboxFiltersProps) {
+export function InboxFilters({
+  filter,
+  onFilter,
+  needsAction,
+  category,
+  onCategory,
+  categories,
+  canIncludeTest,
+  includeTest,
+  onIncludeTest,
+}: InboxFiltersProps) {
   const { colors } = useTheme();
-  const chips = categoryChips(isOwner);
+  const chips = categoryChips(categories);
   const selected = category ?? EVERYTHING;
 
   return (
@@ -61,7 +75,7 @@ export function InboxFilters({ filter, onFilter, needsAction, category, onCatego
             />
           ))}
         </View>
-        {isOwner ? (
+        {canIncludeTest ? (
           <>
             <View style={[styles.rule, { backgroundColor: colors.lineStrong }]} />
             <Chip

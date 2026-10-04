@@ -24,6 +24,8 @@ import { formatCents } from '@/lib/money';
 /* ---------- copy ---------- */
 
 export const EMPTY_COPY = 'No coupons yet. Create one above.';
+/** Without `coupons.write` there is no "New coupon" above. */
+export const EMPTY_COPY_READ_ONLY = 'No coupons yet.';
 export const DISABLED_TOAST = 'Coupon disabled. It can no longer be redeemed.';
 export const CODE_PLACEHOLDER = 'e.g. STARTUP50, or leave blank for auto';
 export const createdToast = (code: string) => `Coupon "${code}" created and live at checkout.`;
@@ -112,6 +114,22 @@ export function expiresText(expiresAt: string | null, now: Date = new Date()): s
 /** The deal link actions show only for active coupons the API gave a link (growth monthly or Anything). */
 export function dealUrlOf(coupon: Pick<Coupon, 'status' | 'dealUrl'>): string | null {
   return coupon.status === 'active' && coupon.dealUrl ? coupon.dealUrl : null;
+}
+
+/** What the signed-in person may do with coupons: `coupons.share` and `coupons.write`. */
+export type CouponAccess = { canShare: boolean; canWrite: boolean };
+
+/**
+ * The buttons under a coupon (owner decision 2026-10-03): "Copy deal link" and
+ * Share need a deal link and `coupons.share`; Disable needs `coupons.write`.
+ * A disabled coupon has none. The code itself is always tap-to-copy.
+ */
+export function couponActions(
+  coupon: Pick<Coupon, 'status' | 'dealUrl'>,
+  access: CouponAccess,
+): { dealUrl: string | null; disable: boolean } {
+  if (coupon.status !== 'active') return { dealUrl: null, disable: false };
+  return { dealUrl: access.canShare ? dealUrlOf(coupon) : null, disable: access.canWrite };
 }
 
 /** Replace a coupon in the cached list by id, or put a new one first (the list is newest first). */

@@ -3,7 +3,8 @@ import { useLocalSearchParams } from 'expo-router';
 
 import { blogKeys, postQuery } from '@/api/endpoints/blog';
 import { ApiError, MESSAGES } from '@/api/errors';
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import { useCan } from '@/auth/permissions';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { ErrorState } from '@/components/ErrorState';
 import { Screen } from '@/components/Screen';
 import { useShowAfter } from '@/components/Skeleton';
@@ -13,17 +14,20 @@ import { useRefetchOnFocus } from '@/modules/overview/hooks';
 
 import { EditorSkeleton } from './editor/EditorSkeleton';
 import { PostEditor } from './editor/PostEditor';
+import { PostReader } from './editor/PostReader';
 
 /**
- * The post editor route (`/blog/[id]`, brief 8.11). `id=new` writes a new post;
- * another id loads it (the cached copy shows at once) and refetches when the
- * screen regains focus or the app comes back. Owner only.
+ * The post editor route (`/blog/[id]`, brief 8.11). `id=new` writes a new post
+ * (`blog.write`); another id loads it (the cached copy shows at once) and
+ * refetches when the screen regains focus or the app comes back. Reading needs
+ * `blog.view`; without `blog.write` (staff) a post opens in the read-only view
+ * (Preview only), and `new` toasts and goes back.
  */
 export function PostEditorScreen() {
   return (
-    <OwnerOnly>
+    <RequireCapability cap="blog.view">
       <PostEditorRoute />
-    </OwnerOnly>
+    </RequireCapability>
   );
 }
 
@@ -33,15 +37,25 @@ function PostEditorRoute() {
   const isNew = id === 'new';
   const online = useIsOnline();
   const showSkeleton = useShowAfter();
+  const canWrite = useCan('blog.write');
 
   const query = useQuery({ ...postQuery(id), enabled: !isNew && id !== '' });
   useRefetchOnFocus((options) => (!isNew && id ? query.refetch(options) : undefined), query.dataUpdatedAt);
 
-  if (isNew) return <PostEditor key="new" postId={null} detail={null} dataUpdatedAt={0} refetching={false} />;
+  if (isNew) {
+    return (
+      <RequireCapability cap="blog.write">
+        <PostEditor key="new" postId={null} detail={null} dataUpdatedAt={0} refetching={false} />
+      </RequireCapability>
+    );
+  }
 
   // A 404 means the post is gone (trashed elsewhere): say so instead of editing a cached copy.
   const notFound = query.error instanceof ApiError && query.error.status === 404;
   if (query.data && !notFound) {
+    if (!canWrite) {
+      return <PostReader key={id} detail={query.data} dataUpdatedAt={query.dataUpdatedAt} refetching={query.isFetching && !query.isPending} />;
+    }
     return (
       <PostEditor
         key={id}

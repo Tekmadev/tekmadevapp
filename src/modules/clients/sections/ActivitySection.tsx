@@ -3,7 +3,8 @@ import { StyleSheet, View } from 'react-native';
 
 import { clientActivityInfiniteQuery, clientKeys, postClientActivity, type NewActivityInput } from '@/api/endpoints/clients';
 import type { ActivityPage } from '@/api/schemas/clients';
-import { useRole } from '@/auth/session';
+import { useCan } from '@/auth/permissions';
+import { useMe } from '@/auth/session';
 import { EmptyState } from '@/components/EmptyState';
 import { PendingButton } from '@/components/PendingButton';
 import { Section } from '@/components/Section';
@@ -22,6 +23,8 @@ type Pages = InfiniteData<ActivityPage, string | null>;
  * the cursor ("Load more"), and the composer for an internal note or an
  * update to the client.
  *
+ * The composer needs `clients.activity.write`.
+ *
  * The first page always comes from the bundle (the shell refreshes it on
  * focus and after every write). Older pages live in their own infinite query
  * that only fetches when asked; it is seeded with the bundle's first page so
@@ -30,7 +33,9 @@ type Pages = InfiniteData<ActivityPage, string | null>;
 export function ActivitySection({ clientId, bundle }: SectionProps) {
   const queryClient = useQueryClient();
   const labels = useClientLabels();
-  const role = useRole();
+  // Links in updates open what this person may open (their GET /me capabilities).
+  const me = useMe();
+  const canWrite = useCan('clients.activity.write');
   const key = clientKeys.activity(clientId);
   const older = useInfiniteQuery({ ...clientActivityInfiniteQuery(clientId), enabled: false, meta: { persist: false } });
 
@@ -67,16 +72,18 @@ export function ActivitySection({ clientId, bundle }: SectionProps) {
       ) : (
         <View style={styles.timeline}>
           {items.map((entry, i) => (
-            <ActivityItem key={entry.id} entry={entry} labels={labels} role={role} last={i === items.length - 1 && !nextCursor} />
+            <ActivityItem key={entry.id} entry={entry} labels={labels} viewer={me} last={i === items.length - 1 && !nextCursor} />
           ))}
         </View>
       )}
       {nextCursor ? (
         <PendingButton label="Load more" pendingLabel="Loading" variant="secondary" size="sm" onPress={loadMore} style={styles.more} />
       ) : null}
-      <View style={styles.composer}>
-        <ActivityComposer onPost={post} />
-      </View>
+      {canWrite ? (
+        <View style={styles.composer}>
+          <ActivityComposer onPost={post} />
+        </View>
+      ) : null}
     </Section>
   );
 }

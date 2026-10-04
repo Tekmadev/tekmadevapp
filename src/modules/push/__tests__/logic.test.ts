@@ -1,5 +1,7 @@
 import {
+  categoryCapability,
   channelIdFor,
+  channelsFor,
   deviceLabel,
   foregroundBehavior,
   needsRegistration,
@@ -7,7 +9,10 @@ import {
   parseRegistration,
   permissionAction,
   PUSH_CHANNELS,
+  PUSH_COPY,
+  pushPitch,
   pushRoute,
+  readableCategories,
   registrationIsCurrent,
   registrationSignature,
   rememberTap,
@@ -99,6 +104,40 @@ describe('parsePushPayload', () => {
   });
 });
 
+describe('categories by capability', () => {
+  it('maps each category to its inbox capability', () => {
+    expect(categoryCapability('leads')).toBe('inbox.leads');
+    expect(categoryCapability('team')).toBe('inbox.team');
+  });
+
+  it('reads the fallback table by role: owners and managers get all seven, staff Leads and Clients', () => {
+    const all = ['leads', 'sales', 'billing', 'clients', 'audience', 'team', 'system'];
+    expect(readableCategories('owner')).toEqual(all);
+    expect(readableCategories('manager')).toEqual(all);
+    expect(readableCategories('staff')).toEqual(['leads', 'clients']);
+    expect(readableCategories(null)).toEqual([]);
+  });
+
+  it('follows the server list over the role', () => {
+    expect(readableCategories({ role: 'staff', capabilities: ['inbox.leads', 'inbox.sales', 'leads.view'] })).toEqual(['leads', 'sales']);
+    expect(readableCategories({ role: 'owner', capabilities: [] })).toEqual([]);
+    expect(readableCategories({ role: 'manager', capabilities: null })).toHaveLength(7);
+  });
+
+  it('makes channels only for those categories, critical variants included', () => {
+    expect(channelsFor(['leads', 'clients']).map((c) => c.id)).toEqual(['leads', 'leads-critical', 'clients', 'clients-critical']);
+    expect(channelsFor(readableCategories('owner'))).toEqual(PUSH_CHANNELS);
+    expect(channelsFor([])).toEqual([]);
+  });
+
+  it('pitches Sales pushes only to someone who gets them', () => {
+    expect(pushPitch(readableCategories('manager'))).toEqual({ title: PUSH_COPY.offerTitle, body: PUSH_COPY.offerBody, offHelp: PUSH_COPY.offHelp });
+    const staff = pushPitch(readableCategories('staff'));
+    expect(staff.title).toBe('Get pushes for new leads?');
+    expect(`${staff.body} ${staff.offHelp}`).not.toMatch(/sale/i);
+  });
+});
+
 describe('rowIdOf', () => {
   it('has no row for a test push or a missing id', () => {
     expect(rowIdOf({ notificationId: 'test', url: null, category: 'system', severity: 'info' })).toBeNull();
@@ -125,9 +164,9 @@ describe('pushRoute', () => {
     expect(pushRoute({ ...base, url: null }, 'owner')).toEqual({ kind: 'inbox', link: { pathname: '/inbox' }, detailId: 'ntf_1' });
   });
 
-  it('opens the Inbox with the detail sheet for an owner-only link sent to a manager', () => {
-    expect(pushRoute({ ...base, url: '/admin/pricing' }, 'manager')).toEqual({ kind: 'inbox', link: { pathname: '/inbox' }, detailId: 'ntf_1' });
-    expect(pushRoute({ ...base, url: '/admin/pricing' }, 'owner').kind).toBe('screen');
+  it('opens the Inbox with the detail sheet for a link this role may not open', () => {
+    expect(pushRoute({ ...base, url: '/admin/team' }, 'staff')).toEqual({ kind: 'inbox', link: { pathname: '/inbox' }, detailId: 'ntf_1' });
+    expect(pushRoute({ ...base, url: '/admin/team' }, 'manager').kind).toBe('screen');
   });
 
   it('keeps the Inbox filter and has no detail for a test push', () => {
@@ -140,6 +179,12 @@ describe('pushRoute', () => {
 
   it('sends unknown links to the Inbox', () => {
     expect(pushRoute({ ...base, url: 'https://evil.example/admin' }, 'owner')).toMatchObject({ kind: 'inbox', detailId: 'ntf_1' });
+  });
+
+  it('follows the capabilities GET /me sent, not the role', () => {
+    const me = { role: 'staff' as const, capabilities: ['team.view'] };
+    expect(pushRoute({ ...base, url: '/admin/team' }, me).kind).toBe('screen');
+    expect(pushRoute({ ...base, url: '/admin/team' }, { role: 'owner' as const, capabilities: ['leads.view'] }).kind).toBe('inbox');
   });
 });
 

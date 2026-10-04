@@ -8,7 +8,7 @@ import { zLoaderSettings, type LoaderSettings } from '@/api/schemas/settings';
 /**
  * Loader settings routes through the real mock transport: read, save (clamped,
  * and visible in GET /me), the deliberate `db` failure, reset, the 400 for a
- * partial body, and owner-only 403s. Nothing here is paged.
+ * partial body, and who may (owners and managers; staff get 403). Nothing here is paged.
  */
 
 let token: string | null = null;
@@ -18,6 +18,9 @@ const asOwner = () => {
 };
 const asManager = () => {
   token = tokenFor('usr_mgr01');
+};
+const asStaff = () => {
+  token = tokenFor('usr_staff01');
 };
 
 beforeAll(() => {
@@ -52,14 +55,23 @@ describe('GET /settings/loader', () => {
     expect((await getMe()).loader).toEqual(settings);
   });
 
-  it('is owner only', async () => {
+  it('is open to managers and closed to staff', async () => {
     asManager();
+    expect(await getLoaderSettings()).toEqual(LOADER_DEFAULTS_SERVER);
+    asStaff();
     for (const call of [getLoaderSettings(), saveLoaderSettings(tuned), resetLoaderSettings()]) {
       const e = await apiError(call);
-      expect([e.status, e.code]).toEqual([403, 'owner_only']);
+      // A role limit, not an owner-only section: the client keeps the server's copy and stays on the screen.
+      expect([e.status, e.code, e.message]).toEqual([403, 'forbidden', 'Your role cannot do that.']);
     }
     asOwner();
     expect(await getLoaderSettings()).toEqual(LOADER_DEFAULTS_SERVER);
+  });
+
+  it('lets a manager save and reset', async () => {
+    asManager();
+    expect(await saveLoaderSettings(tuned)).toEqual(tuned);
+    expect(await resetLoaderSettings()).toEqual(LOADER_DEFAULTS_SERVER);
   });
 });
 

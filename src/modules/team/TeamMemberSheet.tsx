@@ -1,7 +1,8 @@
 import { Lock, UserMinus } from 'lucide-react-native';
 import { StyleSheet, View } from 'react-native';
 
-import type { TeamMember, TeamMeta } from '@/api/schemas/team';
+import type { TeamMember } from '@/api/schemas/team';
+import { roleCopy } from '@/auth/permissions';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Icon } from '@/components/Icon';
@@ -11,14 +12,13 @@ import { Text } from '@/components/Text';
 import { space } from '@/design/tokens';
 import { formatDate, formatDateTime } from '@/lib/dates';
 
-import { canRemove, isSelf, memberName, roleBadge, TEAM_COPY } from './logic';
-
-type RoleInfo = TeamMeta['teamRoles'][number];
+import { canRemove, isSelf, memberName, selfNote, TEAM_COPY } from './logic';
 
 export type TeamMemberSheetProps = {
   member: TeamMember;
-  roles: readonly RoleInfo[];
   myEmail: string | null;
+  /** The signed-in person may remove members (`team.remove`, owners only). */
+  mayRemove: boolean;
   onRemove: (member: TeamMember) => void;
   onClose: () => void;
 };
@@ -26,12 +26,13 @@ export type TeamMemberSheetProps = {
 /**
  * One team member: email, role, last sign in and when they were added. Owners
  * set by the server environment show a lock and why they cannot be removed;
- * you cannot remove yourself. Everyone else gets "Remove from team", which
- * opens the hold to confirm sheet on top of this one.
+ * you cannot remove yourself. For an owner, everyone else gets "Remove from
+ * team", which opens the hold to confirm sheet on top of this one. A manager
+ * never sees Remove.
  */
-export function TeamMemberSheet({ member, roles, myEmail, onRemove, onClose }: TeamMemberSheetProps) {
-  const badge = roleBadge(roles, member.role);
-  const removable = canRemove(member, myEmail);
+export function TeamMemberSheet({ member, myEmail, mayRemove, onRemove, onClose }: TeamMemberSheetProps) {
+  const badge = roleCopy(member.role);
+  const removable = canRemove(member, myEmail, mayRemove);
   const self = isSelf(member, myEmail);
 
   const footer = removable ? (
@@ -70,7 +71,7 @@ export function TeamMemberSheet({ member, roles, myEmail, onRemove, onClose }: T
           </View>
         ) : self ? (
           <Text variant="small" color="ink3">
-            {TEAM_COPY.self}
+            {selfNote(mayRemove)}
           </Text>
         ) : null}
       </View>

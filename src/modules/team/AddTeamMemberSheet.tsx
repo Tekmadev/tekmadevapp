@@ -7,8 +7,9 @@ import { Share, StyleSheet, View } from 'react-native';
 
 import { addTeamMember, teamKeys } from '@/api/endpoints/team';
 import { fieldErrors } from '@/api/errors';
-import type { Team, TeamMember, TeamMeta } from '@/api/schemas/team';
+import type { Team, TeamMember } from '@/api/schemas/team';
 import type { Role } from '@/api/types';
+import { roleCopy } from '@/auth/permissions';
 import { Button } from '@/components/Button';
 import { OptionList, type SelectOption } from '@/components/form/Select';
 import { FieldIconButton } from '@/components/form/InputChrome';
@@ -28,16 +29,15 @@ import {
   insertMember,
   NAME_MAX,
   newMemberInput,
-  roleBadge,
   shareCredentialsText,
   TEAM_COPY,
   validateNewMember,
+  type RoleOption,
 } from './logic';
 
-type RoleInfo = TeamMeta['teamRoles'][number];
-
 export type AddTeamMemberSheetProps = {
-  roles: readonly RoleInfo[];
+  /** The roles this person may give (addableRoles): Owner only with `team.owners`. The first is the default. */
+  roles: readonly RoleOption[];
   onClose: () => void;
 };
 
@@ -55,11 +55,13 @@ async function copy(value: string) {
 }
 
 /**
- * "Add a team member" (brief 8.16): name, email, a temporary password (filled
- * in with a generated one, "Generate" draws another, copy button) and the role
- * with its help line. Creating the sign-in account waits for the server and
- * sends an Idempotency-Key, so a retry never adds the person twice. After it
- * lands the sheet shows the sign-in details with "Share sign-in details".
+ * "Add a team member" (brief 8.16, `team.write`): name, email, a temporary
+ * password (filled in with a generated one, "Generate" draws another, copy
+ * button) and the role with its help line: Staff (the default, the least
+ * access), Manager, and Owner only for someone with `team.owners`. Creating
+ * the sign-in account waits for the server and sends an Idempotency-Key, so a
+ * retry never adds the person twice. After it lands the sheet shows the
+ * sign-in details with "Share sign-in details".
  */
 export function AddTeamMemberSheet({ roles, onClose }: AddTeamMemberSheetProps) {
   const queryClient = useQueryClient();
@@ -67,7 +69,7 @@ export function AddTeamMemberSheet({ roles, onClose }: AddTeamMemberSheetProps) 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState(newPassword);
-  const [role, setRole] = useState<Role>('manager');
+  const [role, setRole] = useState<Role>(() => roles[0]?.value ?? 'staff');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [added, setAdded] = useState<Added | null>(null);
 
@@ -111,9 +113,9 @@ export function AddTeamMemberSheet({ roles, onClose }: AddTeamMemberSheetProps) 
         title={TEAM_COPY.addedTitle}
         subtitle={added.member.name ?? added.member.email}
         scrollable
-        footer={<AddedFooter added={added} roles={roles} onClose={onClose} />}
+        footer={<AddedFooter added={added} onClose={onClose} />}
       >
-        <AddedBody added={added} roles={roles} />
+        <AddedBody added={added} />
       </Sheet>
     );
   }
@@ -224,7 +226,7 @@ export function AddTeamMemberSheet({ roles, onClose }: AddTeamMemberSheetProps) 
 }
 
 /** After the server added them: the sign-in details to pass on. */
-function AddedBody({ added, roles }: { added: Added; roles: readonly RoleInfo[] }) {
+function AddedBody({ added }: { added: Added }) {
   const { member, password } = added;
   return (
     <View style={styles.body}>
@@ -236,7 +238,7 @@ function AddedBody({ added, roles }: { added: Added; roles: readonly RoleInfo[] 
         items={[
           { label: 'Email', value: member.email, copyable: true },
           { label: 'Temporary password', value: password, copyable: true, mono: true },
-          { label: 'Role', value: roleBadge(roles, member.role).label },
+          { label: 'Role', value: roleCopy(member.role).label },
         ]}
       />
     </View>
@@ -244,10 +246,10 @@ function AddedBody({ added, roles }: { added: Added; roles: readonly RoleInfo[] 
 }
 
 /** "Share sign-in details" opens the system share sheet (React Native Share: Android and iOS), then "Done". */
-function AddedFooter({ added, roles, onClose }: { added: Added; roles: readonly RoleInfo[]; onClose: () => void }) {
+function AddedFooter({ added, onClose }: { added: Added; onClose: () => void }) {
   const share = () => {
     const { member, password } = added;
-    const message = shareCredentialsText({ email: member.email, password, roleLabel: roleBadge(roles, member.role).label });
+    const message = shareCredentialsText({ email: member.email, password, role: member.role });
     // `message` works on both platforms; dialogTitle is Android only and subject is used by iOS mail.
     Share.share({ message }, { dialogTitle: TEAM_COPY.share, subject: 'Your Tekmadev Admin sign-in' }).catch(() =>
       notice.err('Could not open the share sheet.'),

@@ -1,4 +1,5 @@
 import type { Lead, LeadNeed, LeadRevenue, LeadSource, LeadStatus, LeadsMeta } from '@/api/schemas/leads';
+import type { Capability } from '@/auth/capabilities';
 import { formatFieldDateTime } from '@/components/form/dateTime';
 import { contactUrl } from '@/components/parts/logic';
 import type { Tone } from '@/design/tokens';
@@ -213,6 +214,17 @@ export function copyTargets(lead: Pick<Lead, 'phone' | 'email'>): CopyTarget[] {
   const phone = lead.phone?.trim();
   if (phone) out.push({ kind: 'phone', value: phone, shown: formatPhone(phone) });
   return out;
+}
+
+/**
+ * The lead's main button (owner decision 2026-10-03 on roles): "Open client"
+ * once it became a client (needs `clients.view`), else "Create client from
+ * this lead", which opens New client and so needs `clients.create` as well as
+ * `leads.convert` (staff hold only the second: no button). Null: no button.
+ */
+export function leadClientAction(convertedClientId: string | null, can: (cap: Capability) => boolean): 'open' | 'create' | null {
+  if (convertedClientId) return can('clients.view') ? 'open' : null;
+  return can('leads.convert') && can('clients.create') ? 'create' : null;
 }
 
 export type NewClientPrefill = { businessName?: string; email?: string; name?: string; phone?: string };

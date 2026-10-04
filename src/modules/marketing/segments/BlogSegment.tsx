@@ -9,6 +9,7 @@ import { blogKeys, postsInfiniteQuery, type PostListParams } from '@/api/endpoin
 import { sessionKeys } from '@/api/endpoints/session';
 import { MESSAGES } from '@/api/errors';
 import type { PostRow as Row } from '@/api/schemas/blog';
+import { useCan } from '@/auth/permissions';
 import { Divider } from '@/components/Divider';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
@@ -19,7 +20,7 @@ import { useReduceMotion } from '@/design/motion';
 import { layout, space } from '@/design/tokens';
 import { useIsOnline } from '@/lib/connectivity';
 import { InlineLoader } from '@/loader/InlineLoader';
-import { BLOG_COPY, rowsOf, statusFilterItems, type StatusFilter } from '@/modules/blog/list/logic';
+import { BLOG_COPY, rowsOf, statusFilterItems, type PostAccess, type StatusFilter } from '@/modules/blog/list/logic';
 import { PostListSkeleton } from '@/modules/blog/list/PostListSkeleton';
 import { PostRow } from '@/modules/blog/list/PostRow';
 import { blogMetaQuery } from '@/modules/blog/list/queries';
@@ -38,13 +39,18 @@ const newPost = () => router.push({ pathname: '/blog/[id]', params: { id: 'new' 
  * chips (All, Draft, In review, Published, Archived), search by title on the
  * server, then every post newest change first with infinite scroll. Tap opens
  * the editor; swipe or long press for Publish / Unpublish, View live, Share
- * link and Move to trash. A failed read is an ErrorState with Retry, never an
- * empty list; cached rows stay on screen offline under the banner.
+ * link and Move to trash. Without `blog.write` (staff) a tap opens the
+ * read-only post, there is no swipe, and long press offers View live and Share
+ * link only. A failed read is an ErrorState with Retry, never an empty list;
+ * cached rows stay on screen offline under the banner.
  */
 export function BlogSegment({ chrome }: MarketingSegmentProps) {
   const online = useIsOnline();
   const reduceMotion = useReduceMotion();
   const now = useMinuteClock();
+  const canWrite = useCan('blog.write');
+  const canTrash = useCan('blog.trash');
+  const access: PostAccess = { canWrite, canTrash };
 
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [searchText, setSearchText] = useState('');
@@ -54,7 +60,7 @@ export function BlogSegment({ chrome }: MarketingSegmentProps) {
   const list = useInfiniteQuery({ ...postsInfiniteQuery(listParams), placeholderData: keepPreviousData });
   const meta = useQuery(blogMetaQuery());
   useRefreshOnFocus([blogKeys.lists(), sessionKeys.meta]);
-  const actions = usePostActions(meta.data);
+  const actions = usePostActions(meta.data, access);
 
   // Offline with nothing cached for this filter the read waits for the connection: say so, not a skeleton
   // that never ends, and not the previous filter's rows (a placeholder reports success, not pending).
@@ -80,6 +86,7 @@ export function BlogSegment({ chrome }: MarketingSegmentProps) {
       meta={meta.data}
       now={now}
       online={online}
+      access={access}
       index={index}
       still={reduceMotion || index >= firstPageCount}
       onPress={actions.open}
@@ -126,8 +133,10 @@ export function BlogSegment({ chrome }: MarketingSegmentProps) {
     <ErrorState error={list.error} onRetry={() => list.refetch()} />
   ) : filtered ? (
     <EmptyState message={BLOG_COPY.noMatch} action={{ label: 'Clear filters', onPress: clearFilters }} />
-  ) : (
+  ) : canWrite ? (
     <EmptyState message={BLOG_COPY.empty} action={{ label: BLOG_COPY.newPost, onPress: newPost, icon: Plus }} />
+  ) : (
+    <EmptyState message={BLOG_COPY.emptyReadOnly} />
   );
 
   const footer = (
@@ -149,7 +158,7 @@ export function BlogSegment({ chrome }: MarketingSegmentProps) {
         data={rows}
         renderItem={renderItem}
         keyExtractor={rowKey}
-        extraData={{ meta: meta.data, now, online }}
+        extraData={{ meta: meta.data, now, online, canWrite, canTrash }}
         ItemSeparatorComponent={Separator}
         ListHeaderComponent={header}
         ListEmptyComponent={empty}

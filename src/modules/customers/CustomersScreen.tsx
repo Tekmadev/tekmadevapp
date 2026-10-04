@@ -4,21 +4,21 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useKeyboardState } from 'react-native-keyboard-controller';
 
-import { useIsOwner } from '@/auth/session';
+import { useCan, useCapabilities } from '@/auth/permissions';
 import { Fab } from '@/components/Fab';
 import { Menu } from '@/components/Menu';
 import { ScrollTabs, type ScrollTabItem } from '@/components/ScrollTabs';
 import { space } from '@/design/tokens';
+import { quickActionsHint } from '@/modules/overview/logic';
 import { PlusSheet } from '@/modules/quickActions/PlusSheet';
+import { plusSheetActions, useVisibility } from '@/modules/registry';
 import { TabHeaderActions } from '@/modules/shell/TabHeaderActions';
 
 import { ClientsSegmentHost } from './segments/ClientsSegmentHost';
 import { LeadsSegment } from './segments/LeadsSegment';
 import { SubscriptionsSegment } from './segments/SubscriptionsSegment';
 import { ToolsSegment } from './segments/ToolsSegment';
-import { CUSTOMER_SEGMENTS, SEGMENT_LABELS, toSegment, type CustomerSegment, type CustomersParams, type SegmentChrome } from './segments/types';
-
-const TABS: readonly ScrollTabItem<CustomerSegment>[] = CUSTOMER_SEGMENTS.map((value) => ({ value, label: SEGMENT_LABELS[value] }));
+import { SEGMENT_LABELS, toSegment, visibleSegments, type CustomerSegment, type CustomersParams, type SegmentChrome } from './segments/types';
 
 /** The Fab is 56dp and floats 16dp above the tab bar; rows get this much extra room under them. */
 const FAB_CLEARANCE = 56 + space[4] + space[2];
@@ -28,15 +28,22 @@ const FAB_CLEARANCE = 56 + space[4] + space[2];
  * Subscriptions, switched by tabs under the title and bound to the route param
  * `segment` (default clients), so deep links and Home cards land on the right
  * one. Each segment owns its list and states; this shell owns the title, the
- * header actions (search, Inbox bell, the owner's "Checklist templates"), the
- * gold + button and the quick actions sheet.
+ * header actions (search, Inbox bell, "Checklist templates" for people with
+ * `clients.templates`), the gold + button and the quick actions sheet.
+ * Only the sections this person may open are tabs: staff never see
+ * Subscriptions (money).
  */
 export function CustomersScreen() {
   const params = useLocalSearchParams<CustomersParams>();
-  const segment = toSegment(params.segment);
-  const isOwner = useIsOwner();
+  const caps = useCapabilities();
+  const segments = visibleSegments((cap) => caps.includes(cap));
+  const segment = toSegment(params.segment, segments);
+  const tabs: ScrollTabItem<CustomerSegment>[] = segments.map((value) => ({ value, label: SEGMENT_LABELS[value] }));
+  const canTemplates = useCan('clients.templates');
   const keyboardVisible = useKeyboardState((s) => s.isVisible);
   const [plusOpen, setPlusOpen] = useState(false);
+  // The gold + lists only what this person may do; with nothing to offer it is not shown.
+  const plusHint = quickActionsHint(plusSheetActions(useVisibility()).map((a) => a.title));
 
   // A segment's quick filter and one-shot action belong to it: leaving it drops them.
   const switchTo = (next: CustomerSegment) => router.setParams({ segment: next, view: undefined, action: undefined });
@@ -44,7 +51,7 @@ export function CustomersScreen() {
   const headerRight = (
     <View style={styles.actions}>
       <TabHeaderActions />
-      {isOwner ? (
+      {canTemplates ? (
         <Menu
           title="Customers"
           items={[{ label: 'Checklist templates', icon: ListChecks, hint: 'The onboarding checklist for new clients', onPress: () => router.push('/clients/templates') }]}
@@ -55,7 +62,7 @@ export function CustomersScreen() {
 
   const chrome: SegmentChrome = {
     screen: { title: 'Customers', headerRight },
-    switcher: <ScrollTabs items={TABS} active={segment} onChange={switchTo} accessibilityLabel="Customers sections" style={styles.switcher} />,
+    switcher: <ScrollTabs items={tabs} active={segment} onChange={switchTo} accessibilityLabel="Customers sections" style={styles.switcher} />,
     fabClearance: FAB_CLEARANCE,
   };
 
@@ -71,8 +78,8 @@ export function CustomersScreen() {
         <SubscriptionsSegment chrome={chrome} params={params} />
       )}
       {/* Out of the way while typing in a search box; the tab bar hides then too. */}
-      {keyboardVisible ? null : (
-        <Fab onPress={() => setPlusOpen(true)} accessibilityLabel="Quick actions" accessibilityHint="New client, log a booked call and more" />
+      {keyboardVisible || !plusHint ? null : (
+        <Fab onPress={() => setPlusOpen(true)} accessibilityLabel="Quick actions" accessibilityHint={plusHint} />
       )}
       <PlusSheet visible={plusOpen} onClose={() => setPlusOpen(false)} />
     </View>

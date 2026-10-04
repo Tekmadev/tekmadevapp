@@ -6,7 +6,7 @@ import { Section } from '@/components/Section';
 import { Skeleton, SkeletonGroup } from '@/components/Skeleton';
 import { layout, radius, space } from '@/design/tokens';
 
-import { kpiCellStyle, KpiLayout, useKpiColumns } from './KpiGrid';
+import { kpiCellStyle, KpiLayout, useKpiColumns, useVisibleKpis } from './KpiGrid';
 import { clampScale } from './logic';
 import { useAttentionCardSize } from './NeedsYou';
 
@@ -26,6 +26,8 @@ const ROW_WIDTHS: DimensionValue[] = ['64%', '52%', '70%', '58%'];
  */
 export function HomeSkeleton() {
   const columns = useKpiColumns();
+  // The same cards the loaded grid shows (three for staff), so nothing moves when the numbers land.
+  const kpis = useVisibleKpis();
   const card = useAttentionCardSize();
   return (
     <SkeletonGroup>
@@ -38,8 +40,8 @@ export function HomeSkeleton() {
 
       <View style={styles.kpis}>
         <KpiLayout columns={columns}>
-          {[0, 1, 2, 3].map((i) => (
-            <KpiCardSkeleton key={i} columns={columns} />
+          {kpis.map((key) => (
+            <KpiCardSkeleton key={key} columns={columns} />
           ))}
         </KpiLayout>
       </View>

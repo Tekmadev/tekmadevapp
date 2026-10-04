@@ -254,7 +254,9 @@ export function installAuthBridge(handlers: { onOwnerOnly: () => void }) {
         sessionEnding = false;
       });
     },
-    ownerOnly: () => {
+    ownerOnly: (code) => {
+      // A role limit on one action stays on the screen; the caller shows the message.
+      if (code === 'forbidden') return;
       notice.err(MESSAGES.ownerOnly);
       handlers.onOwnerOnly();
     },
@@ -266,6 +268,10 @@ export function installAuthBridge(handlers: { onOwnerOnly: () => void }) {
 
 export const useMe = () => useSession((s) => s.me);
 export const useRole = (): Role | null => useSession((s) => s.me?.role ?? null);
+/**
+ * @deprecated Roles no longer decide what someone sees: use `useCan(capability)`
+ * from src/auth/permissions.ts. Kept for screens not moved over yet.
+ */
 export const useIsOwner = () => useSession((s) => s.me?.role === 'owner');
 export const useFeatures = () => useSession((s) => s.me?.features);
 

@@ -2,11 +2,13 @@ import type { Href } from 'expo-router';
 import type { LucideIcon } from 'lucide-react-native';
 
 import type { Role } from '@/api/types';
+import { can, capabilitiesOf, type Capability } from '@/auth/capabilities';
 
 /**
  * Every feature is a module with a manifest. Tabs, the More menu, global search
  * (screens), quick actions and Android app shortcuts are generated from the
- * registry, filtered by role and by the `features` flags from GET /me.
+ * registry, filtered by the person's capabilities (GET /me `capabilities`, or
+ * the role's fallback row) and by the `features` flags from GET /me.
  * Adding a future automation is adding a module, not editing navigation code.
  */
 
@@ -20,7 +22,8 @@ export type QuickAction = {
   title: string;
   icon: LucideIcon;
   href: Href;
-  ownerOnly?: boolean;
+  /** Shown only to people who hold this capability (on top of the module's own). */
+  capability?: Capability;
   /** Also offered as an Android launcher shortcut (long-press the icon). */
   shortcut?: { icon: string; order: number };
   /** Shown in the gold + sheet on Home and Customers. */
@@ -28,7 +31,13 @@ export type QuickAction = {
 };
 
 /** A screen the global search can jump to ("Pricing", "Loader"...). */
-export type ScreenEntry = { title: string; keywords?: string[]; href: Href };
+export type ScreenEntry = {
+  title: string;
+  keywords?: string[];
+  href: Href;
+  /** Found only by people who hold this capability (on top of the module's own). */
+  capability?: Capability;
+};
 
 export type SearchProvider = {
   /** Screens this module contributes to search results. */
@@ -42,7 +51,11 @@ export type ModuleManifest = {
   group: ModuleGroup;
   /** Section inside More (only for group "more"). */
   moreSection?: MoreSection;
-  ownerOnly: boolean;
+  /**
+   * The capability that shows this module (its tab, More row, search screens,
+   * quick actions and shortcuts). None: everyone signed in (Profile, App settings).
+   */
+  capability?: Capability;
   /** Server feature flag from GET /me; the module is hidden when absent. */
   feature?: string;
   /** Route paths (app/ files) owned by this module, for docs and guards. */
@@ -57,11 +70,30 @@ export type ModuleManifest = {
   hidden?: boolean;
 };
 
-export type Visibility = { role: Role | null; features: readonly string[] | undefined };
+/**
+ * Who is looking: the signed-in person's role, feature flags and capabilities.
+ * Without `capabilities`, the role's fallback row is used.
+ */
+export type Visibility = {
+  role: Role | null;
+  features: readonly string[] | undefined;
+  capabilities?: readonly Capability[];
+};
 
-export function isVisible(m: Pick<ModuleManifest, 'ownerOnly' | 'feature'>, v: Visibility): boolean {
+/** The capabilities behind a Visibility (nobody signed in: none). */
+export function visibilityCapabilities(v: Visibility): readonly Capability[] {
+  if (!v.role) return [];
+  return v.capabilities ?? capabilitiesOf(v.role);
+}
+
+/** Whether this person may see something gated by `capability` (no capability: everyone signed in). */
+export function visibleTo(capability: Capability | undefined, v: Visibility): boolean {
   if (!v.role) return false;
-  if (m.ownerOnly && v.role !== 'owner') return false;
+  return !capability || can(visibilityCapabilities(v), capability);
+}
+
+export function isVisible(m: Pick<ModuleManifest, 'capability' | 'feature'>, v: Visibility): boolean {
+  if (!visibleTo(m.capability, v)) return false;
   if (m.feature && !(v.features ?? []).includes(m.feature)) return false;
   return true;
 }

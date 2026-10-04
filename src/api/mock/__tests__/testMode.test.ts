@@ -7,7 +7,7 @@ import { metaFragment, zTestModeStatus, zTestPurgeResult } from '@/api/schemas/t
 /**
  * Test mode routes through the real mock transport: the sandbox status, the
  * catalog rebuild (a long job; instant here because jest sets latency to 0),
- * deleting all test data, and owner-only 403s. Nothing here is paged.
+ * deleting all test data, and who may (owners and managers; staff get 403). Nothing here is paged.
  */
 
 let token: string | null = null;
@@ -17,6 +17,9 @@ const asOwner = () => {
 };
 const asManager = () => {
   token = tokenFor('usr_mgr01');
+};
+const asStaff = () => {
+  token = tokenFor('usr_staff01');
 };
 
 beforeAll(() => {
@@ -63,11 +66,14 @@ describe('GET /test-mode', () => {
     ]);
   });
 
-  it('is owner only', async () => {
+  it('is open to managers and closed to staff', async () => {
     asManager();
+    expect((await getTestMode()).counts.orders).toBe(5);
+    asStaff();
     for (const call of [getTestMode(), rebuildTestCatalog(), purgeTestData()]) {
       const e = await apiError(call);
-      expect([e.status, e.code]).toEqual([403, 'owner_only']);
+      // A role limit, not an owner-only section: the client keeps the server's copy and stays on the screen.
+      expect([e.status, e.code, e.message]).toEqual([403, 'forbidden', 'Your role cannot do that.']);
     }
     asOwner();
     const status = await getTestMode();

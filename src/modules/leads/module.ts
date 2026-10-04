@@ -7,7 +7,7 @@ export const leadsModule: ModuleManifest = {
   title: 'Leads',
   icon: UserRound,
   group: 'customers',
-  ownerOnly: false,
+  capability: 'leads.view',
   routes: ['(tabs)/customers', 'leads/[id]'],
   href: { pathname: '/customers', params: { segment: 'leads' } },
   searchable: {

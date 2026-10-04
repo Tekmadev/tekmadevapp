@@ -18,7 +18,8 @@ export const zCents = z.number().int();
 export const zMoney = z.object({ amount: zCents, currency: z.string() });
 export type Money = z.infer<typeof zMoney>;
 
-export const zRole = z.enum(['owner', 'manager']);
+/** Staff roles (owner decision 2026-10-03). What each may do is in src/auth/capabilities.ts. */
+export const zRole = z.enum(['owner', 'manager', 'staff']);
 export type Role = z.infer<typeof zRole>;
 
 export const zTone = z.enum(['neutral', 'gold', 'ok', 'warn', 'muted', 'signal']);

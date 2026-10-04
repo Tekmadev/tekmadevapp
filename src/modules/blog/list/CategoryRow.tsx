@@ -24,6 +24,8 @@ export type CategoryRowProps = {
   /** Every category, for the duplicate name check. */
   categories: readonly BlogCategory[];
   editing: boolean;
+  /** No rename or delete (`blog.write` missing): the row only reads. */
+  readOnly?: boolean;
   index: number;
   still: boolean;
   onEdit: (category: BlogCategory, index: number) => void;
@@ -37,12 +39,14 @@ export type CategoryRowProps = {
 
 /**
  * One blog category: name, post count and its slug (which never changes).
- * Tap or the pencil renames it in place; the bin asks to delete it.
+ * Tap or the pencil renames it in place; the bin asks to delete it. Read only,
+ * it is the same row without the buttons (same height, so nothing jumps).
  */
 export const CategoryRow = memo(function CategoryRow({
   category,
   categories,
   editing,
+  readOnly = false,
   index,
   still,
   onEdit,
@@ -66,6 +70,12 @@ export const CategoryRow = memo(function CategoryRow({
           onRename={onRename}
           onFocus={() => onFieldFocus(index)}
         />
+      ) : readOnly ? (
+        <View style={styles.row}>
+          <View accessible accessibilityLabel={`${category.name}, ${count}, slug ${category.slug}`} style={styles.texts}>
+            <CategoryTexts category={category} count={count} />
+          </View>
+        </View>
       ) : (
         <View style={styles.row}>
           <PressableScale
@@ -75,17 +85,7 @@ export const CategoryRow = memo(function CategoryRow({
             accessibilityHint="Renames the category"
             style={styles.texts}
           >
-            <Text variant="bodyStrong" numberOfLines={2}>
-              {category.name}
-            </Text>
-            <View style={styles.metaLine}>
-              <Text variant="small" color="ink3" tabular>
-                {count}
-              </Text>
-              <Text variant="mono" color="ink4" numberOfLines={1} style={styles.slug}>
-                {category.slug}
-              </Text>
-            </View>
+            <CategoryTexts category={category} count={count} />
           </PressableScale>
           <IconButton icon={Pencil} size={20} accessibilityLabel={`Rename ${category.name}`} onPress={() => onEdit(category, index)} />
           <IconButton icon={Trash2} size={20} accessibilityLabel={`Delete ${category.name}`} onPress={() => onDelete(category)} />
@@ -94,6 +94,25 @@ export const CategoryRow = memo(function CategoryRow({
     </Animated.View>
   );
 });
+
+/** Name, then the post count and the slug. */
+function CategoryTexts({ category, count }: { category: BlogCategory; count: string }) {
+  return (
+    <>
+      <Text variant="bodyStrong" numberOfLines={2}>
+        {category.name}
+      </Text>
+      <View style={styles.metaLine}>
+        <Text variant="small" color="ink3" tabular>
+          {count}
+        </Text>
+        <Text variant="mono" color="ink4" numberOfLines={1} style={styles.slug}>
+          {category.slug}
+        </Text>
+      </View>
+    </>
+  );
+}
 
 function RenameForm({
   category,

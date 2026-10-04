@@ -7,7 +7,8 @@ import { blogKeys, categoriesQuery, createCategory, deleteCategory, renameCatego
 import { sessionKeys } from '@/api/endpoints/session';
 import { MESSAGES } from '@/api/errors';
 import type { BlogCategory } from '@/api/schemas/blog';
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import { useCan } from '@/auth/permissions';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { ConfirmSheet } from '@/components/ConfirmSheet';
 import { Divider } from '@/components/Divider';
 import { EmptyState } from '@/components/EmptyState';
@@ -28,17 +29,19 @@ const rowKey = (category: BlogCategory) => category.id;
 const Separator = () => <Divider inset />;
 
 /**
- * Blog categories (brief 8.11, owner only, from the Blog menu): each category
- * with its post count and slug, renamed in place (the slug never changes),
- * added from the field on top, and deleted after a hold. Writes wait for the
- * server, put its answer in the list, then refetch what the web admin would:
- * the categories, the post lists (rows show the category name) and GET /meta.
+ * Blog categories (brief 8.11, from the Blog menu): each category with its
+ * post count and slug, renamed in place (the slug never changes), added from
+ * the field on top, and deleted after a hold. Writes wait for the server, put
+ * its answer in the list, then refetch what the web admin would: the
+ * categories, the post lists (rows show the category name) and GET /meta.
+ * Reading needs `blog.view`; without `blog.write` (staff) the list is read
+ * only: no add field, no rename, no delete.
  */
 export function CategoriesScreen() {
   return (
-    <OwnerOnly>
+    <RequireCapability cap="blog.view">
       <CategoriesBody />
-    </OwnerOnly>
+    </RequireCapability>
   );
 }
 
@@ -46,6 +49,7 @@ function CategoriesBody() {
   const queryClient = useQueryClient();
   const online = useIsOnline();
   const reduceMotion = useReduceMotion();
+  const canWrite = useCan('blog.write');
   const list = useQuery(categoriesQuery());
   useRefreshOnFocus([blogKeys.categories()]);
   const listRef = useRef<FlashListRef<BlogCategory>>(null);
@@ -112,7 +116,8 @@ function CategoriesBody() {
     <CategoryRow
       category={item}
       categories={categories}
-      editing={editingId === item.id}
+      editing={canWrite && editingId === item.id}
+      readOnly={!canWrite}
       index={index}
       still={reduceMotion}
       onEdit={startEdit}
@@ -125,7 +130,7 @@ function CategoriesBody() {
 
   const header = (
     <View style={styles.header}>
-      {hasData ? <AddCategoryForm categories={categories} onAdd={(name, key) => add.mutateAsync({ name, key })} /> : null}
+      {hasData && canWrite ? <AddCategoryForm categories={categories} onAdd={(name, key) => add.mutateAsync({ name, key })} /> : null}
       {list.isRefetchError && hasData && online ? <ErrorState compact error={list.error} onRetry={() => list.refetch()} /> : null}
     </View>
   );
@@ -139,7 +144,7 @@ function CategoriesBody() {
     ) : list.isError && !hasData ? (
       <ErrorState error={list.error} onRetry={() => list.refetch()} />
     ) : (
-      <EmptyState message={BLOG_COPY.noCategories} />
+      <EmptyState message={canWrite ? BLOG_COPY.noCategories : BLOG_COPY.noCategoriesReadOnly} />
     );
 
   return (
@@ -151,7 +156,7 @@ function CategoriesBody() {
         data={categories}
         renderItem={renderItem}
         keyExtractor={rowKey}
-        extraData={{ editingId, categories }}
+        extraData={{ editingId, categories, canWrite }}
         ItemSeparatorComponent={Separator}
         ListHeaderComponent={header}
         ListEmptyComponent={empty}

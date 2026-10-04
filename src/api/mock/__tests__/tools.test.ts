@@ -16,6 +16,9 @@ const asOwner = () => {
 const asManager = () => {
   token = `mock.usr_mgr01.${Date.now() + 3_600_000}`;
 };
+const asStaff = () => {
+  token = `mock.usr_staff01.${Date.now() + 3_600_000}`;
+};
 
 beforeAll(() => {
   setAuthBridge({ getAccessToken: async () => token });
@@ -102,8 +105,10 @@ describe('GET /tools/stats', () => {
     expect(stats.leakReported).toEqual({ amount: items.reduce((sum, s) => sum + (s.leak?.amount ?? 0), 0), currency: 'CAD' });
   });
 
-  it('is open to managers too', async () => {
+  it('is open to managers and staff too (tools.view)', async () => {
     asManager();
+    expect(zToolStats.safeParse(await getToolStats()).success).toBe(true);
+    asStaff();
     expect(zToolStats.safeParse(await getToolStats()).success).toBe(true);
   });
 });

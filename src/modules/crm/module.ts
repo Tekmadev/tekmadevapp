@@ -7,7 +7,7 @@ export const crmModule: ModuleManifest = {
   title: 'CRM sync',
   icon: RefreshCcwDot,
   group: 'marketing',
-  ownerOnly: true,
+  capability: 'crm.view',
   routes: ['(tabs)/marketing', 'crm/inspect'],
   href: { pathname: '/marketing', params: { segment: 'crm' } },
   searchable: {

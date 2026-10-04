@@ -7,7 +7,7 @@ export const analyticsModule: ModuleManifest = {
   title: 'Analytics',
   icon: BarChart3,
   group: 'analytics',
-  ownerOnly: false,
+  capability: 'analytics.view',
   routes: ['analytics'],
   href: '/analytics',
   summary: 'Pageviews, sources, devices',

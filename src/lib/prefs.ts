@@ -18,7 +18,7 @@ type PrefsState = {
   biometricUnlock: boolean;
   lockAfter: LockAfter;
   hideInRecents: boolean;
-  /** Owner-only inbox toggle, remembered between sessions. */
+  /** The Inbox's "Include test" toggle (`testdata.view` only), remembered between sessions. */
   inboxIncludeTest: boolean;
   /** Dev builds only: hidden Kit screen unlocked by tapping the version 7 times. */
   kitUnlocked: boolean;

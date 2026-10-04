@@ -16,7 +16,7 @@ import {
 import { sessionKeys } from '@/api/endpoints/session';
 import { MESSAGES } from '@/api/errors';
 import type { OnboardingTemplate } from '@/api/schemas/clients';
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { Button } from '@/components/Button';
 import { ConfirmSheet } from '@/components/ConfirmSheet';
 import { EmptyState } from '@/components/EmptyState';
@@ -47,16 +47,16 @@ const itemType = (item: TemplateListItem) => item.type;
 type Editing = { template: OnboardingTemplate | null; id: number };
 
 /**
- * Checklist templates (brief 8.5, owner only): the tasks every new onboarding
+ * Checklist templates (brief 8.5, `clients.templates`): the tasks every new onboarding
  * run starts with, grouped by stage. Tap a template to edit it, or add a new
  * one; deleting asks for a hold to confirm. Saves update the list from the
  * server's answer, then refetch it.
  */
 export function ChecklistTemplatesScreen() {
   return (
-    <OwnerOnly>
+    <RequireCapability cap="clients.templates">
       <TemplatesBody />
-    </OwnerOnly>
+    </RequireCapability>
   );
 }
 

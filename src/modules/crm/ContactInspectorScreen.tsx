@@ -8,7 +8,8 @@ import { crmInspectQuery, crmKeys, resubscribeCrmContact } from '@/api/endpoints
 import { emailKeys } from '@/api/endpoints/email';
 import { ApiError, fieldErrors, MESSAGES } from '@/api/errors';
 import type { CrmInspect } from '@/api/schemas/crm';
-import { OwnerOnly } from '@/auth/OwnerOnly';
+import { useCan } from '@/auth/permissions';
+import { RequireCapability } from '@/auth/RequireCapability';
 import { JobProgress } from '@/components/automation/JobProgress';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -38,18 +39,19 @@ const ERASED_NOTE = 'This address was erased here. It is never pushed to the CRM
 const normalize = (email: string) => email.trim().toLowerCase();
 
 /**
- * Contact inspector (brief 8.11, owner only, pushed): one email on this site
+ * Contact inspector (brief 8.11, `crm.view`, pushed): one email on this site
  * and in the CRM, side by side, with the not-found reason, the erased note and
  * the consent history. Each lookup calls the CRM live, so nothing here
  * refreshes on its own: no focus, resume or reconnect refetch. Only "Look up"
  * (or a pull) asks again. Opened from a subscriber with `?email=`, it looks
  * that address up once on open, because that tap was the request.
+ * Resubscribe needs `crm.write`; without it the note stays, with no button.
  */
 export function ContactInspectorScreen() {
   return (
-    <OwnerOnly>
+    <RequireCapability cap="crm.view">
       <InspectorBody />
-    </OwnerOnly>
+    </RequireCapability>
   );
 }
 
@@ -60,6 +62,7 @@ function InspectorBody() {
   const online = useIsOnline();
   const now = useMinuteClock();
   const meta = useQuery(metaQuery());
+  const canWrite = useCan('crm.write');
 
   const [text, setText] = useState(given);
   const [lookup, setLookup] = useState(() => (isValidEmail(given) ? normalize(given) : ''));
@@ -162,15 +165,17 @@ function InspectorBody() {
             <Text variant="body" color="ink2">
               Unsubscribed here, but the CRM shows them mailable again.
             </Text>
-            <Button
-              label={RESUBSCRIBE}
-              icon={UserCheck}
-              variant="secondary"
-              fullWidth
-              disabled={!online}
-              onPress={() => setConfirmResub(true)}
-              accessibilityHint="Asks you to hold to confirm"
-            />
+            {canWrite ? (
+              <Button
+                label={RESUBSCRIBE}
+                icon={UserCheck}
+                variant="secondary"
+                fullWidth
+                disabled={!online}
+                onPress={() => setConfirmResub(true)}
+                accessibilityHint="Asks you to hold to confirm"
+              />
+            ) : null}
           </Card>
         ) : null}
         <Section title="Consent history" style={styles.history}>
@@ -222,7 +227,7 @@ function InspectorBody() {
         <PendingButton label="Look up" pendingLabel="Looking up" icon={Search} onPress={submit} fullWidth />
       </View>
       {body}
-      {result && result.canResubscribe ? (
+      {result && result.canResubscribe && canWrite ? (
         <ConfirmSheet
           visible={confirmResub}
           onClose={() => setConfirmResub(false)}
