@@ -575,3 +575,7 @@ Contract: the website's docs/admin-api/staff.md. Seven capabilities after `team.
 - The web admin has no "create client from this lead" flow, so automatic credit from a lead happens only from the app.
 - A lead that books through the public booking link gets no automatic booker: the person who got the booking marks it Booked (the website's booking webhook is unchanged).
 
+
+## Owner requests after 0.4.0
+
+- New client: Assigned strategist starts with the signed-in person's email (owner, manager or anyone allowed to add clients), on the app and the web admin. Typing another email replaces it; clearing it leaves the client unassigned.

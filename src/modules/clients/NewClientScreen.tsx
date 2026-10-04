@@ -9,6 +9,7 @@ import { leadKeys } from '@/api/endpoints/leads';
 import { ApiError, fieldErrors } from '@/api/errors';
 import type { CreateClientResult, PlanId } from '@/api/schemas/clients';
 import { RequireCapability } from '@/auth/RequireCapability';
+import { useMe } from '@/auth/session';
 import { Select, type SelectOption } from '@/components/form/Select';
 import { SwitchRow } from '@/components/form/Switch';
 import { TextField } from '@/components/form/TextField';
@@ -79,13 +80,17 @@ function NewClientForm() {
   const [leadId] = useState(() => first(prefill.leadId) || null);
   const queryClient = useQueryClient();
   const meta = useQuery(clientsMetaQuery());
+  const myEmail = useMe()?.user.email.toLowerCase() ?? '';
 
   const [businessName, setBusinessName] = useState(() => first(prefill.businessName));
   const [email, setEmail] = useState(() => first(prefill.email));
   const [name, setName] = useState(() => first(prefill.name));
   const [phone, setPhone] = useState(() => first(prefill.phone));
   const [plan, setPlan] = useState<PlanChoice>('grow');
-  const [strategist, setStrategist] = useState('');
+  // Whoever adds the client is their strategist until someone types another
+  // email (null: not edited yet). Clearing the field leaves it unassigned.
+  const [strategistEdit, setStrategist] = useState<string | null>(null);
+  const strategist = strategistEdit ?? myEmail;
   const [sendInvite, setSendInvite] = useState(true);
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -231,7 +236,7 @@ function NewClientForm() {
         />
         <TextField
           label="Assigned strategist"
-          help="Staff email."
+          help="Staff email. You by default."
           value={strategist}
           onChangeText={edit('assignedStrategist', setStrategist)}
           error={errors.assignedStrategist}
