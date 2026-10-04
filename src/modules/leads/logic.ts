@@ -6,8 +6,6 @@ import type { Tone } from '@/design/tokens';
 import { daysBetween, relativeTime, toDate, todayToronto, torontoDateOf } from '@/lib/dates';
 import { countLabel, formatPhone } from '@/lib/format';
 
-export { leadTitle } from '@/modules/overview/logic';
-
 /**
  * Pure helpers for the Leads list and the lead detail (brief 8.6): labels (GET
  * /meta first, the brief's tables as the fallback before meta has loaded), the
@@ -20,12 +18,13 @@ export { leadTitle } from '@/modules/overview/logic';
 export type ToneLabel = { label: string; tone: Tone };
 type Option<V extends string> = { value: V; label: string };
 
-/** Brief 8.6, exact. */
+/** Brief 8.6, exact; "Outreach" is a lead added by hand in the app (outreach.md). */
 export const SOURCE_LABELS: Record<LeadSource, string> = {
   cal_booking: 'Booked call',
   grow: 'Lead form',
   lead_magnet: 'Free tool',
   portal_signup: 'Portal sign-up',
+  outreach: 'Outreach',
 };
 
 /** Brief 8.6, exact. */
@@ -73,8 +72,18 @@ export const revenueLabel = (meta: LeadsMeta | undefined, revenue: LeadRevenue) 
 const fallbackOptions = <V extends string>(labels: Record<V, string>): Option<V>[] =>
   (Object.keys(labels) as V[]).map((value) => ({ value, label: labels[value] }));
 
-/** Filter choices in the server's order (meta), or the brief's order before meta loads. */
-export const sourceOptions = (meta: LeadsMeta | undefined): Option<LeadSource>[] => meta?.leadSources ?? fallbackOptions(SOURCE_LABELS);
+/**
+ * Filter choices in the server's order (meta), or the brief's order before meta
+ * loads. A source the app knows but meta does not list yet (the server lists
+ * "Outreach" only once this release ships) is added at the end, so leads added
+ * by hand can always be filtered.
+ */
+export function sourceOptions(meta: LeadsMeta | undefined): Option<LeadSource>[] {
+  if (!meta) return fallbackOptions(SOURCE_LABELS);
+  const listed = new Set<LeadSource>(meta.leadSources.map((o) => o.value));
+  const missing = fallbackOptions(SOURCE_LABELS).filter((o) => !listed.has(o.value));
+  return [...meta.leadSources, ...missing];
+}
 export const needOptions = (meta: LeadsMeta | undefined): Option<LeadNeed>[] => meta?.leadNeeds ?? fallbackOptions(NEED_LABELS);
 export const statusOptions = (meta: LeadsMeta | undefined): Option<LeadStatus>[] =>
   meta?.leadStatuses.map(({ value, label }) => ({ value, label })) ??
@@ -88,18 +97,22 @@ export type LeadFilters = {
   need: LeadNeed | null;
   /** Server-side search (trimmed, debounced). */
   q: string;
+  /** "Follow-ups due": only leads with a follow-up today or earlier (optional: off when left out). */
+  followUpsDue?: boolean;
 };
 
-export const NO_FILTERS: LeadFilters = { source: null, status: null, need: null, q: '' };
+export const NO_FILTERS: LeadFilters = { source: null, status: null, need: null, q: '', followUpsDue: false };
 
-export const hasFilters = (f: LeadFilters) => f.source !== null || f.status !== null || f.need !== null || f.q !== '';
+export const hasFilters = (f: LeadFilters) =>
+  f.source !== null || f.status !== null || f.need !== null || f.q !== '' || f.followUpsDue === true;
 
 /**
  * The "Lead forms" section sits on top while the source filter can include
  * lead forms. With source "Lead form" chosen the list itself is the lead forms,
  * and with another source it has none, so the section is hidden in both cases.
+ * The follow-up queue is a different list (soonest follow-up first): no section.
  */
-export const showsLeadForms = (source: LeadSource | null) => source === null;
+export const showsLeadForms = (source: LeadSource | null, followUpsDue = false) => source === null && !followUpsDue;
 
 /* ---------- Home's quick filter ---------- */
 
@@ -142,11 +155,20 @@ export function uniqueById<T extends { id: string }>(pages: readonly { items: re
   return out;
 }
 
-/** The row's second line: the business, else the email when the title is a name (never the email twice). */
-export function rowSubtitle(lead: Pick<Lead, 'name' | 'email' | 'business'>): string | undefined {
-  const business = lead.business?.trim();
-  if (business) return business;
-  return lead.name?.trim() ? lead.email : undefined;
+/**
+ * A lead's title: the name, else the email (free tools and portal sign-ups may
+ * not ask for a name), else the business or the phone number (a lead added by
+ * hand needs only a name or a business, and an email or a phone).
+ */
+export function leadTitle(lead: Pick<Lead, 'name' | 'email' | 'business' | 'phone'>): string {
+  return lead.name?.trim() || lead.email.trim() || lead.business?.trim() || formatPhone(lead.phone) || 'Lead';
+}
+
+/** The row's second line: the business, else the email, else the phone number; never what the title already says. */
+export function rowSubtitle(lead: Pick<Lead, 'name' | 'email' | 'business' | 'phone'>): string | undefined {
+  const title = leadTitle(lead);
+  const candidates = [lead.business?.trim(), lead.email.trim(), formatPhone(lead.phone)];
+  return candidates.find((c) => !!c && c !== title) || undefined;
 }
 
 /** "Lead form · 3 h ago" */

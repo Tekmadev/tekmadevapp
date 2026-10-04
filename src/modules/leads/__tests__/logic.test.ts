@@ -10,6 +10,7 @@ import {
   hasFilters,
   isUpcoming,
   leadClientAction,
+  leadTitle,
   needLabel,
   needOptions,
   newClientParams,
@@ -68,6 +69,14 @@ describe('labels', () => {
     expect(sourceOptions(meta).find((o) => o.value === 'grow')?.label).toBe('Grow form');
   });
 
+  it('offers Outreach as a source even before the server lists it in meta', () => {
+    const older: LeadsMeta = { ...metaFixture, leadSources: metaFixture.leadSources.filter((o) => o.value !== 'outreach') };
+    expect(sourceOptions(older).map((o) => o.value)).toEqual(['cal_booking', 'grow', 'lead_magnet', 'portal_signup', 'outreach']);
+    expect(sourceOptions(older).at(-1)?.label).toBe('Outreach');
+    expect(sourceLabel(older, 'outreach')).toBe('Outreach');
+    expect(sourceOptions(metaFixture).filter((o) => o.value === 'outreach')).toHaveLength(1);
+  });
+
   it('agrees with the mock meta, so nothing changes when meta lands', () => {
     for (const o of metaFixture.leadSources) expect(sourceLabel(undefined, o.value)).toBe(o.label);
     for (const o of metaFixture.leadNeeds) expect(needLabel(undefined, o.value)).toBe(o.label);
@@ -89,6 +98,9 @@ describe('filters', () => {
     expect(showsLeadForms(null)).toBe(true);
     expect(showsLeadForms('grow')).toBe(false);
     expect(showsLeadForms('cal_booking')).toBe(false);
+    // The follow-up queue is its own list.
+    expect(showsLeadForms(null, true)).toBe(false);
+    expect(hasFilters({ ...NO_FILTERS, followUpsDue: true })).toBe(true);
   });
 
   it("reads Home's quick filter and ignores anything else", () => {
@@ -112,7 +124,16 @@ describe('rows', () => {
   it('shows the business, else the email under a name, never the email twice', () => {
     expect(rowSubtitle(lead())).toBe('Chen Plumbing');
     expect(rowSubtitle(lead({ business: '  ' }))).toBe('maya@chenplumbing.test');
-    expect(rowSubtitle(lead({ business: null, name: null }))).toBeUndefined();
+    expect(rowSubtitle(lead({ business: null, name: null }))).toBe('(613) 555-0171');
+    expect(rowSubtitle(lead({ business: null, name: null, phone: null }))).toBeUndefined();
+  });
+
+  it('titles a lead added by hand without a name or an email by its business, then its phone', () => {
+    expect(leadTitle(lead())).toBe('Maya Chen');
+    expect(leadTitle(lead({ name: null }))).toBe('maya@chenplumbing.test');
+    expect(leadTitle(lead({ name: null, email: '' }))).toBe('Chen Plumbing');
+    expect(rowSubtitle(lead({ name: null, email: '' }))).toBe('(613) 555-0171');
+    expect(leadTitle(lead({ name: ' ', email: '', business: null }))).toBe('(613) 555-0171');
   });
 
   it('says the source and how long ago', () => {

@@ -1,4 +1,4 @@
-import { ChevronDown, X } from 'lucide-react-native';
+import { CalendarClock, ChevronDown, X } from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
@@ -37,13 +37,16 @@ export type LeadFiltersProps = {
   /** The status in effect (Home's quick filter included). */
   status: LeadStatus | null;
   need: LeadNeed | null;
+  /** "Follow-ups due": leads with a follow-up today or earlier, soonest first. */
+  followUpsDue: boolean;
+  onFollowUpsDue: (on: boolean) => void;
   onSource: (value: LeadSource | null) => void;
   onStatus: (value: LeadStatus | null) => void;
   onNeed: (value: LeadNeed | null) => void;
   /** Home's quick filter, shown as a removable gold chip. */
   view: LeadsViewInfo | null;
   onClearView: () => void;
-  /** Resets source, status, need and the quick filter (the search stays). */
+  /** Resets source, status, need, follow-ups and the quick filter (the search stays). */
   onClearChips: () => void;
 };
 
@@ -52,17 +55,18 @@ function withAll<V extends string>(label: string, options: readonly { value: V; 
 }
 
 /**
- * Search (server side, debounced) and three filter chips: Source, Status and
- * Need. Each chip opens a short sheet of choices and then shows the choice in
- * gold, so the row stays light at large font sizes however long a need label
- * is. Home's "Booked calls" filter appears under the row with an X.
+ * Search (server side, debounced), a "Follow-ups due" toggle, and three filter
+ * chips: Source, Status and Need. Each chip opens a short sheet of choices and
+ * then shows the choice in gold, so the row stays light at large font sizes
+ * however long a need label is. Home's "Booked calls" filter appears under the
+ * row with an X.
  */
 export function LeadFilters(props: LeadFiltersProps) {
-  const { meta, source, status, need, view } = props;
+  const { meta, source, status, need, view, followUpsDue } = props;
   const [sheet, setSheet] = useState<{ kind: FilterKind; open: boolean } | null>(null);
   const close = () => setSheet((s) => (s ? { ...s, open: false } : s));
   const open = (kind: FilterKind) => setSheet({ kind, open: true });
-  const chipOn = source !== null || status !== null || need !== null || view !== null;
+  const chipOn = source !== null || status !== null || need !== null || view !== null || followUpsDue;
 
   const kind = sheet?.kind ?? 'source';
   let list: ReactNode;
@@ -127,6 +131,7 @@ export function LeadFilters(props: LeadFiltersProps) {
         contentContainerStyle={styles.chips}
         accessibilityLabel="Lead filters"
       >
+        <ToggleChip label="Follow-ups due" on={followUpsDue} onPress={() => props.onFollowUpsDue(!followUpsDue)} />
         <MenuChip kind="source" value={source ? sourceLabel(meta, source) : null} onPress={() => open('source')} />
         <MenuChip kind="status" value={status ? statusBadge(meta, status).label : null} onPress={() => open('status')} />
         <MenuChip kind="need" value={need ? needLabel(meta, need) : null} onPress={() => open('need')} />
@@ -169,6 +174,32 @@ function MenuChip({ kind, value, onPress }: { kind: FilterKind; value: string | 
         {value ?? name}
       </Text>
       <Icon icon={ChevronDown} size={15} rawColor={text} strokeWidth={selected ? 2.25 : 1.75} />
+    </PressableScale>
+  );
+}
+
+/** An on/off filter: gold with a check-like weight when on, like a chosen MenuChip. */
+function ToggleChip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
+  const { colors, isDark } = useTheme();
+  const text = on ? (isDark ? colors.goldMid : colors.goldDeep) : colors.ink2;
+  return (
+    <PressableScale
+      onPress={onPress}
+      accessibilityRole="switch"
+      accessibilityLabel={label}
+      accessibilityState={{ checked: on }}
+      accessibilityHint="Shows leads with a follow-up today or earlier, soonest first"
+      hitSlop={{ top: 6, bottom: 6 }}
+      style={[
+        styles.chip,
+        styles.toggle,
+        on ? { backgroundColor: colors.goldTint, borderColor: colors.gold } : { backgroundColor: colors.surface, borderColor: colors.line },
+      ]}
+    >
+      <Icon icon={CalendarClock} size={15} rawColor={text} strokeWidth={on ? 2.25 : 1.75} />
+      <Text variant="label" weight={on ? '600' : '500'} numberOfLines={1} style={{ color: text }}>
+        {label}
+      </Text>
     </PressableScale>
   );
 }
@@ -226,6 +257,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
   },
+  toggle: { paddingLeft: space[3], paddingRight: space[4] - 2 },
   // A long need label is cut, not the row: the sheet shows it whole.
   chipText: { maxWidth: 220 },
   view: { flexDirection: 'row', paddingHorizontal: layout.gutter, marginTop: space[2] },

@@ -14,6 +14,7 @@ import { formatPhone } from '@/lib/format';
 import { notice } from '@/lib/notice';
 
 import { contactLinks, copyTargets, leadTitle } from './logic';
+import type { ContactChannel } from './outreach';
 
 const CIRCLE = 52;
 
@@ -26,8 +27,12 @@ async function copyText(value: string) {
   }
 }
 
-function openUrl(url: string, failure: string) {
-  Linking.openURL(url).catch(() => notice.err(failure));
+/** Opens the dialer, mail app or Messages; `then` runs once it opened (not when it failed). */
+function openUrl(url: string, failure: string, then?: () => void) {
+  Linking.openURL(url).then(
+    () => then?.(),
+    () => notice.err(failure),
+  );
 }
 
 type ActionProps = {
@@ -69,12 +74,19 @@ function Action({ icon, label, onPress, disabled, accessibilityLabel, disabledHi
   );
 }
 
+export type LeadContactActionsProps = {
+  lead: Lead;
+  /** After Call, Email or Text opened its app (the detail then offers "Log this call"). */
+  onContacted?: (channel: ContactChannel) => void;
+};
+
 /**
  * One-tap contact (brief 8.6): Call (tel:), Email (mailto:), Text (sms:) and
  * Copy. Copy puts the email on the clipboard, or asks which one when the lead
- * also left a phone number. Without a phone number, Call and Text are dimmed.
+ * also left a phone number. Without a phone number, Call and Text are dimmed;
+ * without an email (a lead added by hand with a phone only), Email is.
  */
-export function LeadContactActions({ lead }: { lead: Lead }) {
+export function LeadContactActions({ lead, onContacted }: LeadContactActionsProps) {
   const links = contactLinks(lead);
   const targets = copyTargets(lead);
   const [copyOpen, setCopyOpen] = useState(false);
@@ -91,7 +103,7 @@ export function LeadContactActions({ lead }: { lead: Lead }) {
         icon={Phone}
         label="Call"
         disabled={!links.call}
-        onPress={() => links.call && openUrl(links.call, 'Could not open the phone app.')}
+        onPress={() => links.call && openUrl(links.call, 'Could not open the phone app.', () => onContacted?.('call'))}
         accessibilityLabel={phone ? `Call ${phone}` : 'Call'}
         disabledHint="No phone number on this lead"
       />
@@ -99,15 +111,15 @@ export function LeadContactActions({ lead }: { lead: Lead }) {
         icon={Mail}
         label="Email"
         disabled={!links.email}
-        onPress={() => links.email && openUrl(links.email, 'Could not open the mail app.')}
-        accessibilityLabel={`Email ${lead.email}`}
+        onPress={() => links.email && openUrl(links.email, 'Could not open the mail app.', () => onContacted?.('email'))}
+        accessibilityLabel={lead.email ? `Email ${lead.email}` : 'Email'}
         disabledHint="No valid email on this lead"
       />
       <Action
         icon={MessageSquareText}
         label="Text"
         disabled={!links.text}
-        onPress={() => links.text && openUrl(links.text, 'Could not open Messages.')}
+        onPress={() => links.text && openUrl(links.text, 'Could not open Messages.', () => onContacted?.('text'))}
         accessibilityLabel={phone ? `Text ${phone}` : 'Text'}
         disabledHint="No phone number on this lead"
       />
@@ -116,7 +128,7 @@ export function LeadContactActions({ lead }: { lead: Lead }) {
         label="Copy"
         disabled={targets.length === 0}
         onPress={copy}
-        accessibilityLabel={targets.length > 1 ? 'Copy the email or phone number' : 'Copy the email'}
+        accessibilityLabel={targets.length > 1 ? 'Copy the email or phone number' : targets[0]?.kind === 'phone' ? 'Copy the phone number' : 'Copy the email'}
         disabledHint="Nothing to copy"
       />
       <ActionSheet

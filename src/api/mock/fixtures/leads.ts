@@ -1,8 +1,10 @@
 import { addDays, parseCalendarDate, torontoWallTimeToInstant } from '@/lib/dates';
+import { env } from '@/lib/env';
 
-import type { Lead, LeadNeed, LeadRevenue, LeadSource, LeadStatus, LeadsMeta, LeadUtm } from '../../schemas/leads';
+import type { Lead, LeadNeed, LeadRevenue, LeadSource, LeadStatus, LeadsMeta, LeadUtm, StaffRef, Touch, TouchKind } from '../../schemas/leads';
 import { byNewest, minutesAgo, pick, torontoDate } from '../router';
 import { SEED_CLIENTS, SEED_PEOPLE, type SeedClient } from './seed';
+import { MOCK_ACCOUNTS } from './staff';
 import { hexId, leadIdFor, toolSubmissionsDb } from './tools';
 
 /**
@@ -14,6 +16,10 @@ import { hexId, leadIdFor, toolSubmissionsDb } from './tools';
  * - the inbox (fixtures/notifications.ts): same person, minute, need, revenue and id;
  * - clients (seed.ts): won leads and portal sign-ups point at the client they became;
  * - ads (fixtures/ads.ts): paid leads carry the campaign slugs of the Meta campaigns.
+ *
+ * Outreach (the website's docs/admin-api/outreach.md): a few leads carry a
+ * follow-up (overdue, today, upcoming), an owner from the mock team, and
+ * touches (calls, emails, DMs, meetings) logged by that team.
  */
 
 /* ---------- attribution presets ---------- */
@@ -85,6 +91,10 @@ function lead(spec: Spec, i: number): Lead {
     utm: { ...tags },
     referrer,
     convertedClientId: spec.convertedClientId ?? null,
+    website: null,
+    followUpAt: null,
+    assignedTo: null,
+    addedBy: null,
   };
 }
 
@@ -258,6 +268,10 @@ function toolLeads(): Lead[] {
       utm: { ...attribution.utm },
       referrer: attribution.referrer,
       convertedClientId: null,
+      website: null,
+      followUpAt: null,
+      assignedTo: null,
+      addedBy: null,
     };
   });
 }
@@ -267,6 +281,136 @@ export const leadsDb: Lead[] = [
   ...[...ANCHORS, ...wonLeads(), GRACE, ...others()].map((spec, i) => lead(spec, i)),
   ...toolLeads(),
 ].sort(byNewest((l) => l.createdAt));
+
+/* ---------- outreach: owners, follow-ups and touches ---------- */
+
+/** A mock team member as leads show them. */
+function staffRef(accountId: string): StaffRef {
+  const account = MOCK_ACCOUNTS.find((a) => a.id === accountId);
+  if (!account) throw new Error(`leads fixture: unknown staff ${accountId}`);
+  return { email: account.email, name: account.name };
+}
+
+/**
+ * Everyone a lead can be assigned to (GET /leads/assignees): the mock team,
+ * plus env owners who are not fixture accounts, sorted by name (else email).
+ * Read on every call: the Team screen adds and removes people.
+ */
+export function leadAssignees(): StaffRef[] {
+  const byEmail = new Map<string, string | null>();
+  for (const email of env.mockOwnerEmails) byEmail.set(email.toLowerCase(), null);
+  for (const account of MOCK_ACCOUNTS) byEmail.set(account.email.toLowerCase(), account.name?.trim() || null);
+  return [...byEmail.entries()]
+    .map(([email, name]) => ({ email, name }))
+    .sort((a, b) => (a.name ?? a.email).localeCompare(b.name ?? b.email, 'en', { sensitivity: 'base' }));
+}
+
+/** A Toronto wall time `dayOffset` calendar days from today. */
+function torontoAt(dayOffset: number, hour: number, minute = 0): string {
+  const p = parseCalendarDate(addDays(torontoDate(0), dayOffset));
+  if (!p) throw new Error('leads fixture: bad date');
+  return torontoWallTimeToInstant({ ...p, hour, minute });
+}
+
+type TouchSeed = [kind: TouchKind, minutesAgo: number, by: string, outcome: string | null, note: string | null];
+
+type OutreachSeed = {
+  leadId: string;
+  /** Days from today and the Toronto hour of the next follow-up. */
+  followUp?: [dayOffset: number, hour: number];
+  assignedTo?: string;
+  website?: string;
+  touches?: TouchSeed[];
+};
+
+const STAFF = 'usr_staff01';
+const MANAGER = 'usr_mgr01';
+const OWNER = 'usr_owner01';
+
+const OUTREACH: OutreachSeed[] = [
+  // Due later today: a new lead form, nobody has called yet.
+  { leadId: hexId('ld', 201), followUp: [0, 16], assignedTo: STAFF },
+  // Overdue: two tries, no answer yet.
+  {
+    leadId: hexId('ld', 212),
+    followUp: [-2, 10],
+    assignedTo: STAFF,
+    website: 'instagram.com/hamiltonmobilegrooming',
+    touches: [
+      ['email', 2 * 1440 + 140, STAFF, 'Sent the free audit link', 'Asked which days they are busiest so we can show the missed calls.'],
+      ['call', 3 * 1440 + 65, STAFF, 'Left a voicemail', null],
+    ],
+  },
+  // Upcoming, owned by the manager.
+  {
+    leadId: hexId('ld', 213),
+    followUp: [3, 11],
+    assignedTo: MANAGER,
+    touches: [
+      ['meeting', 1440 + 300, MANAGER, 'Walked through the plan', 'Wants to start after the fall term rush.\nSend a short proposal by Friday.'],
+      ['call', 4 * 1440 + 30, STAFF, 'Wants a quote', null],
+    ],
+  },
+  // Tomorrow morning, the owner's own lead.
+  {
+    leadId: hexId('ld', 217),
+    followUp: [1, 10],
+    assignedTo: OWNER,
+    website: 'glanbrookseptic.test',
+    touches: [
+      ['email', 600, OWNER, 'Sent the proposal', null],
+      ['meeting', 2 * 1440 + 200, OWNER, 'Good fit', 'Three trucks, two dispatchers. Biggest leak: weekend calls going to voicemail.'],
+      ['call', 3 * 1440 + 400, MANAGER, 'Booked a meeting', null],
+    ],
+  },
+  // Overdue since yesterday afternoon: they replied on Instagram.
+  {
+    leadId: hexId('ld', 114),
+    followUp: [-1, 14],
+    assignedTo: STAFF,
+    touches: [['dm', 1440 + 500, STAFF, 'Replied on Instagram', 'Asked for examples of short videos for studios.']],
+  },
+  // Due first thing today, nobody owns it yet (no phone on this lead).
+  { leadId: hexId('ld', 207), followUp: [0, 9] },
+  // Next week.
+  {
+    leadId: hexId('ld', 111),
+    followUp: [6, 13],
+    assignedTo: MANAGER,
+    touches: [['call', 2 * 1440 + 90, MANAGER, 'Call back after their busy season', null]],
+  },
+  // Lost after a few tries: no follow-up planned.
+  {
+    leadId: hexId('ld', 115),
+    touches: [
+      ['other', 9 * 1440, MANAGER, 'Marked lost', 'Went with their nephew for the website.'],
+      ['call', 10 * 1440 + 30, STAFF, 'Not interested right now', null],
+    ],
+  },
+];
+
+/** Every touch, newest first (GET /leads/:id/touches filters by lead). Mutable in-memory state. */
+export const leadTouchesDb: Touch[] = [];
+
+for (const seed of OUTREACH) {
+  const row = leadsDb.find((l) => l.id === seed.leadId);
+  if (!row) throw new Error(`leads fixture: unknown outreach lead ${seed.leadId}`);
+  if (seed.followUp) row.followUpAt = torontoAt(seed.followUp[0], seed.followUp[1]);
+  if (seed.assignedTo) row.assignedTo = staffRef(seed.assignedTo);
+  if (seed.website) row.website = seed.website;
+  (seed.touches ?? []).forEach(([kind, ago, by, outcome, note], i) => {
+    leadTouchesDb.push({
+      id: `tc_${seed.leadId.slice(3)}${i}`,
+      leadId: seed.leadId,
+      kind,
+      outcome,
+      note,
+      by: staffRef(by),
+      at: minutesAgo(ago),
+    });
+  });
+}
+leadTouchesDb.sort(byNewest((t) => t.at));
 
 export const findLead = (id: string) => leadsDb.find((l) => l.id === id);
 
@@ -283,6 +427,7 @@ export const metaFixture: LeadsMeta = {
     { value: 'grow', label: 'Lead form' },
     { value: 'lead_magnet', label: 'Free tool' },
     { value: 'portal_signup', label: 'Portal sign-up' },
+    { value: 'outreach', label: 'Outreach' },
   ],
   leadStatuses: [
     { value: 'new', label: 'New', tone: 'gold' },
@@ -307,5 +452,12 @@ export const metaFixture: LeadsMeta = {
     { value: '20k_50k', label: '$20K to $50K a month' },
     { value: '50k_100k', label: '$50K to $100K a month' },
     { value: '100k_plus', label: '$100K+ a month' },
+  ],
+  leadTouchKinds: [
+    { value: 'call', label: 'Call' },
+    { value: 'email', label: 'Email' },
+    { value: 'dm', label: 'DM' },
+    { value: 'meeting', label: 'Meeting' },
+    { value: 'other', label: 'Other' },
   ],
 };

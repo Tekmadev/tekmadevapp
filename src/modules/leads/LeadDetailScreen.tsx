@@ -1,13 +1,13 @@
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Building2, CalendarClock, ExternalLink } from 'lucide-react-native';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { leadKeys, leadQuery, leadsMetaQuery } from '@/api/endpoints/leads';
+import { leadKeys, leadQuery, leadsMetaQuery, touchesInfiniteQuery } from '@/api/endpoints/leads';
 import { ApiError, MESSAGES } from '@/api/errors';
-import type { Lead, LeadsMeta } from '@/api/schemas/leads';
-import { useCanAll, useCapabilities } from '@/auth/permissions';
+import type { Lead, LeadsMeta, TouchKind } from '@/api/schemas/leads';
+import { useCan, useCanAll, useCapabilities } from '@/auth/permissions';
 import { RequireCapability } from '@/auth/RequireCapability';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
@@ -25,8 +25,12 @@ import { useIsOnline } from '@/lib/connectivity';
 import { formatPhone } from '@/lib/format';
 import { useMinuteClock, useRefetchOnFocus } from '@/modules/overview/hooks';
 
+import { ContactLogPrompt } from './ContactLogPrompt';
 import { LeadContactActions } from './LeadContactActions';
 import { LeadDetailSkeleton } from './LeadDetailSkeleton';
+import { LogTouchSheet } from './LogTouchSheet';
+import { OutreachCard, type TouchesState } from './OutreachCard';
+import { CONTACT_PROMPTS, firstName, type ContactChannel } from './outreach';
 import {
   asksQualifiers,
   bookingDistance,
@@ -71,25 +75,52 @@ function BookingCard({ instant, now }: { instant: string; now: Date }) {
   );
 }
 
-function LeadBody({ lead, meta, now }: { lead: Lead; meta: LeadsMeta | undefined; now: Date }) {
+/** The "Log outreach" sheet: the kind it opens on and a pre-filled note. */
+type LogIntent = { kind: TouchKind; note: string };
+
+type LeadBodyProps = {
+  lead: Lead;
+  meta: LeadsMeta | undefined;
+  now: Date;
+  touches: TouchesState;
+};
+
+function LeadBody({ lead, meta, now, touches }: LeadBodyProps) {
   const status = statusBadge(meta, lead.status);
   const qualifiers = asksQualifiers(lead);
   const clientId = lead.convertedClientId;
+  const outreach = lead.source === 'outreach';
   // Open client, Create client, or no button (staff cannot create clients).
   const caps = useCapabilities();
   const clientAction = leadClientAction(clientId, (cap) => caps.includes(cap));
+  const canLog = useCan('leads.outreach');
+  // After Call, Email or Text: offer to log it, until used or dismissed.
+  const [contacted, setContacted] = useState<ContactChannel | null>(null);
+  const [logging, setLogging] = useState<LogIntent | null>(null);
+  const title = leadTitle(lead);
+
+  // The usual way to reach this lead first: a call, else an email, else a DM.
+  const defaultKind: TouchKind = lead.phone ? 'call' : lead.email ? 'email' : 'dm';
+  // "Log outreach", or the prompt after a call, email or text: start on that kind, and the prompt has done its job.
+  const logFromButton = () => {
+    const kind = contacted ? CONTACT_PROMPTS[contacted].kind : defaultKind;
+    const note = contacted ? CONTACT_PROMPTS[contacted].note : '';
+    setContacted(null);
+    setLogging({ kind, note });
+  };
 
   const details: KeyValueItem[] = [
     { label: 'Business', value: lead.business },
-    { label: 'Email', value: lead.email, link: 'email' },
+    { label: 'Email', value: lead.email || null, link: 'email' },
     { label: 'Phone', value: lead.phone ? formatPhone(lead.phone) : null, link: 'phone' },
+    ...(lead.website ? [{ label: 'Website', value: lead.website, copyable: true }] : []),
     ...(qualifiers
       ? [
           { label: 'Need', value: lead.need ? needLabel(meta, lead.need) : null },
           { label: 'Revenue', value: lead.revenue ? revenueLabel(meta, lead.revenue) : null },
         ]
       : []),
-    { label: 'Received', value: formatWhen(lead.createdAt, now) },
+    { label: outreach ? 'Added' : 'Received', value: formatWhen(lead.createdAt, now) },
   ];
 
   const attribution: KeyValueItem[] = [
@@ -107,8 +138,19 @@ function LeadBody({ lead, meta, now }: { lead: Lead; meta: LeadsMeta | undefined
       </View>
 
       <View style={styles.actions}>
-        <LeadContactActions lead={lead} />
+        <LeadContactActions lead={lead} onContacted={canLog ? setContacted : undefined} />
       </View>
+
+      {contacted ? (
+        <View style={styles.prompt}>
+          <ContactLogPrompt
+            channel={contacted}
+            name={firstName(lead, title)}
+            onLog={logFromButton}
+            onDismiss={() => setContacted(null)}
+          />
+        </View>
+      ) : null}
 
       {clientAction === 'open' && clientId ? (
         <Button
@@ -137,14 +179,18 @@ function LeadBody({ lead, meta, now }: { lead: Lead; meta: LeadsMeta | undefined
         </View>
       ) : null}
 
-      <Section title="Details" style={styles.details}>
+      <View style={styles.details}>
+        <OutreachCard lead={lead} meta={meta} now={now} touches={touches} onLog={logFromButton} />
+      </View>
+
+      <Section title="Details">
         <Card padded={false}>
           <KeyValue items={details} />
         </Card>
       </Section>
 
       {lead.message?.trim() ? (
-        <Section title="Message">
+        <Section title={outreach ? 'Note' : 'Message'} spacing={outreach ? space[2] : undefined}>
           <Card>
             <Text variant="body" selectable>
               {lead.message}
@@ -153,23 +199,30 @@ function LeadBody({ lead, meta, now }: { lead: Lead; meta: LeadsMeta | undefined
         </Section>
       ) : null}
 
-      <Section title="Attribution" spacing={space[2]}>
-        <Card padded={false}>
-          <KeyValue items={attribution} />
-        </Card>
-      </Section>
+      {/* A lead added by hand never visited the site: no attribution to show. */}
+      {outreach ? null : (
+        <Section title="Attribution" spacing={space[2]}>
+          <Card padded={false}>
+            <KeyValue items={attribution} />
+          </Card>
+        </Section>
+      )}
+
+      {logging ? <LogTouchSheet lead={lead} meta={meta} kind={logging.kind} note={logging.note} onClose={() => setLogging(null)} /> : null}
     </View>
   );
 }
 
 /**
  * Lead detail (brief 8.6, GET /leads/:id): the name as the large title, the
- * status and source, one-tap Call, Email, Text and Copy, "Create client from
- * this lead" (or "Open client" once it became one), the booked call in Toronto
- * time, every field with the brief's labels, the message as typed and the
- * attribution. Opened from a list row or Home, it shows the lead already in
- * the cache at once, then loads the full record. Needs `leads.view`; the
- * client button follows the person's capabilities (leadClientAction).
+ * status and source, one-tap Call, Email, Text and Copy (then "Log this call"),
+ * "Create client from this lead" (or "Open client" once it became one), the
+ * booked call in Toronto time, Outreach (status, follow-up, owner, "Log
+ * outreach" and the touches timeline), every field with the brief's labels,
+ * the message as typed and the attribution (not for leads added by hand).
+ * Opened from a list row or Home, it shows the lead already in the cache at
+ * once, then loads the full record and its touches. Needs `leads.view`; the
+ * client button and the outreach controls follow the person's capabilities.
  */
 export function LeadDetailScreen() {
   return (
@@ -191,20 +244,36 @@ function LeadDetail() {
   // The row it was opened from is on screen at once; the full record always loads behind it.
   const query = useQuery({ ...leadQuery(id), enabled: id !== '', refetchOnMount: 'always' });
   const meta = useQuery(leadsMetaQuery());
+  // A 404 means the lead is gone: say so instead of showing what was cached.
+  const notFound = query.error instanceof ApiError && query.error.status === 404;
+  // The outreach timeline loads next to the lead, not after it.
+  const touchesQuery = useInfiniteQuery({ ...touchesInfiniteQuery(id), enabled: id !== '' && !notFound });
 
   // Back on this screen (from New client, the dialer, another tab) or back in the app: load it again,
   // so a lead that just became a client shows "Open client". A fetch under 5s old is reused.
   useRefetchOnFocus((options) => (id ? query.refetch(options) : undefined), query.dataUpdatedAt);
+  useRefetchOnFocus((options) => (id && !notFound ? touchesQuery.refetch(options) : undefined), touchesQuery.dataUpdatedAt);
 
-  // A 404 means the lead is gone: say so instead of showing what was cached.
-  const notFound = query.error instanceof ApiError && query.error.status === 404;
   const lead = notFound ? undefined : query.data;
+
+  const touches: TouchesState = {
+    data: touchesQuery.data,
+    isPending: touchesQuery.isPending,
+    isError: touchesQuery.isError && touchesQuery.data === undefined,
+    error: touchesQuery.error,
+    paused: touchesQuery.isPending && touchesQuery.fetchStatus === 'paused',
+    hasMore: touchesQuery.hasNextPage,
+    loadingMore: touchesQuery.isFetchingNextPage,
+    loadMoreFailed: touchesQuery.isFetchNextPageError,
+    refetch: () => touchesQuery.refetch(),
+    loadMore: () => (touchesQuery.isFetchingNextPage ? undefined : touchesQuery.fetchNextPage()),
+  };
 
   let body: ReactNode;
   if (!id) {
     body = <ErrorState message={MESSAGES.notFound} />;
   } else if (lead) {
-    body = <LeadBody lead={lead} meta={meta.data} now={now} />;
+    body = <LeadBody lead={lead} meta={meta.data} now={now} touches={touches} />;
   } else if (query.isError) {
     body = <ErrorState error={query.error} onRetry={notFound ? undefined : () => query.refetch()} />;
   } else if (query.fetchStatus === 'paused') {
@@ -218,7 +287,7 @@ function LeadDetail() {
     <Screen
       title={lead ? leadTitle(lead) : undefined}
       back
-      onRefresh={id ? () => Promise.all([query.refetch(), meta.refetch()]) : undefined}
+      onRefresh={id ? () => Promise.all([query.refetch(), meta.refetch(), notFound ? null : touchesQuery.refetch()]) : undefined}
       refetching={query.isFetching && !query.isPending}
       queryKey={leadKeys.detail(id)}
     >
@@ -232,6 +301,7 @@ const styles = StyleSheet.create({
   actions: { marginTop: space[5] },
   primary: { marginTop: space[5] },
   bookingWrap: { marginTop: space[5] },
+  prompt: { marginTop: space[4] },
   details: { marginTop: layout.sectionGap },
   booking: { flexDirection: 'row', alignItems: 'center', gap: space[3] },
   bookingIcon: { width: 40, height: 40, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },

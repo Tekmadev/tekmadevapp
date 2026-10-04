@@ -1,6 +1,7 @@
 import type { ListRenderItemInfo } from '@shopify/flash-list';
 import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
+import { UserPlus } from 'lucide-react-native';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -8,20 +9,24 @@ import { leadFormsQuery, leadKeys, leadsInfiniteQuery, leadsMetaQuery, type Lead
 import { sessionKeys } from '@/api/endpoints/session';
 import { MESSAGES } from '@/api/errors';
 import type { Lead, LeadNeed, LeadSource, LeadStatus } from '@/api/schemas/leads';
+import { useCan } from '@/auth/permissions';
+import { Button } from '@/components/Button';
 import { Divider } from '@/components/Divider';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
 import { ScreenList } from '@/components/ScreenList';
 import { useReduceMotion } from '@/design/motion';
-import { space } from '@/design/tokens';
+import { layout, space } from '@/design/tokens';
 import { useIsOnline } from '@/lib/connectivity';
 import { InlineLoader } from '@/loader/InlineLoader';
 import { useRefreshOnFocus } from '@/modules/customers/useRefreshOnFocus';
+import { AddLeadSheet } from '@/modules/leads/AddLeadSheet';
 import { LeadFilters } from '@/modules/leads/LeadFilters';
 import { LeadFormsSection } from '@/modules/leads/LeadFormsSection';
 import { LeadListSkeleton, ROW_DIVIDER_INSET } from '@/modules/leads/LeadListSkeleton';
 import { LeadRow } from '@/modules/leads/LeadRow';
 import { hasFilters, showsLeadForms, toLeadsView, uniqueById, VIEW_INFO } from '@/modules/leads/logic';
+import { dueByToday } from '@/modules/leads/outreach';
 import { useMinuteClock } from '@/modules/overview/hooks';
 
 import type { SegmentProps } from './types';
@@ -29,6 +34,10 @@ import type { SegmentProps } from './types';
 /** Brief 8.6 empty copy, exact. */
 const EMPTY = 'No leads yet. Lead forms, booked calls, free tool submissions and portal sign-ups appear here.';
 const NO_MATCH = 'No leads match these filters.';
+const NO_FOLLOW_UPS = 'No follow-ups due. Plan one on a lead and it shows here on the day.';
+
+/** The quick action "Add a lead" opens the Leads segment with this one-shot action. */
+const ADD_ACTION = 'add-lead';
 
 const rowKey = (lead: Lead) => lead.id;
 const Separator = () => <Divider inset={ROW_DIVIDER_INSET} />;
@@ -41,6 +50,12 @@ const clearView = () => router.setParams({ view: undefined });
  * calls" card opens it with `view=booked`: the booked status as a removable
  * chip. A failed read is an ErrorState with Retry, never an empty list; cached
  * rows stay on screen offline under the banner.
+ *
+ * Outreach: "Add a lead" (`leads.create`, also the quick action through
+ * `action=add-lead`), and "Follow-ups due": the server's follow-up queue
+ * (`followUp=any`, soonest first) cut at the end of today, so a follow-up
+ * planned for later today is in it too (the server's `due` stops at this
+ * minute). Rows show their follow-up.
  */
 export function LeadsSegment({ chrome, params }: SegmentProps) {
   const queryClient = useQueryClient();
@@ -56,6 +71,11 @@ export function LeadsSegment({ chrome, params }: SegmentProps) {
   const [need, setNeed] = useState<LeadNeed | null>(null);
   const [searchText, setSearchText] = useState('');
   const [q, setQ] = useState('');
+  const [followUpsDue, setFollowUpsDue] = useState(false);
+  const canCreate = useCan('leads.create');
+  const [adding, setAdding] = useState(false);
+  // The quick action lives in the URL; an old link without leads.create just shows the list.
+  const addOpen = canCreate && (adding || params.action === ADD_ACTION);
 
   // A quick filter from Home starts clean: no old chip or search hiding the rows it counted.
   const [seenView, setSeenView] = useState(view);
@@ -65,14 +85,15 @@ export function LeadsSegment({ chrome, params }: SegmentProps) {
       setSource(null);
       setStatusChoice(null);
       setNeed(null);
+      setFollowUpsDue(false);
       setSearchText('');
       setQ('');
     }
   }
 
   const status = viewInfo?.status ?? statusChoice;
-  const listParams: LeadListParams = { q, source, status, need };
-  const formsOn = showsLeadForms(source);
+  const listParams: LeadListParams = { q, source, status, need, followUp: followUpsDue ? 'any' : null };
+  const formsOn = showsLeadForms(source, followUpsDue);
 
   const list = useInfiniteQuery({ ...leadsInfiniteQuery(listParams), placeholderData: keepPreviousData });
   const forms = useQuery({ ...leadFormsQuery({ q, status, need }), enabled: formsOn, placeholderData: keepPreviousData });
@@ -87,9 +108,12 @@ export function LeadsSegment({ chrome, params }: SegmentProps) {
   // The rows wait for "Lead forms" too, so the section never lands on top of rows already showing.
   const formsWaiting = formsOn && forms.isPending && !formsPaused;
   const loading = list.isPending || formsWaiting;
-  const rows = loading || pausedWithoutData ? [] : uniqueById(list.data?.pages);
+  const loaded = loading || pausedWithoutData ? [] : uniqueById(list.data?.pages);
+  // The follow-up queue is soonest first: once a row is past today, the rest are too.
+  const queue = followUpsDue ? dueByToday(loaded, now) : null;
+  const rows = queue ? queue.rows : loaded;
   const firstPageCount = list.data?.pages[0]?.items.length ?? 0;
-  const filtered = hasFilters({ source, status, need, q }) || view !== null;
+  const filtered = hasFilters({ source, status, need, q, followUpsDue }) || view !== null;
 
   /* ---------- filters ---------- */
 
@@ -101,6 +125,7 @@ export function LeadsSegment({ chrome, params }: SegmentProps) {
     setSource(null);
     setStatusChoice(null);
     setNeed(null);
+    setFollowUpsDue(false);
     if (view) clearView();
   };
   const clearFilters = () => {
@@ -122,7 +147,27 @@ export function LeadsSegment({ chrome, params }: SegmentProps) {
   const openFromForms = (lead: Lead) => openLead(lead, forms.dataUpdatedAt);
 
   const loadMore = () => {
+    if (queue?.complete) return;
     if (list.hasNextPage && !list.isFetchingNextPage && !list.isFetchNextPageError) void list.fetchNextPage();
+  };
+
+  /* ---------- add a lead ---------- */
+
+  const closeAdd = () => {
+    setAdding(false);
+    if (params.action) router.setParams({ action: undefined });
+  };
+  // Clear the one-shot action on this (still focused) route first, then open the new lead.
+  const onAdded = (lead: Lead) => {
+    closeAdd();
+    router.push({ pathname: '/leads/[id]', params: { id: lead.id } });
+  };
+  // "That email is already a lead": search for it, every other filter off.
+  const findExisting = (email: string) => {
+    closeAdd();
+    clearChips();
+    setSearchText(email);
+    setQ(email);
   };
 
   const renderItem = ({ item, index }: ListRenderItemInfo<Lead>) => (
@@ -136,6 +181,18 @@ export function LeadsSegment({ chrome, params }: SegmentProps) {
   const header = (
     <View>
       {chrome.switcher}
+      {canCreate ? (
+        <View style={styles.addRow}>
+          <Button
+            label="Add a lead"
+            icon={UserPlus}
+            variant="secondary"
+            size="sm"
+            onPress={() => setAdding(true)}
+            accessibilityHint="Opens the form for someone you found or met"
+          />
+        </View>
+      ) : null}
       <LeadFilters
         meta={meta.data}
         searchText={searchText}
@@ -144,6 +201,8 @@ export function LeadsSegment({ chrome, params }: SegmentProps) {
         source={source}
         status={status}
         need={need}
+        followUpsDue={followUpsDue}
+        onFollowUpsDue={setFollowUpsDue}
         onSource={setSource}
         onStatus={changeStatus}
         onNeed={setNeed}
@@ -178,10 +237,12 @@ export function LeadsSegment({ chrome, params }: SegmentProps) {
     <LeadListSkeleton />
   ) : list.isError && !hasData ? (
     <ErrorState error={list.error} onRetry={() => list.refetch()} />
+  ) : followUpsDue && !hasFilters({ source, status, need, q }) && view === null ? (
+    <EmptyState message={NO_FOLLOW_UPS} action={{ label: 'Show all leads', onPress: () => setFollowUpsDue(false) }} />
   ) : filtered ? (
     <EmptyState message={NO_MATCH} action={{ label: 'Clear filters', onPress: clearFilters }} />
   ) : (
-    <EmptyState message={EMPTY} />
+    <EmptyState message={EMPTY} action={canCreate ? { label: 'Add a lead', icon: UserPlus, onPress: () => setAdding(true) } : undefined} />
   );
 
   const footer = (
@@ -201,26 +262,30 @@ export function LeadsSegment({ chrome, params }: SegmentProps) {
     (list.isFetching && !list.isFetchingNextPage && hasData) || (formsOn && forms.isFetching && forms.data !== undefined);
 
   return (
-    <ScreenList<Lead>
-      {...chrome.screen}
-      data={rows}
-      renderItem={renderItem}
-      keyExtractor={rowKey}
-      extraData={{ meta: meta.data, now }}
-      ItemSeparatorComponent={Separator}
-      ListHeaderComponent={header}
-      ListEmptyComponent={empty}
-      ListFooterComponent={footer}
-      onEndReached={loadMore}
-      onEndReachedThreshold={0.6}
-      onRefresh={refresh}
-      refetching={refetching}
-      queryKey={leadKeys.list(listParams)}
-    />
+    <>
+      <ScreenList<Lead>
+        {...chrome.screen}
+        data={rows}
+        renderItem={renderItem}
+        keyExtractor={rowKey}
+        extraData={{ meta: meta.data, now }}
+        ItemSeparatorComponent={Separator}
+        ListHeaderComponent={header}
+        ListEmptyComponent={empty}
+        ListFooterComponent={footer}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.6}
+        onRefresh={refresh}
+        refetching={refetching}
+        queryKey={leadKeys.list(listParams)}
+      />
+      {addOpen ? <AddLeadSheet meta={meta.data} onClose={closeAdd} onAdded={onAdded} onFindExisting={findExisting} /> : null}
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  addRow: { flexDirection: 'row', paddingHorizontal: layout.gutter },
   refetchError: { marginTop: space[3] },
   headerEnd: { height: space[3] },
   more: { alignItems: 'center', justifyContent: 'center', height: 56 },

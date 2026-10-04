@@ -55,3 +55,31 @@ leadRevenueBands: { value: LeadRevenue; label: string }[];    // the six labels 
 ## Added in phase 3
 
 - The Lead forms section calls `GET /leads?source=grow&limit=3` with the list's `q`, `status` and `need`, and relies on `nextCursor` being non-null when there are more.
+
+## Outreach (owner decision 2026-10-03, roles)
+
+The contract is the website's `docs/admin-api/outreach.md` (server code in `lib/admin-api/leads/` and `app/api/admin/v1/leads/`). The app follows it exactly; this section only lists how the app uses it and what it still needs. Nothing here is owner only: owners, managers and staff hold `leads.view`, `leads.create`, `leads.update` and `leads.outreach`.
+
+What the app calls:
+
+| Call | Where in the app | Capability |
+|---|---|---|
+| `POST /leads` (Idempotency-Key) | "Add a lead" (button on the Leads segment, and the gold + quick action) | `leads.create` |
+| `PATCH /leads/:id` `{ status }`, `{ followUpAt }`, `{ assignedTo }` | Lead detail, Outreach card: Status, Follow-up, Assigned to | `leads.update` |
+| `GET /leads/:id/touches?cursor=` | Lead detail, the touches timeline ("Show older" pages) | `leads.view` |
+| `POST /leads/:id/touches` (Idempotency-Key) | "Log outreach", and "Log this call / email / text" after a one-tap contact | `leads.outreach` |
+| `GET /leads/assignees` | The "Assigned to" picker | `leads.update` or `leads.create` |
+| `GET /leads?followUp=any` | The "Follow-ups due" chip on the Leads segment | `leads.view` |
+
+- The app sends `source=outreach` in the Source filter. `zLeadSource` now lists `outreach`, so **please turn on `LIST_OUTREACH_SOURCE` in `lib/admin-api/meta/leads.ts`** in the release that ships these screens. Until then the app adds "Outreach" to the Source choices itself.
+- `leadTouchKinds` is read from `GET /meta` (optional in the app's schema, with the same five labels as the fallback).
+- A touch logged from the sheet sends `followUpAt` only when the person changed it (null clears it), and never sends `status` (the server's "new becomes contacted" rule decides; the app shows the lead the server answers).
+- The app sends no `at` after a one-tap call (the server's clock is "now"); the sheet's "When" field sends one when the person picks a time.
+- Booked and Cancelled are shown in the status picker but cannot be chosen (400 `status` otherwise).
+
+What the app still needs from the server:
+
+1. **`followUp=today`**: follow-ups due by the end of the Toronto day (overdue, plus later today), soonest first. "Follow-ups due" means "today or overdue" for the team, and `due` stops at the current minute, so a call planned for 4 PM is missing at 10 AM. Today the app asks for `followUp=any` and stops at the first row past today (the list is soonest first, so the rest are later). With `today` the app would drop that cut.
+2. **The existing lead on a 409 `duplicate`**: add `leadId` to the error (for example `{ code: "duplicate", message, fields: { email }, leadId }`) so "Find it" opens that lead. Today the app searches the Leads list for the email.
+3. **Fix a touch logged by mistake**: `PATCH /leads/:id/touches/:touchId` and `DELETE /leads/:id/touches/:touchId` (the author, or `leads.update`). Today a wrong touch stays in the timeline.
+4. **A title for a lead without a name or an email** (phone only, business only) in `GET /search`: use the business, then the phone, like the app's `leadTitle`, so the result is never blank.
