@@ -103,14 +103,14 @@ describe('onQuickAction', () => {
 });
 
 describe('plusSheetActions', () => {
-  it("gives owners the brief's five actions in order, then Add a lead", () => {
+  it("gives owners Add a lead first, then the brief's five actions in order", () => {
     expect(plusSheetActions(OWNER).map((a) => a.title)).toEqual([
+      'Add a lead',
       'New client',
       'Log a booked call',
       'Write a post',
       'New coupon',
       'New link',
-      'Add a lead',
     ]);
   });
 
@@ -118,8 +118,8 @@ describe('plusSheetActions', () => {
     expect(plusSheetActions(MANAGER).map((a) => a.title)).toEqual(plusSheetActions(OWNER).map((a) => a.title));
   });
 
-  it('gives staff New client, Log a booked call and Add a lead', () => {
-    expect(plusSheetActions(STAFF).map((a) => a.title)).toEqual(['New client', 'Log a booked call', 'Add a lead']);
+  it('gives staff Add a lead, New client and Log a booked call', () => {
+    expect(plusSheetActions(STAFF).map((a) => a.title)).toEqual(['Add a lead', 'New client', 'Log a booked call']);
   });
 });
 

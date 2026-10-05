@@ -638,3 +638,4 @@ Contract: the website's docs/admin-api/demos.md (first drafted in the orchestrat
 - Client and lead pages get a compact Demo card (on the client, under the stat cards) with "Request a demo". "Client wants a demo" on New client is off by default and opens the demo form for the new client.
 - The demo form keeps a local draft until the server saves it, and slides up like New client. Success toast: "Demo requested."
 - A lead's demo requests follow it to the client when it converts; a request made on a lead that is already a client gets that client too.
+- 2026-10-05 (owner): Add a lead is first in the gold + sheet, before New client and the brief's order: adding leads is the sales team's main job, and it was hard to find at the bottom.

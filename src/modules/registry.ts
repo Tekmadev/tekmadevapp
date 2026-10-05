@@ -123,8 +123,12 @@ export function moreMenu(v: Visibility): MoreMenuSection[] {
   );
 }
 
-/** The brief's order for the + sheet; actions not listed (future modules) follow in registry order. */
-const PLUS_SHEET_ORDER: readonly string[] = ['new-client', 'log-call', 'write-post', 'new-coupon', 'new-link'];
+/**
+ * The order of the + sheet: Add a lead first (owner request 2026-10-05: adding
+ * leads is the sales team's main job), then the brief's order. Actions not
+ * listed (future modules) follow in registry order.
+ */
+const PLUS_SHEET_ORDER: readonly string[] = ['add-lead', 'new-client', 'log-call', 'write-post', 'new-coupon', 'new-link'];
 
 /** The gold + sheet on Home and Customers. */
 export function plusSheetActions(v: Visibility): QuickAction[] {
