@@ -9,7 +9,8 @@
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#0e0d0b",
     "platforms": [
-      "android"
+      "android",
+      "ios"
     ],
     "android": {
       "package": "com.tekmadev.admin",
@@ -33,6 +34,17 @@
         "android.permission.ACCESS_MEDIA_LOCATION"
       ],
       "googleServicesFile": "./google-services.json"
+    },
+    "ios": {
+      "bundleIdentifier": "com.tekmadev.admin",
+      "buildNumber": "5",
+      "supportsTablet": false,
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "CFBundleDisplayName": "Tekmadev"
+      }
     },
     "plugins": [
       "expo-router",
@@ -103,6 +115,18 @@
                 ]
               }
             ]
+          },
+          "ios": {
+            "fonts": [
+              "./assets/fonts/geist_400.ttf",
+              "./assets/fonts/geist_500.ttf",
+              "./assets/fonts/geist_600.ttf",
+              "./assets/fonts/geist_700.ttf",
+              "./assets/fonts/geist_800.ttf",
+              "./assets/fonts/geist_900.ttf",
+              "./assets/fonts/geistmono_400.ttf",
+              "./assets/fonts/geistmono_500.ttf"
+            ]
           }
         }
       ],
@@ -145,7 +169,12 @@
           "isAccessMediaLocationEnabled": false
         }
       ],
-      "expo-local-authentication",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Tekmadev Admin uses Face ID to unlock the app."
+        }
+      ],
       [
         "expo-build-properties",
         {
@@ -157,6 +186,8 @@
         }
       ],
       "./plugins/withLauncherLabel.js",
+      "./plugins/withPathSpacesFix.js",
+      "./plugins/withSceneLifecycle.js",
       [
         "expo-image-picker",
         {

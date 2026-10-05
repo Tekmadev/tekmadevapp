@@ -1,12 +1,13 @@
 import type { Href } from 'expo-router';
 import * as QuickActions from 'expo-quick-actions';
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 
 import { currentVisibility, shortcutActions, useVisibility, type ShortcutAction } from '../registry';
 import type { Visibility } from '../types';
 
 /**
- * Android app shortcuts (long-press the launcher icon): Inbox, New client,
+ * App shortcuts (long-press the app icon, Android and iPhone): Inbox, New client,
  * Write a post, Analytics, each only for people who hold its capability.
  * Generated from the registry's quick actions that have a `shortcut`,
  * filtered by capability and feature flags, registered while
@@ -17,7 +18,10 @@ import type { Visibility } from '../types';
 export type ShortcutItem = {
   id: string;
   title: string;
-  /** A launcher icon resource generated from app.json (androidIcons keys). */
+  /**
+   * Android: a launcher icon resource generated from app.json (androidIcons
+   * keys). iPhone: the matching SF Symbol ("symbol:tray.full").
+   */
   icon: string;
   params: { href: string };
 };
@@ -38,14 +42,29 @@ export function hrefToPath(href: Href): string {
   return query ? `${path}?${query}` : path;
 }
 
-function toItem(action: ShortcutAction): ShortcutItem {
-  return { id: action.id, title: action.title, icon: action.shortcut.icon, params: { href: hrefToPath(action.href) } };
+/** iPhone shortcut icons are SF Symbols, one per Android launcher icon. */
+const IOS_SYMBOLS: Record<string, string> = {
+  shortcut_inbox: 'tray.full',
+  shortcut_client: 'person.crop.circle.badge.plus',
+  shortcut_post: 'square.and.pencil',
+  shortcut_analytics: 'chart.bar',
+};
+
+/** The icon a shortcut carries on this platform. */
+export function shortcutIcon(icon: string, os: typeof Platform.OS = Platform.OS): string {
+  if (os !== 'ios') return icon;
+  const symbol = IOS_SYMBOLS[icon];
+  return symbol ? `symbol:${symbol}` : icon;
+}
+
+function toItem(action: ShortcutAction, os: typeof Platform.OS): ShortcutItem {
+  return { id: action.id, title: action.title, icon: shortcutIcon(action.shortcut.icon, os), params: { href: hrefToPath(action.href) } };
 }
 
 /** The shortcuts this person gets, in launcher order (none when signed out). */
-export function shortcutItems(v: Visibility, max: number | undefined = QuickActions.maxCount): ShortcutItem[] {
+export function shortcutItems(v: Visibility, max: number | undefined = QuickActions.maxCount, os: typeof Platform.OS = Platform.OS): ShortcutItem[] {
   if (!v.role) return [];
-  const items = shortcutActions(v).map(toItem);
+  const items = shortcutActions(v).map((action) => toItem(action, os));
   return typeof max === 'number' && max > 0 ? items.slice(0, max) : items;
 }
 

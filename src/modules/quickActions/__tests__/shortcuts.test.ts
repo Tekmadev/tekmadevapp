@@ -45,11 +45,20 @@ describe('hrefToPath', () => {
 
 describe('shortcutItems', () => {
   it('gives owners Inbox, New client, Write a post and Analytics, with their icons', () => {
-    expect(shortcutItems(OWNER, undefined)).toEqual([
+    expect(shortcutItems(OWNER, undefined, 'android')).toEqual([
       { id: 'inbox', title: 'Inbox', icon: 'shortcut_inbox', params: { href: '/inbox' } },
       { id: 'new-client', title: 'New client', icon: 'shortcut_client', params: { href: '/clients/new' } },
       { id: 'write-post', title: 'Write a post', icon: 'shortcut_post', params: { href: '/blog/new' } },
       { id: 'analytics', title: 'Analytics', icon: 'shortcut_analytics', params: { href: '/analytics' } },
+    ]);
+  });
+
+  it('uses SF Symbols for the icons on iPhone', () => {
+    expect(shortcutItems(OWNER, undefined, 'ios').map((i) => i.icon)).toEqual([
+      'symbol:tray.full',
+      'symbol:person.crop.circle.badge.plus',
+      'symbol:square.and.pencil',
+      'symbol:chart.bar',
     ]);
   });
 
