@@ -579,3 +579,38 @@ Contract: the website's docs/admin-api/staff.md. Seven capabilities after `team.
 ## Owner requests after 0.4.0
 
 - New client: Assigned strategist starts with the signed-in person's email (owner, manager or anyone allowed to add clients), on the app and the web admin. Typing another email replaces it; clearing it leaves the client unassigned.
+
+## iPhone version (2026-10-05)
+
+Build and platform:
+- iOS 27 traps at launch in any app without the UIScene life cycle. `plugins/withSceneLifecycle.js` makes AppDelegate an `ExpoReactNativeFactoryProvider` and adds `SceneDelegate: ExpoAppSceneDelegate` plus the scene manifest (Expo's SDK 57 template still lacks it). Remove the plugin once Expo's template adopts scenes.
+- The project path contains a space. `plugins/withPathSpacesFix.js` quotes the two Xcode phases that split on it (expo-constants' app config phase via the Podfile, and the React Native bundle phase). A symlink to a space-free path does not help: Xcode resolves real paths.
+- Bundle id `com.tekmadev.admin`, display name "Tekmadev", iPhone only (`supportsTablet: false`), `usesNonExemptEncryption: false` (to re-check against Apple's questionnaire at the first upload: the cache is AES encrypted on the phone).
+- Free Apple ID installs (`scripts/ios-device.sh`) use the bundle id `com.tekmadev.admin.personal` and drop the push entitlement; a paid account is needed for push, TestFlight and Expo (EAS) iPhone builds.
+
+Tab bar and navigation:
+- iPhone uses the system tab bar (UITabBarController, Liquid Glass) through expo-router native tabs, with SF Symbols (outline, filled when selected) and the gold tint. Android keeps the floating pill.
+- The bar never minimises: UIKit only finds a scroll view on the first-subview chain, and our Screen puts its header first (moving it would read the content before the header in VoiceOver). It stays put on every tab rather than on some.
+- Inside native tabs each tab's safe area already includes the bar, so the tab inset and the floating + button measure from the safe area only (`NativeTabsContext`).
+- App shortcuts use SF Symbols on iOS (`tray.full`, `person.crop.circle.badge.plus`, `square.and.pencil`, `chart.bar`).
+
+Fonts, text and input:
+- iOS fonts use the PostScript face per weight with `fontWeight` pinned to that face's own weight, so nothing is synthesised. Android is unchanged. Every font goes through `fontFace()` or the Text `weight`/`family` props; ESLint enforces it.
+- Geist Mono on iOS: lighter than 500 uses Regular, 500 and heavier uses Medium (the same files Android's closest match picks).
+- iOS display line height is 1.22 (Android 1.16): iOS cuts a short line box from the top, which shaved accented capitals.
+- Markdown italics render upright on iPhone: Geist has no italic file and only Android fakes a slant.
+- The iOS caret is one solid gold tint (iOS draws the caret in the selection colour, so the 30% highlight would hide it).
+- Plain screens and lists shift their content for the keyboard on iOS (`automaticallyAdjustKeyboardInsets`). The black hole pull to refresh stays; the native bounce is off on screens that have it.
+
+Lock, privacy and feedback:
+- The iOS app lock is a top overlay layer, not a Modal (UIKit refuses to present a second view controller, so a Modal would not cover the image viewer or the in-app browser). Locking closes the keyboard and the in-app browser; the image viewer hides until unlock.
+- "Hide content in the app switcher" on iOS is an opaque cover with the splash mark whenever the app is not active, except during our own Face ID or permission prompts. iOS cannot block screenshots.
+- iPhone copy says Face ID, Touch ID or passcode, and the offer sheet shows a face icon on Face ID phones.
+- iOS haptics follow the brief's map: selection, light and medium impact, success, warning and error.
+- VoiceOver hides what TalkBack hides, the app under an open sheet is hidden, and the escape gesture closes a sheet.
+- The edge swipe works on the blog editor; with unsaved changes or an upload running it springs back and asks "Save your changes?".
+
+Push and updates:
+- The iOS push token request gives up after 20 seconds with "could not get a push token"; a token that arrives later still registers.
+- The iOS icon badge shows the bell's unread count and is cleared on sign-out.
+- iPhone is never offered the APK: the update card says "Ask Shajeed I. for the latest iPhone version."
