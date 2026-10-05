@@ -7,6 +7,7 @@ import { routes as blog } from './blog';
 import { routes as clients } from './clients';
 import { routes as coupons } from './coupons';
 import { routes as crm } from './crm';
+import { routes as demos } from './demos';
 import { routes as email } from './email';
 import { routes as leads } from './leads';
 import { routes as links } from './links';
@@ -27,6 +28,7 @@ export function allRoutes(): MockRoute[] {
     ...notifications,
     ...clients,
     ...leads,
+    ...demos,
     ...tools,
     ...billing,
     ...analytics,

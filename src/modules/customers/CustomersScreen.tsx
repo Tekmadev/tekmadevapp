@@ -15,6 +15,7 @@ import { plusSheetActions, useVisibility } from '@/modules/registry';
 import { TabHeaderActions } from '@/modules/shell/TabHeaderActions';
 
 import { ClientsSegmentHost } from './segments/ClientsSegmentHost';
+import { DemosSegment } from './segments/DemosSegment';
 import { LeadsSegment } from './segments/LeadsSegment';
 import { SubscriptionsSegment } from './segments/SubscriptionsSegment';
 import { ToolsSegment } from './segments/ToolsSegment';
@@ -24,8 +25,8 @@ import { SEGMENT_LABELS, toSegment, visibleSegments, type CustomerSegment, type 
 const FAB_CLEARANCE = 56 + space[4] + space[2];
 
 /**
- * The Customers tab (brief section 7): Clients, Leads, Free tools and
- * Subscriptions, switched by tabs under the title and bound to the route param
+ * The Customers tab (brief section 7): Clients, Leads, Demos (demo requests,
+ * 2026-10-05), Free tools and Subscriptions, switched by tabs under the title and bound to the route param
  * `segment` (default clients), so deep links and Home cards land on the right
  * one. Each segment owns its list and states; this shell owns the title, the
  * header actions (search, Inbox bell, "Checklist templates" for people with
@@ -72,6 +73,8 @@ export function CustomersScreen() {
         <ClientsSegmentHost chrome={chrome} params={params} />
       ) : segment === 'leads' ? (
         <LeadsSegment chrome={chrome} params={params} />
+      ) : segment === 'demos' ? (
+        <DemosSegment chrome={chrome} params={params} />
       ) : segment === 'tools' ? (
         <ToolsSegment chrome={chrome} params={params} />
       ) : (

@@ -203,8 +203,11 @@ describe('leadClientAction (roles, owner decision 2026-10-03)', () => {
   it('offers Create client only with leads.convert and clients.create', () => {
     expect(leadClientAction(null, (cap) => can('owner', cap))).toBe('create');
     expect(leadClientAction(null, (cap) => can('manager', cap))).toBe('create');
-    // Staff may convert leads on the web but cannot create clients: no button, never one that only fails.
-    expect(leadClientAction(null, (cap) => can('staff', cap))).toBeNull();
+    // Staff hold both since 2026-10-05 (salespeople add the clients they find).
+    expect(leadClientAction(null, (cap) => can('staff', cap))).toBe('create');
+    // Either one alone: no button, never one that only fails.
+    expect(leadClientAction(null, (cap) => can(['leads.convert'], cap))).toBeNull();
+    expect(leadClientAction(null, (cap) => can(['clients.create'], cap))).toBeNull();
   });
 
   it('offers Open client once the lead is a client, to anyone with clients.view', () => {

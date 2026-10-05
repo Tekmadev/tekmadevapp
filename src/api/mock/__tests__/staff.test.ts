@@ -174,6 +174,54 @@ describe('client credits', () => {
     expect(bundle.activity.items.some((a) => a.event.startsWith('credits.'))).toBe(false);
   });
 
+  it('gives whoever adds a client by hand, not from a lead, full credit: finder and booker, 100% (owner decision 2026-10-05)', async () => {
+    const total = (list: { share: number }[]) => list.reduce((sum, c) => sum + c.share, 0);
+
+    asManager();
+    const byManager = await createClient({ businessName: 'Hand Made Signs', email: 'hello@handmadesigns.test', sendInvite: false }, key());
+    asOwner();
+    const managerRows = (await getClientCredits(byManager.client.id)).credits;
+    expect(managerRows.map((c) => [c.email, c.role, c.share])).toEqual([
+      ['manager@tekmadev.test', 'finder', 50],
+      ['manager@tekmadev.test', 'booker', 50],
+    ]);
+    expect(total(managerRows)).toBe(100);
+    expect((await getClientCredits(byManager.client.id)).leadId).toBeNull();
+    const ownerBundle = await getClient(byManager.client.id);
+    expect(ownerBundle.activity.items.some((a) => a.event === 'credits.created')).toBe(true);
+
+    asOwner();
+    const byOwner = await createClient({ businessName: 'Owner Found Co', email: 'hi@ownerfound.test', sendInvite: false }, key());
+    expect((await getClientCredits(byOwner.client.id)).credits.map((c) => [c.email, c.share])).toEqual([
+      ['owner@tekmadev.test', 50],
+      ['owner@tekmadev.test', 50],
+    ]);
+
+    // Staff see it as their own credit: every row is theirs, 100% in all.
+    asStaff();
+    const byStaff = await createClient({ businessName: 'Staff Found Bakery', email: 'hi@stafffoundbakery.test', sendInvite: false }, key());
+    const own = await getClientCredits(byStaff.client.id);
+    expect(own.scope).toBe('own');
+    expect(own.credits.map((c) => [c.email, c.role])).toEqual([
+      ['staff@tekmadev.test', 'finder'],
+      ['staff@tekmadev.test', 'booker'],
+    ]);
+    expect(total(own.credits)).toBe(100);
+    expect((await getClient(byStaff.client.id)).credits?.every((c) => c.email === 'staff@tekmadev.test')).toBe(true);
+    asOwner();
+    expect((await getClientCredits(byStaff.client.id)).credits.every((c) => c.email === 'staff@tekmadev.test')).toBe(true);
+  });
+
+  it('keeps the credits of an existing client added again by hand (reused, not created)', async () => {
+    asManager();
+    const first = await createClient({ businessName: 'Twice Added Co', email: 'hi@twiceadded.test', sendInvite: false }, key());
+    asStaff();
+    const again = await createClient({ businessName: 'Twice Added Co', email: 'hi@twiceadded.test', sendInvite: false }, key());
+    expect(again).toMatchObject({ reused: true, client: { id: first.client.id } });
+    asOwner();
+    expect((await getClientCredits(first.client.id)).credits.map((c) => c.email)).toEqual(['manager@tekmadev.test', 'manager@tekmadev.test']);
+  });
+
   it('refuses a lead that is gone or already another client', async () => {
     asManager();
     const gone = await apiError(createClient({ businessName: 'Gone', email: 'gone@x.test', sendInvite: false, leadId: 'ld_nope' }, key()));

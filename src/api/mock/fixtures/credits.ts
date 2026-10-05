@@ -200,6 +200,28 @@ export function creditClientFromLead(c: ClientRecord, lead: Pick<Lead, 'foundBy'
   return credits;
 }
 
+/**
+ * A client added by hand, not from a lead (owner decision 2026-10-05): the
+ * person who adds it is its finder and its booker, so they hold 100% (one row
+ * per role at the default split). Any role. Only for a client that has no
+ * credits yet. Logged as "credits.created" (internal).
+ */
+export function creditClientToCreator(c: ClientRecord, by: string): CreditInput[] {
+  const creator = by.trim().toLowerCase();
+  const credits = defaultCredits(creator, creator, commissionState.current);
+  if (credits.length === 0 || creditsOf(c.id).length > 0) return [];
+  const at = nowIso();
+  write(c.id, credits, creator, at);
+  addActivity(c, {
+    event: 'credits.created',
+    summary: `Credits set when the client was added by hand: ${creditSummary(credits, creditTeam())}.`,
+    actor: staffActor(creator),
+    visible: false,
+    at,
+  });
+  return credits;
+}
+
 /* ---------- the seed ---------- */
 
 const OWNER = 'owner@tekmadev.test';

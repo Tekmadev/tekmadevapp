@@ -2,14 +2,15 @@ import type { ReactNode } from 'react';
 
 import type { Capability } from '@/auth/capabilities';
 
-/** The four sections of the Customers tab, in order (route param `segment`). */
-export const CUSTOMER_SEGMENTS = ['clients', 'leads', 'tools', 'subscriptions'] as const;
+/** The sections of the Customers tab, in order (route param `segment`). Demos follows Leads (2026-10-05). */
+export const CUSTOMER_SEGMENTS = ['clients', 'leads', 'demos', 'tools', 'subscriptions'] as const;
 export type CustomerSegment = (typeof CUSTOMER_SEGMENTS)[number];
 
 /** What each section needs. Subscriptions is money: owners and managers only. */
 export const SEGMENT_CAPABILITIES: Record<CustomerSegment, Capability> = {
   clients: 'clients.view',
   leads: 'leads.view',
+  demos: 'demos.view',
   tools: 'tools.view',
   subscriptions: 'billing.view',
 };
@@ -22,6 +23,7 @@ export function visibleSegments(can: (cap: Capability) => boolean): CustomerSegm
 export const SEGMENT_LABELS: Record<CustomerSegment, string> = {
   clients: 'Clients',
   leads: 'Leads',
+  demos: 'Demos',
   tools: 'Free tools',
   subscriptions: 'Subscriptions',
 };
@@ -40,7 +42,10 @@ export function toSegment(value: unknown, visible: readonly CustomerSegment[] = 
 /** Route params of the Customers tab (`/customers?segment=clients&view=blocked`). */
 export type CustomersParams = {
   segment?: string;
-  /** Clients: a quick filter from Home's "Needs you" cards (blocked, review, intake, behind). */
+  /**
+   * A segment's quick filter. Clients: Home's "Needs you" cards (blocked, review,
+   * intake, behind). Leads: booked. Demos: open, ready, mine or all.
+   */
   view?: string;
   /** One-shot action from a quick action ("log-call"). Cleared once handled. */
   action?: string;

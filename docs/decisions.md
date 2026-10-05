@@ -614,3 +614,27 @@ Push and updates:
 - The iOS push token request gives up after 20 seconds with "could not get a push token"; a token that arrives later still registers.
 - The iOS icon badge shows the bell's unread count and is cleared on sign-out.
 - iPhone is never offered the APK: the update card says "Ask Shajeed I. for the latest iPhone version."
+
+## Legal pieces for the stores (2026-10-05)
+
+- Legal links (privacy policy, terms, open-source licenses, account deletion) live in one Legal group on the More tab for every role, not in App settings > About: easier to find, as the stores want for account deletion.
+- Sign-in links the privacy policy and terms quietly at the bottom, so the privacy policy is reachable before signing in (Apple requires it inside the app).
+- Legal pages open in the in-app browser; their URLs live only in `src/lib/legal.ts` (tekmadev.com /privacy, /terms, /account-deletion).
+- Open-source licenses come from `scripts/gen-licenses.mjs`, run by hand and committed as JSON; each license text is stored once and copyright lines are kept per package.
+- Native libraries are listed only when the Android or iOS build confirms them (Gradle resolved deps, Podfile.lock), with versions from those builds; re-run the generator after every build that changes native dependencies. Google Play services and the Install Referrer are not open source and are not listed.
+- Long and medium dashes in third-party license texts are turned into ASCII hyphens to keep the no-dash rule.
+- The license detail is a sheet, not a pushed screen: it keeps the list's scroll place and needs one route.
+
+## Staff clients and demo requests (owner decisions 2026-10-05)
+
+Contract: the website's docs/admin-api/demos.md (first drafted in the orchestrator's demos-contract.md). Capabilities: `clients.create` is now owners, managers and staff; new `demos.view` and `demos.request` (everyone) and `demos.manage` (owners and managers). Totals: owner 75, manager 72, staff 28.
+
+- Staff may add clients. New client, its quick action, shortcut, search entry and deep link follow the capability. The form shows no money (plan names and hints only).
+- A client added without a lead credits the signed-in creator as finder and booker (100%), for every role. New client says "You get the credit for this client." Creating from a lead still credits the lead's finder and booker; adding an existing client's email again keeps that client's credits.
+- Demo requests need business information (name, type of business, area served, what they sell or do; optional website or socials, logo and colours, customers, what they want to see, needed by).
+- Demos are a Customers segment after Leads, with Open, Ready, Mine (your open requests) and All, and the server's counts on the chips.
+- Demo actions follow only the server's `can`. Mark as shown and Cancel request use HoldToConfirm (closing is permanent).
+- "Mark ready to show" without a link shows "Add the demo link first." under the button, with an "Add the link" shortcut that saves the link and marks ready together. "Start building" makes the person tapping it the builder when nobody is set.
+- Client and lead pages get a compact Demo card (on the client, under the stat cards) with "Request a demo". "Client wants a demo" on New client is off by default and opens the demo form for the new client.
+- The demo form keeps a local draft until the server saves it, and slides up like New client. Success toast: "Demo requested."
+- A lead's demo requests follow it to the client when it converts; a request made on a lead that is already a client gets that client too.

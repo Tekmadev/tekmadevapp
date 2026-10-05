@@ -1,5 +1,20 @@
 import { router, useFocusEffect } from 'expo-router';
-import { ChartLine, ChevronRight, LogOut, SlidersHorizontal, Smartphone, Trophy, Wallet, type LucideIcon } from 'lucide-react-native';
+import {
+  ChartLine,
+  ChevronRight,
+  Code,
+  ExternalLink,
+  LogOut,
+  Scale,
+  ScrollText,
+  ShieldCheck,
+  SlidersHorizontal,
+  Smartphone,
+  Trophy,
+  UserX,
+  Wallet,
+  type LucideIcon,
+} from 'lucide-react-native';
 import { Fragment, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -19,11 +34,14 @@ import { Icon } from '@/components/Icon';
 import { ListRow } from '@/components/ListRow';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/components/Text';
+import { openInBrowser } from '@/components/automation/ApprovalBlocks';
 import { enterPull } from '@/design/motion';
+import { useTheme } from '@/design/theme';
 import { space } from '@/design/tokens';
 import { connectivity } from '@/lib/connectivity';
 import { env } from '@/lib/env';
 import { plural } from '@/lib/format';
+import { ACCOUNT_DELETION_URL, LEGAL_COPY, PRIVACY_URL, TERMS_URL } from '@/lib/legal';
 import { notice } from '@/lib/notice';
 import { drafts } from '@/lib/storage';
 import { clearAppShortcuts } from '@/modules/quickActions/shortcuts';
@@ -88,7 +106,9 @@ async function signOut() {
 /**
  * The More tab: the full menu (owner decision: no side drawer), generated from
  * the module registry and filtered by capability and feature flags. A profile card
- * on top, then Insights, Sales, Settings and App, then Sign out and the version.
+ * on top, then Insights, Sales, Settings and App, then Legal (every role: the
+ * privacy policy, the terms, open-source licenses and how to ask for account
+ * deletion, which the stores want easy to find), then Sign out and the version.
  */
 export function MoreScreen() {
   const me = useMe();
@@ -104,7 +124,7 @@ export function MoreScreen() {
     setSignOutOpen(true);
   };
 
-  // Enter order: profile, each section, sign out (staggered, first 8 only).
+  // Enter order: profile, each section, legal, sign out (staggered, first 8 only).
   const first = me ? 1 : 0;
   return (
     <>
@@ -123,6 +143,10 @@ export function MoreScreen() {
         ))}
 
         <Animated.View entering={enterPull(first + sections.length)} style={styles.block}>
+          <LegalSection />
+        </Animated.View>
+
+        <Animated.View entering={enterPull(first + sections.length + 1)} style={styles.block}>
           <Card padded={false}>
             <ListRow
               title="Sign out"
@@ -223,6 +247,55 @@ function MenuSection({ section }: { section: MoreMenuSection }) {
             <ListRow title={m.title} subtitle={m.summary} icon={m.icon} onPress={() => router.push(m.href)} />
           </Fragment>
         ))}
+      </Card>
+    </View>
+  );
+}
+
+/** Legal, for every role. The web pages open in the in-app browser; the licenses are a screen in the app. */
+function LegalSection() {
+  const { colors } = useTheme();
+  const external = <Icon icon={ExternalLink} size={18} color="ink4" />;
+  const web = (url: string) => () => openInBrowser(url, colors);
+
+  return (
+    <View>
+      <View style={styles.sectionHeader} accessible accessibilityRole="header" accessibilityLabel={LEGAL_COPY.section}>
+        <Icon icon={Scale} size={14} color="ink3" />
+        <Text variant="eyebrow">{LEGAL_COPY.section}</Text>
+      </View>
+      <Card padded={false}>
+        <ListRow
+          title={LEGAL_COPY.privacy}
+          icon={ShieldCheck}
+          trailing={external}
+          chevron={false}
+          onPress={web(PRIVACY_URL)}
+          accessibilityHint={LEGAL_COPY.opensInBrowser}
+          testID="more-privacy"
+        />
+        <Divider inset={ROW_TEXT_INSET} />
+        <ListRow
+          title={LEGAL_COPY.terms}
+          icon={ScrollText}
+          trailing={external}
+          chevron={false}
+          onPress={web(TERMS_URL)}
+          accessibilityHint={LEGAL_COPY.opensInBrowser}
+          testID="more-terms"
+        />
+        <Divider inset={ROW_TEXT_INSET} />
+        <ListRow title={LEGAL_COPY.licenses} icon={Code} onPress={() => router.push('/licenses')} testID="more-licenses" />
+        <Divider inset={ROW_TEXT_INSET} />
+        <ListRow
+          title={LEGAL_COPY.deletion}
+          icon={UserX}
+          trailing={external}
+          chevron={false}
+          onPress={web(ACCOUNT_DELETION_URL)}
+          accessibilityHint={LEGAL_COPY.opensInBrowser}
+          testID="more-account-deletion"
+        />
       </Card>
     </View>
   );

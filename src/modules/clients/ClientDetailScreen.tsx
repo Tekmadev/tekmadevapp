@@ -18,6 +18,7 @@ import { useReduceMotion } from '@/design/motion';
 import { layout, space } from '@/design/tokens';
 import { useIsOnline } from '@/lib/connectivity';
 import type { ClientSection } from '@/lib/deeplinks';
+import { DemoCard } from '@/modules/demos/DemoCard';
 
 import { ClientHeader } from './detail/ClientHeader';
 import { ClientMenu } from './detail/ClientMenu';
@@ -88,7 +89,8 @@ function cachedBusinessName(queryClient: QueryClient, id: string): string | unde
  *
  * What shows follows the person's capabilities: the CRM tab and section need
  * `clients.crm`, and each section hides the actions this person cannot take.
- * Credit (commission credit) follows Account, inside the Account tab.
+ * Credit (commission credit) follows Account, inside the Account tab. The
+ * Demo card (demo requests, 2026-10-05) sits under the stat cards.
  */
 export function ClientDetailScreen() {
   return (
@@ -249,6 +251,8 @@ function ClientDetail() {
       <View key={HEAD} onLayout={(e) => onMeasure(HEAD, e)}>
         <ClientHeader bundle={bundle} meta={meta.data} />
         <ClientStatCards bundle={bundle} meta={meta.data} onOpenSection={(s) => jumpTo(s, !reduceMotion)} />
+        {/* Demo requests for this client and "Request a demo" (2026-10-05): above the tabs, it is a sales step, not a section. */}
+        <DemoCard target={{ clientId: id }} businessName={bundle.client.businessName} area={bundle.client.serviceArea} style={styles.demo} />
       </View>,
       <SectionTabs
         key="tabs"
@@ -320,4 +324,5 @@ function ClientDetail() {
 
 const styles = StyleSheet.create({
   section: { paddingTop: SECTION_TOP },
+  demo: { marginTop: space[5], marginBottom: space[4] },
 });

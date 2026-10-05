@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useSyncExternalStore, type ReactNode } from 'react';
 
 import { ApiError, errorMessage } from '@/api/errors';
+import { captureError } from '@/lib/monitoring';
 import { notice } from '@/lib/notice';
 
 /**
@@ -107,8 +108,10 @@ export function useSubmitGroup(explicit?: SubmitGroupHandle): SubmitGroupState {
  * owns the error (inline field errors, a custom message). Otherwise the API's
  * message is shown as a notice. 401, 403 and 426 are already handled globally
  * (sign out, owner-only notice, update screen), so they are not shown twice.
+ * Unexpected errors (5xx, bugs) also go to crash reporting, whoever shows them.
  */
 export function reportSubmitError(error: unknown, onError?: (error: unknown) => void): void {
+  captureError(error);
   if (onError) {
     onError(error);
     return;

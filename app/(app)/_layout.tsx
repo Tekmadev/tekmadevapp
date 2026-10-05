@@ -41,6 +41,7 @@ export default function AppLayout() {
       >
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="clients/new" options={{ animation: 'fade_from_bottom' }} />
+        <Stack.Screen name="demos/new" options={{ animation: 'fade_from_bottom' }} />
         <Stack.Screen name="blog/[id]" options={{ animation: 'fade_from_bottom' }} />
         <Stack.Screen name="links/qr/[id]" options={{ animation: 'fade' }} />
         <Stack.Screen name="kit" />

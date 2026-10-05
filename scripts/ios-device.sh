@@ -17,9 +17,26 @@
 # (com.tekmadev.admin.personal), so the real one, com.tekmadev.admin, stays
 # free for the paid account and the App Store. The JS is bundled into the app
 # (Release), so it runs without the dev server, against the API in .env.
+#
+# Sentry: source maps and debug symbols are uploaded only when .env.sentry.local
+# (gitignored, docs/release-signing.md) sets SENTRY_AUTH_TOKEN, SENTRY_ORG and
+# SENTRY_PROJECT; otherwise the build skips the upload.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 BUNDLE_ID="com.tekmadev.admin.personal"
+
+if [ -f .env.sentry.local ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env.sentry.local
+  set +a
+fi
+if [ -z "${SENTRY_AUTH_TOKEN:-}" ] || [ -z "${SENTRY_ORG:-}" ] || [ -z "${SENTRY_PROJECT:-}" ]; then
+  export SENTRY_DISABLE_AUTO_UPLOAD=true
+  echo "SENTRY_UPLOAD_OFF (no token, org and project in .env.sentry.local)"
+else
+  echo "SENTRY_UPLOAD_ON"
+fi
 
 # The team: the Personal Team of the Apple ID signed in to Xcode.
 TEAM=$(defaults export com.apple.dt.Xcode - 2>/dev/null | plutil -extract IDEProvisioningTeamByIdentifier json -o - - 2>/dev/null | node -e '

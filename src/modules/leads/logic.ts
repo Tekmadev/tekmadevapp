@@ -242,7 +242,7 @@ export function copyTargets(lead: Pick<Lead, 'phone' | 'email'>): CopyTarget[] {
  * The lead's main button (owner decision 2026-10-03 on roles): "Open client"
  * once it became a client (needs `clients.view`), else "Create client from
  * this lead", which opens New client and so needs `clients.create` as well as
- * `leads.convert` (staff hold only the second: no button). Null: no button.
+ * `leads.convert` (every role holds both since 2026-10-05). Null: no button.
  */
 export function leadClientAction(convertedClientId: string | null, can: (cap: Capability) => boolean): 'open' | 'create' | null {
   if (convertedClientId) return can('clients.view') ? 'open' : null;

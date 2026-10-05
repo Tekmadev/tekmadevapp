@@ -1,3 +1,6 @@
+// First import: starts crash reporting before the rest of the app loads (src/lib/monitoring.ts).
+import { reportQueryErrors, setMonitoringUser, withMonitoring } from '@/lib/monitoring';
+
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider as NavigationThemeProvider, router } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -21,13 +24,24 @@ import { BootSplash } from '@/loader/BootSplash';
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 startConnectivity();
 wireQueryManagers();
+reportQueryErrors(queryClient);
 installAuthBridge({
   onOwnerOnly: () => {
     if (router.canGoBack()) router.back();
   },
 });
 
-export default function RootLayout() {
+// Crash reports name the admin by id only (never email or name), and nobody once signed out.
+const monitoredUserId = () => {
+  const { status, me } = useSession.getState();
+  return status !== 'signedOut' ? (me?.user.id ?? null) : null;
+};
+setMonitoringUser(monitoredUserId());
+useSession.subscribe(() => setMonitoringUser(monitoredUserId()));
+
+export default withMonitoring(RootLayout);
+
+function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.fill}>
       <KeyboardProvider>

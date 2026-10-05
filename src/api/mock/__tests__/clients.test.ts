@@ -784,7 +784,6 @@ describe('staff (capabilities, owner decision 2026-10-03)', () => {
 
     asStaff();
     const refused = [
-      createClient({ businessName: 'Staff Made Co', email: 'hello@staffmade.test', sendInvite: false }, key()),
       updateClient(ACME, { legalName: 'Nope Inc.' }),
       goLive(ACME),
       updateOnboarding(run.id, { blocked: false }),
@@ -809,6 +808,15 @@ describe('staff (capabilities, owner decision 2026-10-03)', () => {
     expect(after.intake).toEqual(before.intake);
     expect(after.calls).toEqual(before.calls);
     expect(after.members).toEqual(before.members);
+  });
+
+  it('may add a client by hand (2026-10-05): created, never shown money', async () => {
+    asStaff();
+    const created = await createClient({ businessName: 'Concession Street Bakery', email: 'hello@concessionbakery.test', planId: 'webline', sendInvite: false }, key());
+    expect(zCreateClientResult.safeParse(created).success).toBe(true);
+    expect(created).toMatchObject({ reused: false, invite: 'skipped', client: { businessName: 'Concession Street Bakery', status: 'pending' } });
+    const b = await bundle(created.client.id);
+    expect(b.billing).toBeNull();
   });
 
   it('may help with onboarding: tasks, access and approval requests, booked calls and activity', async () => {

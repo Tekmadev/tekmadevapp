@@ -58,6 +58,28 @@ const ANALYTICS_RANGE_VALUES: readonly string[] = ['24h', '7d', '30d', '3m', '6m
 
 const tab = (pathname: string, segment?: string): AppLink => (segment ? { pathname, params: { segment } } : { pathname });
 
+/**
+ * /admin/demos with the web's filters: `?mine=1` opens Mine, `?status=ready`
+ * Ready and `?status=all` All (the Demos segment's `view`); anything else opens
+ * the default (Open).
+ */
+function demosLink(search: URLSearchParams): AppLink {
+  const status = search.get('status');
+  const view = search.get('mine') === '1' ? 'mine' : status === 'ready' || status === 'all' ? status : null;
+  return view ? { pathname: '/customers', params: { segment: 'demos', view } } : tab('/customers', 'demos');
+}
+
+/** The demo request form, with the target and prefill the link carries (empty values left out). */
+const NEW_DEMO_PARAMS = ['clientId', 'leadId', 'businessName', 'area'] as const;
+function newDemoLink(search: URLSearchParams): AppLink {
+  const params: Record<string, string> = {};
+  for (const key of NEW_DEMO_PARAMS) {
+    const value = search.get(key)?.trim();
+    if (value) params[key] = value;
+  }
+  return Object.keys(params).length > 0 ? { pathname: '/demos/new', params } : { pathname: '/demos/new' };
+}
+
 const CORE_RULES: DeepLinkRule[] = [
   { pattern: '', capability: 'overview.view', to: () => ({ pathname: '/' }) },
   {
@@ -70,6 +92,10 @@ const CORE_RULES: DeepLinkRule[] = [
   },
   { pattern: '/leads', capability: 'leads.view', to: () => tab('/customers', 'leads') },
   { pattern: '/leads/:id', capability: 'leads.view', to: ({ id }) => ({ pathname: '/leads/[id]', params: { id } }) },
+  { pattern: '/demos', capability: 'demos.view', to: (_p, _h, search) => demosLink(search) },
+  // Before /demos/:id, or "new" would open as a demo id.
+  { pattern: '/demos/new', capability: 'demos.request', to: (_p, _h, search) => newDemoLink(search) },
+  { pattern: '/demos/:id', capability: 'demos.view', to: ({ id }) => ({ pathname: '/demos/[id]', params: { id } }) },
   { pattern: '/tools', capability: 'tools.view', to: () => tab('/customers', 'tools') },
   { pattern: '/tools/:id', capability: 'tools.view', to: ({ id }) => ({ pathname: '/tools/[id]', params: { id } }) },
   { pattern: '/subscriptions', capability: 'billing.view', to: () => tab('/customers', 'subscriptions') },

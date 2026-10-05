@@ -66,6 +66,7 @@ import {
   CREDIT_MESSAGES,
   CREDIT_ROLES,
   creditClientFromLead,
+  creditClientToCreator,
   creditTeam,
   creditView,
   isCreditActivity,
@@ -75,6 +76,7 @@ import {
   visibleCredits,
   type CreditInput,
 } from '../fixtures/credits';
+import { linkLeadDemosToClient } from '../fixtures/demos';
 import { findLead, leadsDb } from '../fixtures/leads';
 import { mockCan, requireAnyCap, requireCap } from '../permissions';
 import { bool, fail, isEmail, matches, mockId, notFound, nowIso, num, ok, paginate, str, torontoDate, type MockContext, type MockResult, type MockRoute } from '../router';
@@ -98,6 +100,11 @@ import { bool, fail, isEmail, matches, mockId, notFound, nowIso, num, ok, pagina
  * credits), the bundle's `credits` are every row with `clients.credits.view`
  * and only the caller's own otherwise, `credits.*` activity is left out
  * without `clients.credits.view`, and GET / PUT /clients/:id/credits.
+ *
+ * Demo requests (2026-10-05): converting a lead links its demo requests to the
+ * new client (fixtures/demos.ts linkLeadDemosToClient). A client added by hand
+ * without a lead credits its creator as finder and booker, 100% (owner
+ * decision 2026-10-05); a reused client keeps its credits.
  */
 
 const REQUIRED = 'Business name and a valid email are required.';
@@ -501,6 +508,11 @@ export const routes: MockRoute[] = [
       if (sourceLead) {
         if (!leadOf(c.id)) sourceLead.convertedClientId = c.id;
         creditClientFromLead(c, sourceLead, ctx.user.email.toLowerCase());
+        // Demo requests asked for on the lead now belong to the client too (they keep the leadId).
+        linkLeadDemosToClient(sourceLead.id, c.id);
+      } else if (!existing) {
+        // Added by hand, not from a lead (owner decision 2026-10-05): whoever adds it found and booked it, 100%.
+        creditClientToCreator(c, ctx.user.email.toLowerCase());
       }
       touch(c);
       return ok({ client: clientView(c), reused: !!existing, invite }, existing ? 200 : 201);

@@ -11,13 +11,16 @@ import { Button } from '@/components/Button';
 import { Chip } from '@/components/Chip';
 import { Grain } from '@/components/Grain';
 import { Icon } from '@/components/Icon';
+import { PressableScale } from '@/components/PressableScale';
 import { Text } from '@/components/Text';
+import { openInBrowser } from '@/components/automation/ApprovalBlocks';
 import { PasswordField, TextField } from '@/components/form';
 import { haptics } from '@/design/haptics';
 import { durations, enterPull, springs } from '@/design/motion';
 import { useTheme } from '@/design/theme';
-import { space } from '@/design/tokens';
+import { layout, space } from '@/design/tokens';
 import { env } from '@/lib/env';
+import { LEGAL_COPY, PRIVACY_URL, TERMS_URL } from '@/lib/legal';
 import { BreathingMark } from '@/loader/BreathingMark';
 
 import { ForgotPasswordSheet } from './ForgotPasswordSheet';
@@ -62,6 +65,7 @@ type Message = { tone: 'error' | 'info'; text: string };
  * Sign in (brief 8.2): grain on bg, the slowly breathing mark, then the form
  * pulled into place under it. Errors are the exact copy from session.signIn,
  * shown inline above the button; a forced sign-out explains itself once.
+ * Quiet "Privacy policy" and "Terms of service" links sit at the bottom.
  */
 export function SignInScreen() {
   const { colors } = useTheme();
@@ -243,6 +247,14 @@ export function SignInScreen() {
               </View>
             </Animated.View>
           ) : null}
+
+          <Animated.View entering={pull(SHOW_MOCK_ACCOUNTS ? 7 : 6)} layout={settle} style={styles.legal}>
+            <LegalLink label={LEGAL_COPY.privacy} url={PRIVACY_URL} />
+            <Text variant="small" color="ink4" accessibilityElementsHidden importantForAccessibility="no">
+              ·
+            </Text>
+            <LegalLink label={LEGAL_COPY.terms} url={TERMS_URL} />
+          </Animated.View>
         </View>
       </KeyboardAwareScrollView>
 
@@ -274,6 +286,27 @@ function InlineMessage({ message }: { message: Message }) {
   );
 }
 
+/**
+ * A quiet link under the form. The stores want the privacy policy reachable
+ * before signing in; it opens in the in-app browser, tinted like the app.
+ */
+function LegalLink({ label, url }: { label: string; url: string }) {
+  const { colors } = useTheme();
+  return (
+    <PressableScale
+      onPress={() => openInBrowser(url, colors)}
+      accessibilityRole="link"
+      accessibilityLabel={label}
+      accessibilityHint={LEGAL_COPY.opensInBrowser}
+      style={styles.legalLink}
+    >
+      <Text variant="small" color="ink3">
+        {label}
+      </Text>
+    </PressableScale>
+  );
+}
+
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   scroll: { flexGrow: 1, paddingHorizontal: space[6] },
@@ -290,4 +323,6 @@ const styles = StyleSheet.create({
   forgot: { alignSelf: 'center' },
   mock: { marginTop: space[8], paddingTop: space[5], borderTopWidth: 1, gap: space[3] },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space[2] },
+  legal: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: space[6] },
+  legalLink: { minHeight: layout.minTouch, justifyContent: 'center', paddingHorizontal: space[2] },
 });

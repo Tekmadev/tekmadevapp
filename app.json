@@ -188,6 +188,8 @@
       "./plugins/withLauncherLabel.js",
       "./plugins/withPathSpacesFix.js",
       "./plugins/withSceneLifecycle.js",
+      "./plugins/withReleaseSigning.js",
+      "./plugins/withSentryUploadGuard.js",
       [
         "expo-image-picker",
         {
@@ -195,7 +197,8 @@
           "cameraPermission": "Tekmadev Admin uses the camera to take photos for blog posts.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "@sentry/react-native"
     ],
     "experiments": {
       "typedRoutes": true,

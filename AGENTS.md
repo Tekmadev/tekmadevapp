@@ -6,7 +6,7 @@ The full product spec is `PROMPT.md` (the "brief"). Read the sections relevant t
 
 1. **No em dashes anywhere** (UI copy, code comments, docs, commit messages). Use a colon, comma, parentheses or a new sentence. Never type the U+2014 character, and never type U+2013 either.
 2. **Never name the CRM vendor.** It is always "CRM" in UI and in identifiers you create.
-3. **No secrets in the APK.** Only the Supabase URL + publishable key (sign-in only). The app never reads tables; everything goes through the admin API (`src/api`).
+3. **No secrets in the APK.** Only the Supabase URL + publishable key (sign-in only), and the Sentry DSN (a public, send-only key; owner approved crash reporting 2026-10-05). The app never reads tables; everything goes through the admin API (`src/api`).
 4. Owner-only UI is hidden for managers, but the server (and the mock) enforce it with 403.
 5. **Never fake data.** A failed read shows `ErrorState` with Retry, never zeros. "Failed" and "empty" are different states everywhere.
 6. **Money is integer cents.** Show `$77.50` (never rounded to `$78`); whole amounts may drop `.00`. Use `src/lib/money.ts`.

@@ -2,7 +2,8 @@ import * as Application from 'expo-application';
 
 /**
  * Build-time configuration. Only EXPO_PUBLIC_* values exist in the bundle, and the
- * only keys allowed in the APK are the Supabase URL and publishable key (sign-in only).
+ * only keys allowed in the APK are the Supabase URL and publishable key (sign-in only)
+ * and the Sentry DSN (a public key that can only send crash reports).
  */
 
 const apiMode = process.env.EXPO_PUBLIC_API_MODE === 'live' ? 'live' : 'mock';
@@ -16,6 +17,8 @@ export const env = {
   authMode: authMode as 'mock' | 'supabase',
   supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL ?? '',
   supabaseKey: process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '',
+  /** Crash reporting (src/lib/monitoring.ts). Empty turns it off. Send-only, so safe in the app. */
+  sentryDsn: (process.env.EXPO_PUBLIC_SENTRY_DSN ?? '').trim(),
   /**
    * Emails treated as owners by the mock API when signing in with real Supabase
    * accounts (comma separated). Lets the owner sign in for real and see fixtures.

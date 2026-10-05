@@ -42,11 +42,11 @@ const EVERY_SCREEN = [
   'My activity',
   'App settings',
   'Notification settings',
+  'Open-source licenses',
 ];
 
-/** Screens staff never see, not even in search (owner decision 2026-10-03). */
+/** Screens staff never see, not even in search (owner decision 2026-10-03; New client is theirs since 2026-10-05). */
 const NOT_FOR_STAFF = [
-  'New client',
   'Subscriptions',
   'One-time orders',
   'Subscribers',
@@ -115,7 +115,7 @@ describe('suggestedScreens', () => {
   it('picks the usual jumps this person can open', () => {
     expect(suggestedScreens(searchScreensFor(OWNER)).map((s) => s.title)).toEqual(['Inbox', 'New client', 'Pricing', 'Coupons']);
     expect(suggestedScreens(searchScreensFor(MANAGER)).map((s) => s.title)).toEqual(['Inbox', 'New client', 'Pricing', 'Coupons']);
-    expect(suggestedScreens(searchScreensFor(STAFF)).map((s) => s.title)).toEqual(['Inbox', 'Pricing', 'Coupons', 'Leads']);
+    expect(suggestedScreens(searchScreensFor(STAFF)).map((s) => s.title)).toEqual(['Inbox', 'New client', 'Pricing', 'Coupons']);
   });
 });
 

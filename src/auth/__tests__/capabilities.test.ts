@@ -14,11 +14,15 @@ import {
 } from '@/auth/capabilities';
 
 /**
- * The permission table (owner decision 2026-10-03), written out here by hand so
- * a slip in the table shows up as a failing test rather than a hidden screen.
+ * The permission table (owner decisions 2026-10-03 and 2026-10-05), written out
+ * here by hand so a slip in the table shows up as a failing test rather than a
+ * hidden screen.
  */
 
-/** Exactly what staff may do: leads and outreach, analytics, onboarding help, view-only marketing and sales. */
+/**
+ * Exactly what staff may do: leads and outreach, adding clients and asking for
+ * demos (2026-10-05), analytics, onboarding help, view-only marketing and sales.
+ */
 const STAFF: Capability[] = [
   'overview.view',
   'notifications.view',
@@ -32,12 +36,15 @@ const STAFF: Capability[] = [
   'leads.convert',
   'tools.view',
   'clients.view',
+  'clients.create',
   'clients.tasks.create',
   'clients.tasks.status',
   'clients.access.request',
   'clients.approvals.request',
   'clients.calls.log',
   'clients.activity.write',
+  'demos.view',
+  'demos.request',
   'blog.view',
   'email.view',
   'links.view',
@@ -54,9 +61,9 @@ const OWNER_ONLY: Capability[] = ['team.remove', 'team.owners', 'commission.sett
 const MONEY: Capability[] = ['overview.revenue', 'billing.view', 'clients.billing', 'inbox.billing', 'inbox.sales', 'pricing.write', 'coupons.write'];
 
 describe('the table', () => {
-  it('has the 72 capability names the server uses, each once', () => {
-    expect(CAPABILITIES).toHaveLength(72);
-    expect(new Set(CAPABILITIES).size).toBe(72);
+  it('has the 75 capability names the server uses, each once', () => {
+    expect(CAPABILITIES).toHaveLength(75);
+    expect(new Set(CAPABILITIES).size).toBe(75);
     for (const cap of CAPABILITIES) expect(cap).toMatch(/^[a-z]+(\.[a-z_]+)+$/);
   });
 
@@ -72,8 +79,23 @@ describe('the table', () => {
     expect([...ROLE_CAPABILITIES.staff].sort()).toEqual([...STAFF].sort());
   });
 
+  it('counts each role: owner 75, manager 72, staff 28', () => {
+    expect(ROLE_CAPABILITIES.owner).toHaveLength(75);
+    expect(ROLE_CAPABILITIES.manager).toHaveLength(72);
+    expect(ROLE_CAPABILITIES.staff).toHaveLength(28);
+  });
+
+  it('lets staff add clients and ask for demos, while building them stays with owners and managers (2026-10-05)', () => {
+    expect(CAPABILITY_ROLES['clients.create']).toEqual(['owner', 'manager', 'staff']);
+    expect(CAPABILITY_ROLES['demos.view']).toEqual(['owner', 'manager', 'staff']);
+    expect(CAPABILITY_ROLES['demos.request']).toEqual(['owner', 'manager', 'staff']);
+    expect(CAPABILITY_ROLES['demos.manage']).toEqual(['owner', 'manager']);
+    expect(can('staff', 'demos.manage')).toBe(false);
+    expect(can('manager', 'demos.manage')).toBe(true);
+  });
+
   it('never gives staff money, writes to marketing or sales, settings, or test data', () => {
-    for (const cap of [...MONEY, 'blog.write', 'email.campaigns.write', 'links.write', 'crm.view', 'loader.view', 'testmode.view', 'team.view', 'testdata.view', 'team.role', 'team.pause', 'team.activity', 'clients.credits.view', 'clients.credits.edit'] as Capability[]) {
+    for (const cap of [...MONEY, 'blog.write', 'email.campaigns.write', 'links.write', 'crm.view', 'loader.view', 'testmode.view', 'team.view', 'testdata.view', 'team.role', 'team.pause', 'team.activity', 'clients.credits.view', 'clients.credits.edit', 'demos.manage'] as Capability[]) {
       expect(can('staff', cap)).toBe(false);
     }
   });

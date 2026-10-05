@@ -16,6 +16,13 @@ jest.mock('expo-secure-store', () => {
 });
 
 jest.mock('expo-application', () => ({ nativeApplicationVersion: '0.1.0', nativeBuildVersion: '1' }));
+// Crash reporting is off under jest (src/lib/monitoring.ts); the real SDK starts a timer on import.
+jest.mock('@sentry/react-native', () => ({
+  init: jest.fn(),
+  wrap: <T,>(component: T) => component,
+  setUser: jest.fn(),
+  captureException: jest.fn(),
+}));
 jest.mock('@react-native-community/netinfo', () => ({ addEventListener: () => () => undefined, fetch: async () => ({ isConnected: true }) }));
 
 // MMKV is a Nitro native module; give tests an in-memory store with the same surface.

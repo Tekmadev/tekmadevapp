@@ -9,7 +9,8 @@ export const appSettingsModule: ModuleManifest = {
   icon: SlidersHorizontal,
   group: 'more',
   moreSection: 'app',
-  routes: ['settings/index', 'settings/notifications'],
+  // licenses: More > Legal > Open-source licenses (the Legal rows themselves live on the More screen).
+  routes: ['settings/index', 'settings/notifications', 'licenses'],
   href: '/settings',
   summary: 'Appearance, notifications, security',
   searchable: {
@@ -28,6 +29,7 @@ export const appSettingsModule: ModuleManifest = {
         href: '/settings',
       },
       { title: 'Notification settings', keywords: ['push', 'quiet'], href: '/settings/notifications', capability: 'notifications.view' },
+      { title: 'Open-source licenses', keywords: ['licenses', 'open source', 'legal', 'credits'], href: '/licenses' },
     ],
   },
 };

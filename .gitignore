@@ -42,10 +42,16 @@ example
 /ios
 /android
 
-# env (only the example is committed)
+# env (only the examples are committed)
 .env
 .env.*
 !.env.example
+!.env.sentry.local.example
+# Sentry upload token for builds (docs/release-signing.md)
+.env.sentry.local
+
+# Android release key and its passwords: never commit, back up instead (docs/release-signing.md)
+credentials/
 
 # local build outputs and screenshots scratch
 /builds

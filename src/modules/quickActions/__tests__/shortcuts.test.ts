@@ -66,8 +66,9 @@ describe('shortcutItems', () => {
     expect(shortcutItems(MANAGER, undefined)).toEqual(shortcutItems(OWNER, undefined));
   });
 
-  it('gives staff only Inbox and Analytics (no New client, no Write a post)', () => {
-    expect(shortcutItems(STAFF, undefined).map((i) => i.id)).toEqual(['inbox', 'analytics']);
+  it('gives staff Inbox, New client and Analytics (no Write a post)', () => {
+    // Staff may add clients since 2026-10-05 (clients.create): the shortcut follows the capability.
+    expect(shortcutItems(STAFF, undefined).map((i) => i.id)).toEqual(['inbox', 'new-client', 'analytics']);
   });
 
   it('gives nothing when signed out, and respects the launcher limit', () => {
@@ -87,8 +88,9 @@ describe('onQuickAction', () => {
   it('stops a shortcut this person may not use, and anything unknown', () => {
     signInAs('staff');
     expect(onQuickAction({ id: 'write-post', title: 'Write a post', params: { href: '/blog/new' } })).toBe(true);
-    expect(onQuickAction({ id: 'new-client', title: 'New client', params: { href: '/clients/new' } })).toBe(true);
     expect(onQuickAction({ id: 'nope', title: 'Nope', params: { href: '/team' } })).toBe(true);
+    // Staff may add clients (2026-10-05): the router opens it.
+    expect(onQuickAction({ id: 'new-client', title: 'New client', params: { href: '/clients/new' } })).toBe(false);
     expect(onQuickAction({ id: 'inbox', title: 'Inbox', params: { href: '/inbox' } })).toBe(false);
   });
 
@@ -116,8 +118,8 @@ describe('plusSheetActions', () => {
     expect(plusSheetActions(MANAGER).map((a) => a.title)).toEqual(plusSheetActions(OWNER).map((a) => a.title));
   });
 
-  it('gives staff only Log a booked call and Add a lead', () => {
-    expect(plusSheetActions(STAFF).map((a) => a.title)).toEqual(['Log a booked call', 'Add a lead']);
+  it('gives staff New client, Log a booked call and Add a lead', () => {
+    expect(plusSheetActions(STAFF).map((a) => a.title)).toEqual(['New client', 'Log a booked call', 'Add a lead']);
   });
 });
 

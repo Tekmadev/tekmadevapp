@@ -23,6 +23,7 @@ import { useTheme } from '@/design/theme';
 import { layout, radius, space } from '@/design/tokens';
 import { useIsOnline } from '@/lib/connectivity';
 import { formatPhone } from '@/lib/format';
+import { DemoCard } from '@/modules/demos/DemoCard';
 import { useMinuteClock, useRefetchOnFocus } from '@/modules/overview/hooks';
 
 import { ContactLogPrompt } from './ContactLogPrompt';
@@ -90,7 +91,7 @@ function LeadBody({ lead, meta, now, touches }: LeadBodyProps) {
   const qualifiers = asksQualifiers(lead);
   const clientId = lead.convertedClientId;
   const outreach = lead.source === 'outreach';
-  // Open client, Create client, or no button (staff cannot create clients).
+  // Open client, Create client, or no button (when the capabilities are missing).
   const caps = useCapabilities();
   const clientAction = leadClientAction(clientId, (cap) => caps.includes(cap));
   const canLog = useCan('leads.outreach');
@@ -182,6 +183,9 @@ function LeadBody({ lead, meta, now, touches }: LeadBodyProps) {
       <View style={styles.details}>
         <OutreachCard lead={lead} meta={meta} now={now} touches={touches} onLog={logFromButton} />
       </View>
+
+      {/* Demo requests for this lead and "Request a demo" (2026-10-05). */}
+      <DemoCard target={{ leadId: lead.id }} businessName={lead.business} style={styles.demo} />
 
       <Section title="Details">
         <Card padded={false}>
@@ -303,6 +307,7 @@ const styles = StyleSheet.create({
   bookingWrap: { marginTop: space[5] },
   prompt: { marginTop: space[4] },
   details: { marginTop: layout.sectionGap },
+  demo: { marginBottom: layout.sectionGap },
   booking: { flexDirection: 'row', alignItems: 'center', gap: space[3] },
   bookingIcon: { width: 40, height: 40, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   bookingText: { flex: 1, gap: 2 },

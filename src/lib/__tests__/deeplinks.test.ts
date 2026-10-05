@@ -30,6 +30,7 @@ const TABLE: [path: string, link: AppLink, capability: Capability | null][] = [
   ['/admin/notifications?filter=bogus', INBOX, 'notifications.view'],
   ['/admin/analytics?range=7d', { pathname: '/analytics', params: { range: '7d' } }, 'analytics.view'],
   ['/admin/leads', segment('/customers', 'leads'), 'leads.view'],
+  ['/admin/demos', segment('/customers', 'demos'), 'demos.view'],
   ['/admin/tools', segment('/customers', 'tools'), 'tools.view'],
   ['/admin/subscriptions', segment('/customers', 'subscriptions'), 'billing.view'],
   ['/admin/clients', segment('/customers', 'clients'), 'clients.view'],
@@ -56,6 +57,18 @@ const DETAILS: [path: string, link: AppLink, capability: Capability | null][] = 
   ['/admin/tools/sub_1', { pathname: '/tools/[id]', params: { id: 'sub_1' } }, 'tools.view'],
   ['/admin/email/subscribers/es_1', { pathname: '/email/subscriber/[id]', params: { id: 'es_1' } }, 'email.subscribers.view'],
   ['/admin/links/ln_1', { pathname: '/links/[id]', params: { id: 'ln_1' } }, 'links.view'],
+  // Demo requests (contract 2026-10-05): the list with the web's filters, a request, the form.
+  ['/admin/demos/7c1e4a52-90b3-4d6f-a1e8-3f2b9c0d5e17', { pathname: '/demos/[id]', params: { id: '7c1e4a52-90b3-4d6f-a1e8-3f2b9c0d5e17' } }, 'demos.view'],
+  ['/admin/demos?status=ready', { pathname: '/customers', params: { segment: 'demos', view: 'ready' } }, 'demos.view'],
+  ['/admin/demos?status=all', { pathname: '/customers', params: { segment: 'demos', view: 'all' } }, 'demos.view'],
+  ['/admin/demos?mine=1&status=open', { pathname: '/customers', params: { segment: 'demos', view: 'mine' } }, 'demos.view'],
+  ['/admin/demos?status=open', segment('/customers', 'demos'), 'demos.view'],
+  ['/admin/demos/new', { pathname: '/demos/new' }, 'demos.request'],
+  [
+    '/admin/demos/new?clientId=cl_1&businessName=Acme%20Plumbing&area=',
+    { pathname: '/demos/new', params: { clientId: 'cl_1', businessName: 'Acme Plumbing' } },
+    'demos.request',
+  ],
   // Web admin pages below a section (app/admin/(dashboard) on the website).
   ['/admin/blog/new', { pathname: '/blog/[id]', params: { id: 'new' } }, 'blog.write'],
   ['/admin/blog/post_42/preview', { pathname: '/blog/[id]', params: { id: 'post_42' } }, 'blog.view'],
@@ -65,10 +78,12 @@ const DETAILS: [path: string, link: AppLink, capability: Capability | null][] = 
 
 const ALL = [...TABLE, ...DETAILS];
 
-/** What staff may not open (owner decision 2026-10-03: no money, no settings, view-only marketing). */
+/**
+ * What staff may not open (owner decision 2026-10-03: no money, no settings,
+ * view-only marketing). New client and demo requests are theirs since 2026-10-05.
+ */
 const STAFF_BLOCKED = [
   '/admin/subscriptions',
-  '/admin/clients/new',
   '/admin/ads',
   '/admin/crm',
   '/admin/loader',
@@ -148,6 +163,32 @@ describe('mapAdminUrl: who is following the link', () => {
   });
 });
 
+describe('mapAdminUrl: demo requests', () => {
+  it('opens the Demos segment and a request for every role, staff included', () => {
+    for (const viewer of [OWNER, MANAGER, STAFF]) {
+      expect(mapAdminUrl('/admin/demos', viewer)).toEqual(segment('/customers', 'demos'));
+      expect(mapAdminUrl('/admin/demos/d_1', viewer)).toEqual({ pathname: '/demos/[id]', params: { id: 'd_1' } });
+      expect(mapAdminUrl('/admin/demos/new?leadId=ld_9', viewer)).toEqual({ pathname: '/demos/new', params: { leadId: 'ld_9' } });
+    }
+  });
+
+  it('opens a notification link to a request even before /me has loaded (every role may read demos)', () => {
+    expect(mapAdminUrl('https://www.tekmadev.com/admin/demos/d_1', null)).toEqual({ pathname: '/demos/[id]', params: { id: 'd_1' } });
+  });
+
+  it('sends someone without demos.view to the Inbox, and the form without demos.request', () => {
+    const viewOnly = me('staff', ['notifications.view', 'demos.view']);
+    expect(mapAdminUrl('/admin/demos/d_1', me('staff', ['notifications.view']))).toEqual(INBOX);
+    expect(mapAdminUrl('/admin/demos/new', viewOnly)).toEqual(INBOX);
+    expect(mapAdminUrl('/admin/demos/d_1', viewOnly)).toEqual({ pathname: '/demos/[id]', params: { id: 'd_1' } });
+  });
+
+  it('round trips into app hrefs', () => {
+    expect(toHref(mapAdminUrl('/admin/demos/d_1', STAFF))).toBe('/demos/d_1');
+    expect(toHref(mapAdminUrl('/admin/demos?mine=1', STAFF))).toBe('/customers?segment=demos&view=mine');
+  });
+});
+
 describe('mapAdminUrl: client sections', () => {
   it('knows the 11 sections from the brief', () => {
     expect([...CLIENT_SECTIONS].sort()).toEqual(
@@ -223,6 +264,8 @@ describe('mapAdminUrl: unknown and garbage input never throws', () => {
     '/admin/nope',
     '/admin/clients/cl_1/extra',
     '/admin/blog/post_1/revisions',
+    '/admin/demos/d_1/events',
+    '/admin/demo',
     '/administrator',
     '/admin-panel',
     '/clients/cl_1',

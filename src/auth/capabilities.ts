@@ -15,8 +15,9 @@ import type { Tone } from '@/design/tokens';
  * src/api/mock/permissions.ts and a test keeps the two in step.
  *
  * Owner: everything. Manager: everything except removing team members and
- * creating or promoting owners. Staff: leads and outreach, analytics,
- * onboarding help, view-only marketing, pricing and coupons, never money.
+ * creating or promoting owners. Staff: leads and outreach, adding clients,
+ * demo requests, analytics, onboarding help, view-only marketing, pricing and
+ * coupons, never money (owner decisions 2026-10-03 and 2026-10-05).
  */
 
 const O: readonly Role[] = ['owner'];
@@ -63,7 +64,8 @@ export const CAPABILITY_ROLES = {
   'clients.view': OMS,
   /** The billing card and amounts on a client. */
   'clients.billing': OM,
-  'clients.create': OM,
+  /** Add a client by hand (staff too since 2026-10-05: salespeople add the clients they find). */
+  'clients.create': OMS,
   /** Account fields and guarantee terms. */
   'clients.edit': OM,
   'clients.go_live': OM,
@@ -82,6 +84,14 @@ export const CAPABILITY_ROLES = {
   'clients.calls.review': OM,
   'clients.activity.write': OMS,
   'clients.templates': OM,
+
+  /* Demo requests (2026-10-05): a salesperson asks for a demo website, an owner or manager builds it. */
+  /** List and read every demo request. */
+  'demos.view': OMS,
+  /** Ask for a demo; edit or cancel your own while it is open; mark your own shown. */
+  'demos.request': OMS,
+  /** Everything on any demo request: status, builder, demo link, builder note, edit, cancel. */
+  'demos.manage': OM,
 
   /** Test toggles, "Include test" and test rows. */
   'testdata.view': OM,

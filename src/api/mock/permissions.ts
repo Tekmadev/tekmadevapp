@@ -56,7 +56,7 @@ export const PERMISSIONS = {
   /* Clients */
   'clients.view': OMS,
   'clients.billing': OM,
-  'clients.create': OM,
+  'clients.create': OMS,
   'clients.edit': OM,
   'clients.go_live': OM,
   'clients.trash': OM,
@@ -73,6 +73,11 @@ export const PERMISSIONS = {
   'clients.calls.review': OM,
   'clients.activity.write': OMS,
   'clients.templates': OM,
+
+  /* Demo requests */
+  'demos.view': OMS,
+  'demos.request': OMS,
+  'demos.manage': OM,
 
   /* Test data */
   'testdata.view': OM,

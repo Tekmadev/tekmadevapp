@@ -48,7 +48,7 @@ type Me = {
 
 ### Roles and capabilities (owner decision 2026-10-03)
 
-- Three roles: `owner`, `manager`, `staff`. A manager has nearly the owner's power: everything except removing team members and creating or promoting owners. Staff: leads and outreach, analytics, onboarding help, view-only marketing, pricing and coupons, never money.
+- Three roles: `owner`, `manager`, `staff`. A manager has nearly the owner's power: everything except removing team members and creating or promoting owners. Staff: leads and outreach, adding clients and asking for demos (2026-10-05), analytics, onboarding help, view-only marketing, pricing and coupons, never money.
 - Please send the signed-in person's `capabilities` in `GET /me`: the capability names from `lib/admin-api/permissions.ts` that this person holds, as plain strings. The app shows and hides every tab, More row, search screen, quick action, launcher shortcut, deep link and control from this list.
 - Without the list (an older server), the app falls back to the role table below, which must match the server's. An empty list means "nothing", not "use the role".
 - Names the app does not know are ignored, so the server can add capabilities before the app knows them.
@@ -69,7 +69,8 @@ type Me = {
 | `billing.view` | yes | yes | | the Subscriptions segment |
 | `clients.view` | yes | yes | yes | |
 | `clients.billing` | yes | yes | | billing card and amounts |
-| `clients.create`, `clients.edit`, `clients.go_live`, `clients.trash`, `clients.crm`, `clients.members` | yes | yes | | `clients.edit`: account and guarantee terms |
+| `clients.create` | yes | yes | yes | add a client by hand (staff too since 2026-10-05); without a lead the creator is credited as finder and booker, 100% |
+| `clients.edit`, `clients.go_live`, `clients.trash`, `clients.crm`, `clients.members` | yes | yes | | `clients.edit`: account and guarantee terms |
 | `clients.onboarding` | yes | yes | | run controls: stage, dates, blocked, complete |
 | `clients.tasks.create`, `clients.tasks.status` | yes | yes | yes | |
 | `clients.intake.review` | yes | yes | | |
@@ -77,6 +78,8 @@ type Me = {
 | `clients.access.update` | yes | yes | | |
 | `clients.approvals.request`, `clients.calls.log`, `clients.activity.write` | yes | yes | yes | |
 | `clients.calls.review`, `clients.templates` | yes | yes | | |
+| `demos.view`, `demos.request` | yes | yes | yes | NEW (2026-10-05): list and read demo requests; ask for one, edit or cancel your own while open, mark your own shown |
+| `demos.manage` | yes | yes | | NEW (2026-10-05): status, builder, demo link, builder note, edit and cancel on any request |
 | `testdata.view` | yes | yes | | Test toggles, Include test, test rows |
 | `blog.view` | yes | yes | yes | |
 | `blog.write`, `blog.trash` | yes | yes | | |

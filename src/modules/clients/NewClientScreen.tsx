@@ -5,9 +5,11 @@ import { StyleSheet, View, type TextInput } from 'react-native';
 
 import { newIdempotencyKey } from '@/api/client';
 import { clientKeys, clientsMetaQuery, createClient, type NewClientInput } from '@/api/endpoints/clients';
+import { demoKeys } from '@/api/endpoints/demos';
 import { leadKeys } from '@/api/endpoints/leads';
 import { ApiError, fieldErrors } from '@/api/errors';
 import type { CreateClientResult, PlanId } from '@/api/schemas/clients';
+import { useCan } from '@/auth/permissions';
 import { RequireCapability } from '@/auth/RequireCapability';
 import { useMe } from '@/auth/session';
 import { Select, type SelectOption } from '@/components/form/Select';
@@ -23,10 +25,9 @@ import { notice } from '@/lib/notice';
 import { isValidEmail } from '@/lib/text';
 
 import { planSelectOptions } from './list/labels';
+import { newClientNotes } from './newClientCopy';
 
 const REQUIRED = 'Business name and a valid email are required.';
-const REUSE_NOTE = 'If a client with this email already exists, it is reused and updated instead of duplicated.';
-const FROM_LEAD_NOTE = 'Linked to the lead, so the people who found it and booked the call get credit for this client.';
 const NO_PLAN = 'none';
 
 type PlanChoice = PlanId | typeof NO_PLAN;
@@ -64,7 +65,16 @@ function validate(input: NewClientInput): Errors {
  * the same details reuses it, so a timeout never makes two clients; changing
  * anything is a new intent. On success it opens the client in place of this
  * screen and says whether the portal invite went out. Needs `clients.create`
- * (owners and managers): anyone else who lands here is sent back.
+ * (every role since 2026-10-05: salespeople add the clients they find);
+ * anyone without it who lands here is sent back. No money is shown here.
+ *
+ * Credit: added by hand (not from a lead), the person adding it is its finder
+ * and booker, 100%, and the form says so next to the button; from a lead the
+ * lead's finder and booker keep it (owner decision 2026-10-05).
+ *
+ * "Client wants a demo" (off by default, for people with `demos.request`):
+ * after the client is created, "Request a demo" opens in place of the client,
+ * for that client with the business name filled in.
  */
 export function NewClientScreen() {
   return (
@@ -92,6 +102,10 @@ function NewClientForm() {
   const [strategistEdit, setStrategist] = useState<string | null>(null);
   const strategist = strategistEdit ?? myEmail;
   const [sendInvite, setSendInvite] = useState(true);
+  const canRequestDemo = useCan('demos.request');
+  const [wantsDemo, setWantsDemo] = useState(false);
+  // Not from a lead: the person adding it gets the credit (owner decision 2026-10-05).
+  const notes = newClientNotes(leadId !== null);
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [intent, setIntent] = useState<{ signature: string; key: string } | null>(null);
@@ -106,10 +120,12 @@ function NewClientForm() {
       // The list (and a reused client's detail) changed; the new client's detail loads on open.
       void queryClient.invalidateQueries({ queryKey: clientKeys.lists() });
       if (result.reused) void queryClient.invalidateQueries({ queryKey: clientKeys.detail(result.client.id) });
-      // The lead now points at its client ("Open client" instead of "Create client").
+      // The lead now points at its client ("Open client" instead of "Create client"),
+      // and its demo requests now belong to the client too.
       if (input.leadId) {
         void queryClient.invalidateQueries({ queryKey: leadKeys.detail(input.leadId) });
         void queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
+        void queryClient.invalidateQueries({ queryKey: demoKeys.all });
       }
     },
   });
@@ -160,6 +176,11 @@ function NewClientForm() {
     const message = createdMessage(result);
     if (message.tone === 'ok') notice.ok(message.text);
     else notice.err(message.text);
+    if (wantsDemo && canRequestDemo) {
+      // The client exists now: ask for the demo next, for this client.
+      router.replace({ pathname: '/demos/new', params: { clientId: result.client.id, businessName: result.client.businessName } });
+      return;
+    }
     router.replace({ pathname: '/clients/[id]', params: { id: result.client.id } });
   };
 
@@ -250,10 +271,18 @@ function NewClientForm() {
           value={sendInvite}
           onValueChange={setSendInvite}
         />
+        {canRequestDemo ? (
+          <SwitchRow
+            label="Client wants a demo"
+            description="After the client is created, the demo request opens so you can add what they want to see."
+            value={wantsDemo}
+            onValueChange={setWantsDemo}
+          />
+        ) : null}
       </View>
 
       <Text variant="small" color="ink3" style={styles.note}>
-        {leadId ? `${FROM_LEAD_NOTE} ${REUSE_NOTE}` : REUSE_NOTE}
+        {notes.note}
       </Text>
 
       {formError ? (
@@ -262,7 +291,21 @@ function NewClientForm() {
         </Text>
       ) : null}
 
-      <PendingButton label="Create client" pendingLabel="Creating" variant="primary" fullWidth onPress={submit} onError={onError} style={styles.submit} />
+      {notes.creditHint ? (
+        <Text variant="small" color="ink2" style={styles.creditHint}>
+          {notes.creditHint}
+        </Text>
+      ) : null}
+
+      <PendingButton
+        label="Create client"
+        pendingLabel="Creating"
+        variant="primary"
+        fullWidth
+        onPress={submit}
+        onError={onError}
+        style={notes.creditHint ? styles.submitAfterHint : styles.submit}
+      />
     </Screen>
   );
 }
@@ -272,4 +315,6 @@ const styles = StyleSheet.create({
   note: { marginTop: space[5] },
   formError: { marginTop: space[4] },
   submit: { marginTop: space[6] },
+  creditHint: { marginTop: space[6] },
+  submitAfterHint: { marginTop: space[2] },
 });
