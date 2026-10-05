@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react-native';
 import { BarChart3, Bell, LayoutDashboard, Menu, Send, Users } from 'lucide-react-native';
-import { use, useEffect, useState } from 'react';
+import { createContext, use, useEffect, useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { useKeyboardState } from 'react-native-keyboard-controller';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -44,17 +44,27 @@ const TAB_ICONS: Record<TabId, LucideIcon> = {
 };
 
 /**
- * Bottom padding scroll content needs so its last row clears the floating bar
+ * True inside the iPhone's native tab bar (UITabBarController, Liquid Glass),
+ * provided by the tabs layout. There each tab's content sits in its own
+ * SafeAreaProvider whose bottom inset already covers the system bar, so the
+ * hooks below add nothing for the bar itself.
+ */
+export const NativeTabsContext = createContext(false);
+
+/**
+ * Bottom padding scroll content needs so its last row clears the tab bar
  * (bar + gap + gesture area + a little breathing room).
  */
 export function useTabBarInset(): number {
   const insets = useSafeAreaInsets();
+  if (use(NativeTabsContext)) return insets.bottom + space[4];
   return TAB_BAR_HEIGHT + SIDE_GAP + insets.bottom + space[4];
 }
 
-/** True inside a tab screen (the tab navigator provides its bar height there). */
+/** True inside a tab screen (our tab bar provides its height there; the native one, its context). */
 export function useIsInTabs(): boolean {
-  return use(BottomTabBarHeightContext) !== undefined;
+  const native = use(NativeTabsContext);
+  return use(BottomTabBarHeightContext) !== undefined || native;
 }
 
 /**
@@ -64,6 +74,8 @@ export function useIsInTabs(): boolean {
 export function useFloatingBottom(): number {
   const insets = useSafeAreaInsets();
   const inTabs = useIsInTabs();
+  const native = use(NativeTabsContext);
+  if (native) return insets.bottom;
   return inTabs ? TAB_BAR_HEIGHT + SIDE_GAP + insets.bottom : insets.bottom;
 }
 
