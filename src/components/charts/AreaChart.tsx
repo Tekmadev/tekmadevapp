@@ -89,7 +89,7 @@ export function AreaChart({
       <View style={{ height }}>
         {width > 0 ? <Plot data={data} width={width} height={height} formatValue={formatValue} formatAxis={formatAxis} /> : null}
       </View>
-      <View style={styles.xLabels} importantForAccessibility="no-hide-descendants">
+      <View style={styles.xLabels} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         {data.length === 1 ? (
           <Text variant="mono" color="ink4" tabular numberOfLines={1} style={[styles.axisText, styles.xCentre]}>
             {first.label}
@@ -328,6 +328,7 @@ function ScrubTooltip({ data, xs, ys, active, shown, width, baseline, formatValu
     <Animated.View
       pointerEvents="none"
       importantForAccessibility="no-hide-descendants"
+      accessibilityElementsHidden
       onLayout={(e) => box.set({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
       style={[
         styles.tooltip,

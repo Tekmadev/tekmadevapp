@@ -44,7 +44,7 @@ export function ReconcileCard({ last, now, reconcile, busy, verified, canWrite }
         </Text>
       ) : (
         <View style={styles.halted} accessible accessibilityLabel={`${line.text} ${line.reason}`}>
-          <View style={styles.haltedTop} importantForAccessibility="no-hide-descendants">
+          <View style={styles.haltedTop} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
             <Icon icon={TriangleAlert} size={18} tone="signal" />
             <Text variant="bodyStrong" tone="signal" style={styles.flex}>
               {line.text}

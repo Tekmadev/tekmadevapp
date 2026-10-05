@@ -102,7 +102,7 @@ export function StatCard({
 
   return (
     <Card onPress={onPress} accessibilityLabel={a11y} accessibilityHint={accessibilityHint} style={style} testID={testID}>
-      <View style={styles.top} importantForAccessibility="no-hide-descendants">
+      <View style={styles.top} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <Text variant="eyebrow" numberOfLines={1} style={styles.label}>
           {label}
         </Text>
@@ -112,11 +112,11 @@ export function StatCard({
           </View>
         ) : null}
       </View>
-      <View style={styles.number} importantForAccessibility="no-hide-descendants">
+      <View style={styles.number} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         {numberNode}
       </View>
       {!loading && (trend || sub) ? (
-        <View style={styles.bottom} importantForAccessibility="no-hide-descendants">
+        <View style={styles.bottom} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
           {trend ? (
             <Badge label={trend.label} tone={trend.tone ?? TREND_TONE[trend.direction]} icon={TREND_ICON[trend.direction]} />
           ) : null}

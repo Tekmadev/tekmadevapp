@@ -59,6 +59,7 @@ export function Sparkline({ values, height = 28, width: fixedWidth, tone = 'gold
       style={[styles.box, { height }, fixedWidth ? { width: fixedWidth } : null]}
       accessible={false}
       importantForAccessibility="no-hide-descendants"
+      accessibilityElementsHidden
     >
       {geometry ? (
         <Canvas style={StyleSheet.absoluteFill}>

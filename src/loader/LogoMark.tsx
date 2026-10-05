@@ -29,6 +29,7 @@ export const LogoMark = memo(function LogoMark({ size, color, opacity = 1 }: Log
       opacity={opacity}
       accessible={false}
       importantForAccessibility="no-hide-descendants"
+      accessibilityElementsHidden
       pointerEvents="none"
     >
       {LOGO_PATHS.map((piece) => (

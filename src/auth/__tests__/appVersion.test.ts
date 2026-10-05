@@ -1,4 +1,12 @@
-import { compareVersions, isBelowMinVersion, isUpdateAvailable, safeApkUrl } from '../appVersion';
+import {
+  ASK_FOR_APK,
+  askForUpdate,
+  compareVersions,
+  isBelowMinVersion,
+  isUpdateAvailable,
+  safeApkUrl,
+  updateDownloadUrl,
+} from '../appVersion';
 
 describe('compareVersions', () => {
   it.each([
@@ -45,5 +53,27 @@ describe('safeApkUrl', () => {
     expect(safeApkUrl('http://www.tekmadev.com/app.apk')).toBeNull();
     expect(safeApkUrl('javascript:alert(1)')).toBeNull();
     expect(safeApkUrl('https://')).toBeNull();
+  });
+});
+
+describe('updateDownloadUrl', () => {
+  const apk = 'https://www.tekmadev.com/downloads/tekmadev-admin-0.4.2.apk';
+
+  it('offers the APK on Android, like before', () => {
+    expect(updateDownloadUrl(apk, 'android')).toBe(apk);
+    expect(updateDownloadUrl('http://insecure.example/app.apk', 'android')).toBeNull();
+    expect(updateDownloadUrl(null, 'android')).toBeNull();
+  });
+
+  it('never offers an APK to an iPhone', () => {
+    expect(updateDownloadUrl(apk, 'ios')).toBeNull();
+  });
+});
+
+describe('askForUpdate', () => {
+  it('keeps the APK wording on Android and drops it on iPhone', () => {
+    expect(askForUpdate('android')).toBe(ASK_FOR_APK);
+    expect(askForUpdate('ios')).toBe('Ask Shajeed I. for the latest iPhone version.');
+    expect(askForUpdate('ios')).not.toMatch(/APK/);
   });
 });

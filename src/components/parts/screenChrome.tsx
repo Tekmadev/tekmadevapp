@@ -267,7 +267,7 @@ export function PullIndicatorSlot({
     };
   });
   return (
-    <Animated.View pointerEvents="none" style={[styles.indicator, style]} importantForAccessibility="no-hide-descendants">
+    <Animated.View pointerEvents="none" style={[styles.indicator, style]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
       <PullToRefreshIndicator pull={pull} refreshing={refreshing} size={INDICATOR_SIZE} />
     </Animated.View>
   );

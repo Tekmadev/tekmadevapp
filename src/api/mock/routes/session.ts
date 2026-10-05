@@ -129,7 +129,8 @@ export const routes: MockRoute[] = [
         token,
         platform: platform as 'android' | 'ios',
         appVersion,
-        deviceName: deviceName || 'Android phone',
+        // The server's own default name per platform (lib/admin-devices.ts on the website).
+        deviceName: deviceName || (platform === 'ios' ? 'iPhone' : 'Android phone'),
         createdAt: now,
         lastSeenAt: now,
       };

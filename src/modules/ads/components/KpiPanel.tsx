@@ -60,12 +60,12 @@ function KpiCell({ item, labelHeight, countFromZero }: { item: KpiItem; labelHei
   const spoken = [item.label, shown, item.sub].filter(Boolean).join(', ');
   return (
     <View style={styles.cell} accessible accessibilityLabel={spoken}>
-      <View style={[styles.label, { minHeight: labelHeight }]} importantForAccessibility="no-hide-descendants">
+      <View style={[styles.label, { minHeight: labelHeight }]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <Text variant="eyebrow" numberOfLines={2}>
           {item.label}
         </Text>
       </View>
-      <View style={styles.number} importantForAccessibility="no-hide-descendants">
+      <View style={styles.number} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         {present ? (
           <AnimatedNumber value={value} format={item.format} variant="number" color={item.emphasis ? 'gold' : 'ink'} countFromZero={countFromZero} />
         ) : (

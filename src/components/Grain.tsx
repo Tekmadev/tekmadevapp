@@ -43,7 +43,7 @@ export const Grain = memo(function Grain({ opacity = 0.05, seed = 7, style }: Gr
   const { colors, isDark } = useTheme();
   const matrix = useMemo(() => grainMatrix(colors.ink, opacity, isDark), [colors.ink, opacity, isDark]);
   return (
-    <View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" style={[StyleSheet.absoluteFill, style]}>
+    <View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={[StyleSheet.absoluteFill, style]}>
       <Canvas style={StyleSheet.absoluteFill}>
         <Fill>
           <FractalNoise freqX={0.85} freqY={0.85} octaves={2} seed={seed} />

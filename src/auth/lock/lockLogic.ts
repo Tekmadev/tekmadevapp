@@ -40,6 +40,18 @@ export function shouldLockOnResume(backgroundAt: number | null, now: number, loc
   return away >= lockAfterMs;
 }
 
+/**
+ * The iOS app switcher cover (PrivacyCover): up whenever the app is not active,
+ * except while a system prompt of our own (Face ID, a permission) makes it
+ * inactive. In the background it is always up: that is when iOS takes the
+ * snapshot the app switcher shows.
+ */
+export function coversContent(state: string, systemPrompt: boolean): boolean {
+  if (state === 'background') return true;
+  if (state === 'inactive') return !systemPrompt;
+  return false;
+}
+
 export const LOCK_COPY = {
   title: 'Locked',
   body: "Confirm it's you to open Tekmadev Admin.",
@@ -52,13 +64,19 @@ export const LOCK_COPY = {
   lockout: 'Too many tries. Wait a moment, then try again.',
   failed: "Could not confirm it's you. Try again.",
   unavailable: 'This phone has no fingerprint or screen lock set up. Sign out, then sign in with your password.',
+  unavailableIos: 'This iPhone has no Face ID, Touch ID or passcode set up. Sign out, then sign in with your password.',
 } as const;
+
+/** "Nothing is set up on this phone", in the words of the platform. */
+export function unlockUnavailableMessage(platform: string): string {
+  return platform === 'ios' ? LOCK_COPY.unavailableIos : LOCK_COPY.unavailable;
+}
 
 /**
  * What to say after a failed system prompt. Null means stay quiet: backing out
  * of the prompt is a choice, and `app_cancel` means another prompt was already up.
  */
-export function unlockErrorMessage(error: LocalAuthenticationError): string | null {
+export function unlockErrorMessage(error: LocalAuthenticationError, platform: string): string | null {
   switch (error) {
     case 'user_cancel':
     case 'system_cancel':
@@ -69,7 +87,7 @@ export function unlockErrorMessage(error: LocalAuthenticationError): string | nu
     case 'not_enrolled':
     case 'not_available':
     case 'passcode_not_set':
-      return LOCK_COPY.unavailable;
+      return unlockUnavailableMessage(platform);
     default:
       return LOCK_COPY.failed;
   }
@@ -81,14 +99,22 @@ export function unlockErrorMessage(error: LocalAuthenticationError): string | nu
  * same help line the setting shows.
  */
 export function turnOnErrorMessage(error: LocalAuthenticationError, platform: string): string | null {
-  const message = unlockErrorMessage(error);
-  if (message === LOCK_COPY.unavailable) return biometricDescription(NO_UNLOCK_SUPPORT, platform);
+  const message = unlockErrorMessage(error, platform);
+  if (message === unlockUnavailableMessage(platform)) return biometricDescription(NO_UNLOCK_SUPPORT, platform);
   return message;
+}
+
+/** iPhone names its biometrics: Face ID or Touch ID (null when it has neither). */
+export function iosBiometricName(support: Pick<UnlockSupport, 'fingerprint' | 'face'>): 'Face ID' | 'Touch ID' | null {
+  if (support.face) return 'Face ID';
+  if (support.fingerprint) return 'Touch ID';
+  return null;
 }
 
 /** The help line under "Biometric unlock", in the words of what this phone actually has. */
 export function biometricDescription(support: UnlockSupport, platform: 'android' | 'ios' | string): string {
-  const screenLock = platform === 'ios' ? 'passcode' : 'screen lock';
+  if (platform === 'ios') return iosBiometricDescription(support);
+  const screenLock = 'screen lock';
   switch (support.method) {
     case 'biometric': {
       let what = 'fingerprint or face';
@@ -101,6 +127,61 @@ export function biometricDescription(support: UnlockSupport, platform: 'android'
     default:
       return `Set up a fingerprint or a ${screenLock} on this phone first, then turn this on.`;
   }
+}
+
+function iosBiometricDescription(support: UnlockSupport): string {
+  const name = iosBiometricName(support);
+  switch (support.method) {
+    case 'biometric':
+      return `Open the app with ${name ?? 'Face ID or Touch ID'}. Your passcode works too.`;
+    case 'credential':
+      return 'Open the app with your iPhone passcode.';
+    default:
+      return name
+        ? `Set up ${name} or a passcode on this iPhone first, then turn this on.`
+        : 'Set up a passcode on this iPhone first, then turn this on.';
+  }
+}
+
+/** The one-time "Unlock with your fingerprint next time?" offer after the first sign-in (brief 8.2). */
+export type BiometricOfferCopy = {
+  title: string;
+  body: string;
+  noHardware: string;
+  notEnrolled: string;
+  lockout: string;
+  failed: string;
+  turnedOn: string;
+  /** The system prompt's reason line. */
+  prompt: string;
+};
+
+/** The brief's words (Android). */
+export const BIOMETRIC_OFFER_COPY: BiometricOfferCopy = {
+  title: 'Unlock with your fingerprint next time?',
+  body: 'When you come back to the app, your fingerprint opens it. You can change this any time in Settings.',
+  noHardware: 'This phone has no fingerprint sensor.',
+  notEnrolled: 'Add a fingerprint in your phone settings first, then turn this on in Settings.',
+  lockout: LOCK_COPY.lockout,
+  failed: 'Could not confirm your fingerprint. Try again.',
+  turnedOn: 'Fingerprint unlock is on.',
+  prompt: 'Turn on fingerprint unlock',
+};
+
+/** The offer in the words of the platform: on iPhone, Face ID (or Touch ID on a phone with a home button). */
+export function biometricOfferCopy(platform: string, iosBiometric: 'Face ID' | 'Touch ID' | null): BiometricOfferCopy {
+  if (platform !== 'ios') return BIOMETRIC_OFFER_COPY;
+  const name = iosBiometric ?? 'Face ID';
+  return {
+    title: `Unlock with ${name} next time?`,
+    body: `When you come back to the app, ${name} opens it. You can change this any time in Settings.`,
+    noHardware: 'This iPhone has no Face ID or Touch ID.',
+    notEnrolled: `Set up ${name} in your iPhone settings first, then turn this on in Settings.`,
+    lockout: LOCK_COPY.lockout,
+    failed: name === 'Touch ID' ? 'Could not confirm your fingerprint. Try again.' : 'Could not confirm your face. Try again.',
+    turnedOn: `${name} unlock is on.`,
+    prompt: `Turn on ${name} unlock`,
+  };
 }
 
 /** Space kept between the logo mark and the text under it on the lock screen. */

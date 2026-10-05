@@ -50,7 +50,7 @@ export function OfflineBanner({ updatedAt, queryKey, style }: OfflineBannerProps
       accessibilityLabel={copy}
       style={[styles.banner, { backgroundColor: colors.bg3, borderColor: colors.line }, style]}
     >
-      <View importantForAccessibility="no-hide-descendants" style={styles.row}>
+      <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={styles.row}>
         <Icon icon={WifiOff} size={14} color="ink3" />
         <Text variant="small" color="ink2" style={styles.text}>
           {copy}

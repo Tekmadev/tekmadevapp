@@ -47,6 +47,8 @@ export const PUSH_COPY = {
   open: 'Open',
   fallbackTitle: 'New notification',
   mockLocalTest: 'Mock API: this phone also shows a local test now, in the shade and here.',
+  /** iPhone has no notification shade: the local test shows as a banner. */
+  mockLocalTestIos: 'Mock API: this phone also shows a local test now, as a banner and here.',
 } as const;
 
 /* ------------------------------------------------------------------ */
@@ -403,6 +405,47 @@ export function tokenErrorMessage(error: unknown, online: boolean): SetupError {
     default:
       return { message: SETUP_MESSAGES.generic, detail };
   }
+}
+
+/**
+ * iOS: how long to wait for Apple's push token. APNs may never answer (the
+ * simulator, a build signed without the push entitlement, no network at
+ * launch), and a token request that never settles would hold every later
+ * registration and leave "Turning on" spinning.
+ */
+export const IOS_TOKEN_TIMEOUT_MS = 20_000;
+
+/** The error a timed-out token request fails with: reads as the plain "could not get a push token". */
+export function tokenTimeoutError(): Error & { code: string } {
+  return Object.assign(new Error('No push token from Apple in time.'), { code: 'E_REGISTRATION_FAILED' });
+}
+
+/** Rejects with `onTimeout()` when `promise` has not settled after `ms`; the timer never outlives it. */
+export function withTimeout<T>(promise: Promise<T>, ms: number, onTimeout: () => Error): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(onTimeout()), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+/**
+ * iOS app icon badge: the Inbox's unread count (the bell's number), since the
+ * server's pushes carry no badge. Null while the count is not known yet (keep
+ * what the icon shows); 0 without the Inbox.
+ */
+export function iconBadgeCount(unread: number | undefined, canViewInbox: boolean): number | null {
+  if (!canViewInbox) return 0;
+  if (unread === undefined) return null;
+  return Number.isFinite(unread) && unread > 0 ? Math.floor(unread) : 0;
 }
 
 /** Retry by itself when the connection comes back (not after a server refusal or a broken build). */

@@ -1,7 +1,7 @@
 import * as LocalAuthentication from 'expo-local-authentication';
-import { Fingerprint } from 'lucide-react-native';
+import { Fingerprint, ScanFace } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { Button } from '@/components/Button';
@@ -18,22 +18,28 @@ import { notice } from '@/lib/notice';
 import { usePrefs } from '@/lib/prefs';
 import { storage, StorageKeys } from '@/lib/storage';
 
+import { BIOMETRIC_OFFER_COPY, biometricOfferCopy, iosBiometricName } from './lock/lockLogic';
 import { session, useSession } from './session';
 
 /** Let Home finish rising into place before a sheet asks for attention. */
 const OFFER_DELAY_MS = 900;
 
-export const BIOMETRIC_MESSAGES = {
-  title: 'Unlock with your fingerprint next time?',
-  body: 'When you come back to the app, your fingerprint opens it. You can change this any time in Settings.',
-  noHardware: 'This phone has no fingerprint sensor.',
-  notEnrolled: 'Add a fingerprint in your phone settings first, then turn this on in Settings.',
-  lockout: 'Too many tries. Wait a moment, then try again.',
-  failed: 'Could not confirm your fingerprint. Try again.',
-  turnedOn: 'Fingerprint unlock is on.',
-} as const;
+/** The brief's words (Android). iPhone reads Face ID or Touch ID instead (biometricOfferCopy). */
+export const BIOMETRIC_MESSAGES = BIOMETRIC_OFFER_COPY;
 
-/** Only offered where it can work right now: a sensor and at least one enrolled fingerprint. */
+type IosBiometric = 'Face ID' | 'Touch ID' | null;
+
+/** iPhone: which biometric it has, for the words and the icon. Android never asks (its copy is fixed). */
+async function iosBiometric(): Promise<IosBiometric> {
+  if (Platform.OS !== 'ios') return null;
+  const types = await LocalAuthentication.supportedAuthenticationTypesAsync().catch((): LocalAuthentication.AuthenticationType[] => []);
+  return iosBiometricName({
+    face: types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION),
+    fingerprint: types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT),
+  });
+}
+
+/** Only offered where it can work right now: a sensor and at least one enrolled fingerprint or face. */
 async function biometricsUsable(): Promise<boolean> {
   try {
     const [hardware, enrolled] = await Promise.all([
@@ -50,14 +56,17 @@ async function biometricsUsable(): Promise<boolean> {
  * The one-time offer after the first successful sign-in (brief 8.2). Mount it
  * once inside the signed-in layout; it shows itself when `justSignedIn` is set,
  * at most once per install (StorageKeys.biometricOffered), and only on a phone
- * that can actually unlock with a fingerprint. "Turn on" confirms with a real
- * fingerprint before saving the preference, so it can never lock anyone out.
+ * that can actually unlock with a fingerprint (or Face ID or Touch ID on
+ * iPhone). "Turn on" confirms with a real unlock before saving the preference,
+ * so it can never lock anyone out.
  */
 export function BiometricOfferSheet() {
   const justSignedIn = useSession((s) => s.justSignedIn);
   const alreadyOn = usePrefs((s) => s.biometricUnlock);
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [biometric, setBiometric] = useState<IosBiometric>(null);
+  const copy = biometricOfferCopy(Platform.OS, biometric);
 
   useEffect(() => {
     if (!justSignedIn) return undefined;
@@ -67,8 +76,8 @@ export function BiometricOfferSheet() {
     }
     let cancelled = false;
     const timer = setTimeout(() => {
-      biometricsUsable()
-        .then((usable) => {
+      Promise.all([biometricsUsable(), iosBiometric()])
+        .then(([usable, kind]) => {
           if (cancelled) return;
           if (!usable) {
             session.acknowledgeSignIn();
@@ -76,6 +85,7 @@ export function BiometricOfferSheet() {
           }
           // Remembered as soon as it is shown: "Not now", back and a swipe all count as an answer.
           storage.set(StorageKeys.biometricOffered, true);
+          setBiometric(kind);
           setError(null);
           setVisible(true);
         })
@@ -99,49 +109,44 @@ export function BiometricOfferSheet() {
       LocalAuthentication.isEnrolledAsync().catch(() => false),
     ]);
     if (!hardware || !enrolled) {
-      setError(hardware ? BIOMETRIC_MESSAGES.notEnrolled : BIOMETRIC_MESSAGES.noHardware);
+      setError(hardware ? copy.notEnrolled : copy.noHardware);
       haptics.error();
       return;
     }
     const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Turn on fingerprint unlock',
+      promptMessage: copy.prompt,
       cancelLabel: 'Cancel',
     }).catch((): LocalAuthentication.LocalAuthenticationResult => ({ success: false, error: 'unknown' }));
     if (result.success) {
       usePrefs.getState().setBiometricUnlock(true);
       haptics.success();
-      notice.ok(BIOMETRIC_MESSAGES.turnedOn);
+      notice.ok(copy.turnedOn);
       close();
       return;
     }
     // Backing out of the system prompt is a choice, not a failure: stay quiet and keep the offer open.
     if (result.error === 'user_cancel' || result.error === 'system_cancel' || result.error === 'app_cancel') return;
-    setError(result.error === 'lockout' ? BIOMETRIC_MESSAGES.lockout : BIOMETRIC_MESSAGES.failed);
+    setError(result.error === 'lockout' ? copy.lockout : copy.failed);
     haptics.error();
   };
 
   return (
-    <Sheet
-      visible={visible}
-      onClose={close}
-      title={BIOMETRIC_MESSAGES.title}
-      footer={<OfferActions onTurnOn={turnOn} onNotNow={close} />}
-    >
-      <OfferBody error={error} />
+    <Sheet visible={visible} onClose={close} title={copy.title} footer={<OfferActions onTurnOn={turnOn} onNotNow={close} />}>
+      <OfferBody body={copy.body} face={biometric === 'Face ID'} error={error} />
     </Sheet>
   );
 }
 
-function OfferBody({ error }: { error: string | null }) {
+function OfferBody({ body, face, error }: { body: string; face: boolean; error: string | null }) {
   const { colors } = useTheme();
   return (
     <View style={styles.body}>
       <View style={styles.row}>
         <View style={[styles.badge, { backgroundColor: colors.goldTint }]}>
-          <Icon icon={Fingerprint} size={24} color="gold" />
+          <Icon icon={face ? ScanFace : Fingerprint} size={24} color="gold" />
         </View>
         <Text variant="body" color="ink3" style={styles.flex}>
-          {BIOMETRIC_MESSAGES.body}
+          {body}
         </Text>
       </View>
       {error ? (
@@ -155,7 +160,7 @@ function OfferBody({ error }: { error: string | null }) {
   );
 }
 
-/** Rendered inside the sheet, so "Not now" is disabled while the fingerprint prompt is up. */
+/** Rendered inside the sheet, so "Not now" is disabled while the system prompt is up. */
 function OfferActions({ onTurnOn, onNotNow }: { onTurnOn: () => Promise<void>; onNotNow: () => void }) {
   const { busy } = useSubmitGroup();
   return (

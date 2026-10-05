@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useState } from 'react';
-import { AppState, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { AppState, Platform, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -28,9 +28,10 @@ const MAX_WIDTH = 440;
 /**
  * The full-screen lock. The logo mark sits exactly where the boot splash draws
  * it, so a cold start goes from splash to lock without the mark moving. It asks
- * for the fingerprint, face or screen lock once by itself (when the app is in
- * front), then waits for "Unlock". Signing out with a password sign-in later
- * is the way out for someone who cannot unlock.
+ * for the fingerprint, face or screen lock (Face ID, Touch ID or the passcode on
+ * iPhone) once by itself (when the app is in front), then waits for "Unlock".
+ * Signing out with a password sign-in later is the way out for someone who
+ * cannot unlock.
  */
 export function LockScreen() {
   const { colors } = useTheme();
@@ -55,7 +56,7 @@ export function LockScreen() {
       appLock.unlock();
       return;
     }
-    const message = unlockErrorMessage(result.error);
+    const message = unlockErrorMessage(result.error, Platform.OS);
     if (!message) return;
     setError(message);
     haptics.error();
@@ -99,6 +100,7 @@ export function LockScreen() {
         style={[styles.markArea, markArea === null ? StyleSheet.absoluteFill : { height: markArea }]}
         pointerEvents="none"
         importantForAccessibility="no-hide-descendants"
+        accessibilityElementsHidden
       >
         <LogoMark size={SPLASH_MARK_SIZE} color={colors.gold} />
       </View>

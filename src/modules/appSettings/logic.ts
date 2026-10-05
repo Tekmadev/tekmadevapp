@@ -31,7 +31,9 @@ export const SETTINGS_COPY = {
   lockAfterHelp: 'How long the app can be away before it asks again.',
   hideInRecents: 'Hide content in the recent apps screen',
   hideInRecentsAndroid: 'Recent apps shows a blank card. Screenshots and screen recordings are blocked too.',
-  hideInRecentsIos: 'The app switcher shows a blurred card.',
+  /** iPhone has an app switcher, not a recent apps screen. */
+  hideInRecentsIosLabel: 'Hide content in the app switcher',
+  hideInRecentsIos: 'The app switcher shows the Tekmadev mark instead of the screen.',
   data: 'Data',
   clearCache: 'Clear cached data',
   clearCacheHint: 'Your session, settings and drafts stay.',
@@ -50,6 +52,13 @@ export const SETTINGS_COPY = {
   latest: "You're on the latest version.",
   signOut: 'Sign out',
 } as const;
+
+/** The "Hide content" row in the words of the platform (the brief's words on Android). */
+export function hideInRecentsCopy(platform: string): { label: string; description: string } {
+  return platform === 'ios'
+    ? { label: SETTINGS_COPY.hideInRecentsIosLabel, description: SETTINGS_COPY.hideInRecentsIos }
+    : { label: SETTINGS_COPY.hideInRecents, description: SETTINGS_COPY.hideInRecentsAndroid };
+}
 
 export const THEME_OPTIONS: readonly { value: ThemePreference; label: string }[] = [
   { value: 'system', label: 'System' },

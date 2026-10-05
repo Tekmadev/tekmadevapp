@@ -4,6 +4,8 @@ import {
   channelsFor,
   deviceLabel,
   foregroundBehavior,
+  iconBadgeCount,
+  IOS_TOKEN_TIMEOUT_MS,
   needsRegistration,
   parsePushPayload,
   parseRegistration,
@@ -25,6 +27,8 @@ import {
   toastMessage,
   toastTone,
   tokenErrorMessage,
+  tokenTimeoutError,
+  withTimeout,
   type PushRegistration,
 } from '../logic';
 
@@ -353,5 +357,55 @@ describe('tokenErrorMessage', () => {
     expect(retriesWhenOnline({ message: SETUP_MESSAGES.network, detail: null })).toBe(true);
     expect(retriesWhenOnline({ message: SETUP_MESSAGES.token, detail: null })).toBe(false);
     expect(retriesWhenOnline(null)).toBe(false);
+  });
+});
+
+describe('withTimeout (iOS push token)', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it('passes an answer through and clears its timer', async () => {
+    await expect(withTimeout(Promise.resolve('token'), 1000, tokenTimeoutError)).resolves.toBe('token');
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('passes a refusal through unchanged', async () => {
+    const refusal = Object.assign(new Error('no aps-environment entitlement'), { code: 'E_REGISTRATION_FAILED' });
+    await expect(withTimeout(Promise.reject(refusal), 1000, tokenTimeoutError)).rejects.toBe(refusal);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('gives up on a request that never answers, with the plain token message', async () => {
+    const never = new Promise<string>(() => undefined);
+    const run = withTimeout(never, IOS_TOKEN_TIMEOUT_MS, tokenTimeoutError);
+    jest.advanceTimersByTime(IOS_TOKEN_TIMEOUT_MS);
+    const error: unknown = await run.catch((e: unknown) => e);
+    expect(tokenErrorMessage(error, true)).toEqual({ message: SETUP_MESSAGES.token, detail: 'No push token from Apple in time.' });
+    // Not a connection problem: it does not retry by itself when the phone comes back online.
+    expect(retriesWhenOnline(tokenErrorMessage(error, true))).toBe(false);
+  });
+});
+
+describe('iconBadgeCount (iOS app icon)', () => {
+  it('shows the unread count', () => {
+    expect(iconBadgeCount(3, true)).toBe(3);
+    expect(iconBadgeCount(0, true)).toBe(0);
+  });
+
+  it('keeps the icon as it is until the count is known', () => {
+    expect(iconBadgeCount(undefined, true)).toBeNull();
+  });
+
+  it('shows nothing to someone without the Inbox, and never a bad number', () => {
+    expect(iconBadgeCount(7, false)).toBe(0);
+    expect(iconBadgeCount(undefined, false)).toBe(0);
+    expect(iconBadgeCount(-2, true)).toBe(0);
+    expect(iconBadgeCount(Number.NaN, true)).toBe(0);
+  });
+});
+
+describe('PUSH_COPY', () => {
+  it('never says "shade" on iPhone', () => {
+    expect(PUSH_COPY.mockLocalTestIos).not.toMatch(/shade/i);
   });
 });

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Checkbox, type CheckState } from '@/components/form/Checkbox';
@@ -9,6 +9,7 @@ import { Slider } from '@/components/form/Slider';
 import { Switch, SwitchRow } from '@/components/form/Switch';
 import { TextField } from '@/components/form/TextField';
 import { space } from '@/design/tokens';
+import { hideInRecentsCopy } from '@/modules/appSettings/logic';
 
 import { Caption, Demo, Labeled, Wrap } from '../../kitLayout';
 
@@ -81,7 +82,7 @@ export function ToggleDemos() {
           style={styles.row}
         />
         <SwitchRow
-          label="Hide content in the recent apps screen"
+          label={hideInRecentsCopy(Platform.OS).label}
           description="Owner only"
           value={false}
           onValueChange={() => undefined}

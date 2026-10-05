@@ -13,6 +13,7 @@ import { useIsOnline } from '@/lib/connectivity';
 import { isPreviewableUrl } from '../editor/form';
 import { useDebouncedValue } from '../editor/hooks';
 import { ImagePreview } from '../editor/ImagePreview';
+import { PICK_COPY } from './errors';
 import { ImageSourceSheet } from './ImageSourceSheet';
 import type { ImageUpload } from './useImageUpload';
 
@@ -88,7 +89,7 @@ export function ImageUploadField({
           size="sm"
           disabled={!online}
           accessibilityLabel={`Upload ${noun}`}
-          accessibilityHint={online ? 'Choose from the gallery or take a photo.' : MESSAGES.offline}
+          accessibilityHint={online ? PICK_COPY.hint : MESSAGES.offline}
           onPress={() => setChoosing(true)}
         />
         {!online ? (

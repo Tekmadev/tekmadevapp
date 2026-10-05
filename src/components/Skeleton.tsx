@@ -102,6 +102,7 @@ export function Skeleton({ shape = 'line', width, height, size = 40, style }: Sk
     <View
       accessible={false}
       importantForAccessibility="no-hide-descendants"
+      accessibilityElementsHidden
       onLayout={(e: LayoutChangeEvent) => setW(e.nativeEvent.layout.width)}
       style={[styles.block, dims, { backgroundColor: base }, style]}
     >

@@ -11,7 +11,7 @@ import { Text, type TextColor } from '@/components/Text';
 import { haptics } from '@/design/haptics';
 import { useTheme } from '@/design/theme';
 import { radius, space, type Tone } from '@/design/tokens';
-import { fonts, type TypeVariant } from '@/design/typography';
+import type { FontWeight, TypeVariant } from '@/design/typography';
 
 import { ImagePreview } from './ImagePreview';
 import { siteUrl } from './form';
@@ -31,26 +31,38 @@ function hrefFor(href: string | undefined): string | null {
   return isSafeHref(url) ? url : null;
 }
 
-type InlineProps = { text: string; variant: TypeVariant; color: TextColor; style?: TextStyle };
+type InlineProps = {
+  text: string;
+  variant: TypeVariant;
+  color: TextColor;
+  /** Size or spacing overrides (never a font: use `weight`). */
+  style?: TextStyle;
+  /** The variant's weight, overridden for the whole line (h4 headings). */
+  weight?: FontWeight;
+};
 
 /** Inline Markdown as nested Text; links are the one tap target inside running text. */
-export function Inline({ text, variant, color, style }: InlineProps) {
+export function Inline({ text, variant, color, style, weight }: InlineProps) {
   const { colors } = useTheme();
   const spans: InlineSpan[] = parseInline(text);
   return (
-    <Text variant={variant} color={color} style={style}>
+    <Text variant={variant} color={color} weight={weight} style={style}>
       {spans.map((s, i) => {
-        // Each nested Text applies its full type style, so the caller's override is repeated here.
+        // Each nested Text applies its full type style, so the caller's overrides are repeated here.
+        // Bold and code go through the face props: iOS needs a font file per weight and family.
+        const spanWeight = s.bold ? '700' : weight;
+        const family = s.code ? 'mono' : undefined;
         const spanStyle: TextStyle[] = style ? [style] : [];
-        if (s.bold) spanStyle.push(styles.bold);
         if (s.italic) spanStyle.push(styles.italic);
-        if (s.code) spanStyle.push({ fontFamily: fonts.mono, backgroundColor: colors.bg3 });
+        if (s.code) spanStyle.push({ backgroundColor: colors.bg3 });
         const href = hrefFor(s.href);
         if (href) {
           return (
             <Text
               key={i}
               variant={variant}
+              weight={spanWeight}
+              family={family}
               tone="gold"
               accessibilityRole="link"
               style={[...spanStyle, styles.link]}
@@ -64,7 +76,7 @@ export function Inline({ text, variant, color, style }: InlineProps) {
           );
         }
         return (
-          <Text key={i} variant={variant} color={color} style={spanStyle}>
+          <Text key={i} variant={variant} color={color} weight={spanWeight} family={family} style={spanStyle}>
             {s.text}
           </Text>
         );
@@ -98,7 +110,8 @@ function Heading({ block }: { block: BlockOf<'heading'> }) {
       text={block.text}
       variant={variant}
       color="ink"
-      style={block.level === 3 ? styles.h3 : block.level === 4 ? styles.h4 : undefined}
+      style={block.level === 3 ? styles.h3 : undefined}
+      weight={block.level === 4 ? '700' : undefined}
     />
   );
 }
@@ -143,7 +156,7 @@ function Answer({ block }: { block: BlockOf<'answer'> }) {
       <Text variant="eyebrow" tone="gold">
         Short answer
       </Text>
-      {block.question ? <Inline text={block.question} variant="title" color="ink" style={styles.answerQuestion} /> : null}
+      {block.question ? <Inline text={block.question} variant="title" color="ink" weight="700" /> : null}
       <Paragraphs text={block.text} variant="body" color="ink2" />
     </View>
   );
@@ -266,11 +279,9 @@ export function BlockView({ block }: { block: BlogBlock }) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  bold: { fontWeight: '700' },
   italic: { fontStyle: 'italic' },
   link: { textDecorationLine: 'underline' },
   h3: { fontSize: 20, lineHeight: 26 },
-  h4: { fontWeight: '700' },
   paragraphs: { gap: space[3] },
   list: { gap: space[2] },
   listItem: { flexDirection: 'row', gap: space[2] },
@@ -279,7 +290,6 @@ const styles = StyleSheet.create({
   callout: { borderRadius: radius.input, padding: space[4], gap: space[2] },
   calloutHead: { flexDirection: 'row', alignItems: 'center', gap: space[2] },
   answer: { borderRadius: radius.input, borderWidth: 1.5, padding: space[4], gap: space[2] },
-  answerQuestion: { fontWeight: '700' },
   figure: { gap: space[2] },
   tableFrame: { borderRadius: radius.sm, borderWidth: 1, overflow: 'hidden' },
   tableRow: { flexDirection: 'row' },

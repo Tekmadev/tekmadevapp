@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useFocusEffect } from 'expo-router';
 import { AlertTriangle, BellOff, BellRing, type LucideIcon } from 'lucide-react-native';
 import { Fragment, useCallback, useState, type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { notificationKeys, notificationPrefsQuery, sendTestPush } from '@/api/endpoints/notifications';
@@ -246,7 +246,8 @@ function TestPushCard() {
     const message = testPushMessage(sent, deviceId !== null);
     const local = isMockApi && deviceId !== null && permission?.status === 'granted';
     if (local) await presentLocalTest().catch(() => undefined);
-    setResult({ tone: 'ok', message: local ? `${message} ${PUSH_COPY.mockLocalTest}` : message });
+    const mockNote = Platform.OS === 'ios' ? PUSH_COPY.mockLocalTestIos : PUSH_COPY.mockLocalTest;
+    setResult({ tone: 'ok', message: local ? `${message} ${mockNote}` : message });
   };
 
   const onError = (error: unknown) => {

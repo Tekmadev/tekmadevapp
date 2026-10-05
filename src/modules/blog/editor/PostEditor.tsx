@@ -36,10 +36,11 @@ import { PendingButton } from '@/components/PendingButton';
 import type { ActionSheetItem } from '@/components/sheet/ActionSheet';
 import { reportSubmitError, useSubmitGroup, useSubmitGroupHandle } from '@/components/SubmitGroup';
 import { Text } from '@/components/Text';
+import { caretColors } from '@/design/caret';
 import { haptics } from '@/design/haptics';
 import { durations, springs } from '@/design/motion';
 import { useTheme } from '@/design/theme';
-import { layout, space, withAlpha } from '@/design/tokens';
+import { layout, space } from '@/design/tokens';
 import { MAX_FONT_SCALE, type } from '@/design/typography';
 import { useIsOnline } from '@/lib/connectivity';
 import { countLabel } from '@/lib/format';
@@ -332,7 +333,9 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
   // Android: the body's height comes from the EditText's own text layout (plus a
   // spare line). Android ignores scrollEnabled={false}, and a box even a pixel
   // shorter than its text scrolls itself, so a drag moved the caret instead of
-  // scrolling the page.
+  // scrolling the page. iOS honours scrollEnabled={false}: the text view grows
+  // with its text by itself, the page scrolls, and the keyboard-aware scroll view
+  // keeps the caret above the keyboard and the toolbar.
   const [bodyContentHeight, setBodyContentHeight] = useState(0);
   // Only the shared values go into the worklet: the scroll objects also hold the
   // event handlers, which Worklets cannot copy to the UI thread (it crashes).
@@ -560,8 +563,8 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
 
   /* ---------- unsaved-changes guard ---------- */
 
-  // Hardware back, the header back and the back gesture all remove the screen: ask first.
-  // An image still uploading counts too: leaving drops it.
+  // Hardware back, the header back and the back gesture (the iOS edge swipe too) all remove
+  // the screen: ask first. An image still uploading counts too: leaving drops it.
   usePreventRemove(dirty || uploading, ({ data }) => {
     if (leavingRef.current) {
       navigation.dispatch(data.action);
@@ -657,9 +660,7 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
               onSubmitEditing={() => bodyRef.current?.focus()}
               autoCapitalize="sentences"
               maxFontSizeMultiplier={MAX_FONT_SCALE}
-              selectionColor={withAlpha(colors.gold, 0.3)}
-              selectionHandleColor={colors.gold}
-              cursorColor={colors.gold}
+              {...caretColors(colors.gold)}
               accessibilityLabel="Title"
               style={[type.largeTitle, styles.title, { color: colors.ink }]}
             />
@@ -708,9 +709,7 @@ export function PostEditor({ postId, detail, dataUpdatedAt, refetching }: PostEd
             textAlignVertical="top"
             autoCapitalize="sentences"
             maxFontSizeMultiplier={MAX_FONT_SCALE}
-            selectionColor={withAlpha(colors.gold, 0.3)}
-            selectionHandleColor={colors.gold}
-            cursorColor={colors.gold}
+            {...caretColors(colors.gold)}
             accessibilityLabel="Post body, Markdown"
             style={[
               type.editor,

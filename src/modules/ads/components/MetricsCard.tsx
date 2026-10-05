@@ -46,7 +46,7 @@ export function MetricsCard({ title, badge, spend, metrics, columns, onPress, ac
 
   return (
     <Card onPress={onPress} accessibilityLabel={spoken} accessibilityHint={accessibilityHint}>
-      <View importantForAccessibility="no-hide-descendants">
+      <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         {hasTop ? (
           <View style={styles.top}>
             {title ? (

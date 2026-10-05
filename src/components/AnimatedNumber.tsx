@@ -166,6 +166,7 @@ export function AnimatedNumber({
         pointerEvents="none"
         accessible={false}
         importantForAccessibility="no-hide-descendants"
+        accessibilityElementsHidden
         style={[
           type[variant],
           tabular,

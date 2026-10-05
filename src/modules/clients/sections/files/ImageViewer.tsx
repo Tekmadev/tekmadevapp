@@ -3,7 +3,15 @@ import { Image, type ImageLoadEventData } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 import { ExternalLink, ImageOff, RotateCw, X, type LucideIcon } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Modal, StyleSheet, View, useWindowDimensions, type AccessibilityActionEvent, type LayoutChangeEvent } from 'react-native';
+import {
+  Modal,
+  Platform,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+  type AccessibilityActionEvent,
+  type LayoutChangeEvent,
+} from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   FadeIn,
@@ -20,6 +28,8 @@ import { scheduleOnRN } from 'react-native-worklets';
 
 import { errorMessage } from '@/api/errors';
 import type { Asset } from '@/api/schemas/clients';
+import { useAppLock } from '@/auth/lock/lockStore';
+import { PrivacyCover } from '@/auth/lock/PrivacyCover';
 import { openInBrowser } from '@/components/automation';
 import { Icon } from '@/components/Icon';
 import { PressableScale } from '@/components/PressableScale';
@@ -31,6 +41,7 @@ import { layout, radius, space, withAlpha } from '@/design/tokens';
 import { BlackHole } from '@/loader/BlackHole';
 import { formatBytes } from '@/lib/format';
 import { notice } from '@/lib/notice';
+import { usePrefs } from '@/lib/prefs';
 
 import { isExpired, signedAssetQuery } from './assetSigning';
 import {
@@ -73,7 +84,10 @@ export type ImageViewerProps = {
  * thumbnail shows while the full image loads.
  *
  * It is a Modal (its own window, which copies FLAG_SECURE from the activity),
- * because the Client detail sections live inside a scroll view.
+ * because the Client detail sections live inside a scroll view. On iOS a Modal
+ * is a view controller above the app's own view, where the app lock and the app
+ * switcher cover are drawn: so there it hides while the app is locked (and comes
+ * back after the unlock), and draws the app switcher cover inside itself.
  */
 export function ImageViewer({ clientId, asset, session, open, subtitle, onClose }: ImageViewerProps) {
   const reduceMotion = useReduceMotion();
@@ -86,12 +100,16 @@ export function ImageViewer({ clientId, asset, session, open, subtitle, onClose 
     return () => clearTimeout(timer);
   }, [open, session, armedFor]);
 
+  // iOS: the lock is drawn under any Modal, so the viewer steps aside while it is up.
+  const lockedOnIos = useAppLock((s) => Platform.OS === 'ios' && s.locked === true);
+  const coverOnIos = usePrefs((s) => Platform.OS === 'ios' && s.hideInRecents);
+
   if (!asset) return null;
-  const visible = open && armedFor === session;
+  const visible = open && armedFor === session && !lockedOnIos;
 
   return (
     <>
-      {open ? <StatusBar style="light" /> : null}
+      {open && !lockedOnIos ? <StatusBar style="light" /> : null}
       <Modal
         visible={visible}
         transparent
@@ -102,6 +120,7 @@ export function ImageViewer({ clientId, asset, session, open, subtitle, onClose 
       >
         <GestureHandlerRootView style={styles.fill}>
           <ViewerContent key={`${asset.id}:${session}`} clientId={clientId} asset={asset} subtitle={subtitle} onClose={onClose} />
+          {coverOnIos ? <PrivacyCover /> : null}
         </GestureHandlerRootView>
       </Modal>
     </>

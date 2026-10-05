@@ -1,6 +1,6 @@
 import { Archive, Copy, Pencil, Share2, Trash2 } from 'lucide-react-native';
 import { Fragment, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { Divider } from '@/components/Divider';
@@ -106,8 +106,11 @@ export function SheetsDemos() {
       >
         <View style={styles.body}>
           <Text variant="body" color="ink2">
-            This sheet ignores drags, the backdrop and the back button. Every sheet does this on its own while one of its submit
-            buttons runs.
+            {Platform.select({
+              ios: 'This sheet ignores drags and the backdrop.',
+              default: 'This sheet ignores drags, the backdrop and the back button.',
+            })}{' '}
+            Every sheet does this on its own while one of its submit buttons runs.
           </Text>
         </View>
       </Sheet>

@@ -2,18 +2,21 @@ import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } fr
 import { BackHandler, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
 
 import { ToastStack } from '../Toast';
-import { OverlayRootContext, SheetStoreContext, type OverlayRoot } from './context';
+import { OverlayRootContext, SheetStoreContext, type OverlayLayer, type OverlayRoot } from './context';
 import { createSheetStore, topOpenEntry, type SheetEntry, type SheetStore } from './sheetStore';
 import { SheetView } from './SheetView';
 
 /**
  * The overlay root, mounted once around the navigator. It draws, in order:
- * the app, the stack of open sheets (above every screen and the tab bar), then
- * the toasts (above the sheets, so a failed save inside a sheet is still seen).
+ * the app, the stack of open sheets (above every screen and the tab bar), the
+ * toasts (above the sheets, so a failed save inside a sheet is still seen),
+ * then any full-screen layers (the iOS app lock and app switcher cover).
  * Everything stays in the activity's window, so FLAG_SECURE covers it.
  *
- * While a sheet is open the app underneath is hidden from TalkBack and Android
- * back (including predictive back) closes the topmost sheet.
+ * While a sheet is open the app underneath is hidden from TalkBack and
+ * VoiceOver, and Android back (including predictive back) closes the topmost
+ * sheet. iOS has no back button: a sheet closes by a drag, the scrim or its
+ * own buttons, and the edge swipe never reaches the screen under the scrim.
  */
 export function SheetProvider({ children }: { children: ReactNode }) {
   const [store] = useState(createSheetStore);
@@ -21,15 +24,22 @@ export function SheetProvider({ children }: { children: ReactNode }) {
   const anyOpen = topOpenEntry(entries) != null;
 
   const [toastHosts, setToastHosts] = useState(0);
+  const [layers, setLayers] = useState<readonly OverlayLayer[]>([]);
   const overlay = useMemo<OverlayRoot>(
     () => ({
       hostToasts: () => {
         setToastHosts((n) => n + 1);
         return () => setToastHosts((n) => n - 1);
       },
+      showLayer: (layer) => {
+        setLayers((current) => [...current.filter((l) => l.key !== layer.key), layer].sort((a, b) => a.order - b.order));
+        // Removes only this registration, never a newer layer shown under the same key.
+        return () => setLayers((current) => current.filter((l) => l !== layer));
+      },
     }),
     [],
   );
+  const modalLayer = layers.some((l) => l.modal);
 
   // Added while a sheet is open, so it runs before any back handler a screen registered earlier.
   useEffect(() => {
@@ -41,11 +51,20 @@ export function SheetProvider({ children }: { children: ReactNode }) {
   return (
     <SheetStoreContext.Provider value={store}>
       <OverlayRootContext.Provider value={overlay}>
-        <View style={styles.fill} importantForAccessibility={anyOpen ? 'no-hide-descendants' : 'auto'}>
+        <View
+          style={styles.fill}
+          importantForAccessibility={anyOpen ? 'no-hide-descendants' : 'auto'}
+          accessibilityElementsHidden={anyOpen || modalLayer}
+        >
           {children}
         </View>
         <SheetLayer entries={entries} store={store} />
         {toastHosts > 0 ? <ToastStack /> : null}
+        {layers.map((layer) => (
+          <View key={layer.key} style={StyleSheet.absoluteFill} pointerEvents="box-none" accessibilityViewIsModal={layer.modal}>
+            {layer.node}
+          </View>
+        ))}
       </OverlayRootContext.Provider>
     </SheetStoreContext.Provider>
   );

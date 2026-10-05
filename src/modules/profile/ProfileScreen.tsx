@@ -127,7 +127,7 @@ function IdentityCard({ me }: { me: Me }) {
 
   return (
     <Card accessibilityLabel={[display, name ? me.user.email : null, `Role: ${badge.label}`].filter(Boolean).join(', ')}>
-      <View style={styles.identity} importantForAccessibility="no-hide-descendants">
+      <View style={styles.identity} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <Avatar name={display} size="lg" />
         <View style={styles.identityText}>
           <Text variant="title" numberOfLines={2}>

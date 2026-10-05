@@ -81,7 +81,7 @@ export function QueueCard({ queue, sync, busy, verified, canWrite }: QueueCardPr
 function QueueTile({ label, stat }: { label: string; stat: CrmQueueStat }) {
   return (
     <Card style={styles.tile} accessibilityLabel={`${label}, ${formatCount(stat.count)}, ${stat.sub}`}>
-      <View importantForAccessibility="no-hide-descendants" style={styles.tileBody}>
+      <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={styles.tileBody}>
         <Text variant="eyebrow" numberOfLines={2}>
           {label}
         </Text>
@@ -123,7 +123,7 @@ function RunRow({ run, meta, now }: { run: CrmRun; meta: Partial<CrmMeta> | unde
   const meta3 = [when, `by ${by}`].filter(Boolean).join(' · ');
   return (
     <View style={styles.run} accessible accessibilityLabel={`${job}, ${badge.label}. ${run.result} ${meta3}`}>
-      <View style={styles.runTop} importantForAccessibility="no-hide-descendants">
+      <View style={styles.runTop} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <Text variant="bodyStrong" style={styles.runJob}>
           {job}
         </Text>

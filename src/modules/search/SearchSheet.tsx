@@ -310,7 +310,7 @@ function OfflineNote() {
       accessibilityLabel={SEARCH_COPY.offline}
       style={[styles.note, { backgroundColor: colors.bg3, borderColor: colors.line }]}
     >
-      <View importantForAccessibility="no-hide-descendants" style={styles.noteRow}>
+      <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={styles.noteRow}>
         <Icon icon={WifiOff} size={14} color="ink3" />
         <Text variant="small" color="ink2" style={styles.noteText}>
           {SEARCH_COPY.offline}

@@ -128,7 +128,7 @@ export function AttentionRow({ item, meta, now, selected, onToggle }: AttentionR
   const spoken = [item.what, item.who, facts, item.why, when].filter(Boolean).join('. ');
 
   const texts = (
-    <View style={styles.body} importantForAccessibility="no-hide-descendants">
+    <View style={styles.body} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
       <View style={styles.top}>
         <Text variant="bodyStrong" style={styles.flex}>
           {item.what}
@@ -170,7 +170,7 @@ export function AttentionRow({ item, meta, now, selected, onToggle }: AttentionR
         accessibilityLabel={spoken}
         style={styles.row}
       >
-        <View importantForAccessibility="no-hide-descendants">
+        <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
           <CheckboxBox checked={selected} />
         </View>
         {texts}

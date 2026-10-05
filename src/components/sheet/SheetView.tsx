@@ -63,7 +63,7 @@ export type SheetViewProps = {
   store: SheetStore;
   /** Height of the root layer (the whole window in edge to edge). */
   layerHeight: number;
-  /** Only the topmost open sheet is reachable by TalkBack. */
+  /** Only the topmost open sheet is reachable by TalkBack and VoiceOver. */
   isTop: boolean;
 };
 
@@ -400,6 +400,7 @@ export const SheetView = memo(function SheetView({ entry, store, layerHeight, is
       style={StyleSheet.absoluteFill}
       pointerEvents={closing ? 'none' : 'box-none'}
       importantForAccessibility={isTop ? 'auto' : 'no-hide-descendants'}
+      accessibilityElementsHidden={!isTop}
     >
       <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: colors.scrim }, scrimStyle]}>
         <PressableScale
@@ -414,6 +415,8 @@ export const SheetView = memo(function SheetView({ entry, store, layerHeight, is
       <Animated.View
         testID={testID}
         accessibilityViewIsModal
+        // VoiceOver's escape gesture (two-finger scrub) closes it, like Android back.
+        onAccessibilityEscape={dismissSelf}
         onLayout={onSheetLayout}
         style={[
           styles.sheet,

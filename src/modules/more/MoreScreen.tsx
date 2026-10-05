@@ -169,7 +169,7 @@ function ProfileCard({ me }: { me: Me }) {
       testID="more-profile"
     >
       {/* The card reads as one item ("name, email, role"), not three. */}
-      <View style={styles.profile} importantForAccessibility="no-hide-descendants">
+      <View style={styles.profile} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <Avatar name={display} size="lg" />
         <View style={styles.profileText}>
           <Text variant="title" numberOfLines={1}>

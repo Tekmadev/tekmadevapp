@@ -1,6 +1,6 @@
 import { Bell, Plus, Search, Share2, Trash2 } from 'lucide-react-native';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 
 import { Button, type ButtonVariant } from '@/components/Button';
 import { ConfirmSheet } from '@/components/ConfirmSheet';
@@ -110,7 +110,13 @@ export function ButtonsDemos() {
         <Caption>Copy link is local, so it stays enabled offline.</Caption>
       </Demo>
 
-      <Demo title="Icon buttons" note="48dp targets with a TalkBack label. Plain, tonal, badges, disabled.">
+      <Demo
+        title="Icon buttons"
+        note={Platform.select({
+          ios: '48pt targets with a VoiceOver label. Plain, tonal, badges, disabled.',
+          default: '48dp targets with a TalkBack label. Plain, tonal, badges, disabled.',
+        })}
+      >
         <Wrap gap={space[3]}>
           <Labeled label="plain">
             <IconButton icon={Search} accessibilityLabel="Search" onPress={() => notice.ok('Search pressed.')} />

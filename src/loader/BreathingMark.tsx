@@ -61,7 +61,7 @@ export const BreathingMark = memo(function BreathingMark({ size, color }: Breath
   });
 
   return (
-    <View style={{ width: size, height: size }} accessible={false} importantForAccessibility="no-hide-descendants">
+    <View style={{ width: size, height: size }} accessible={false} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
       <MarkCanvas size={size} bleed={BLEED} color={color ?? colors.gold} pose={pose} />
     </View>
   );

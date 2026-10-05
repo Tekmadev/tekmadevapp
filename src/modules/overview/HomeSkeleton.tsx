@@ -5,6 +5,7 @@ import { Divider } from '@/components/Divider';
 import { Section } from '@/components/Section';
 import { Skeleton, SkeletonGroup } from '@/components/Skeleton';
 import { layout, radius, space } from '@/design/tokens';
+import { type } from '@/design/typography';
 
 import { kpiCellStyle, KpiLayout, useKpiColumns, useVisibleKpis } from './KpiGrid';
 import { clampScale } from './logic';
@@ -96,8 +97,8 @@ export function HomeSkeleton() {
   );
 }
 
-/** The `number` variant's line (28sp display at 1.16). */
-const KPI_NUMBER_LINE = 32;
+/** The `number` variant's line (28sp display: 32 on Android, 34 on iOS). */
+const KPI_NUMBER_LINE = type.number.lineHeight;
 
 /** Sized like a `md` StatCard with no sub line: 28dp label row, then the number line (it grows with font scale). */
 function KpiCardSkeleton({ columns }: { columns: 1 | 2 }) {

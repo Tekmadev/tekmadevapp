@@ -1,6 +1,7 @@
 import { NOTIFICATION_CATEGORIES, type NotificationPrefs } from '@/api/schemas/notifications';
 
 import {
+  hideInRecentsCopy,
   KIT_TAP_WINDOW_MS,
   KIT_TAPS_START,
   prefRows,
@@ -108,5 +109,20 @@ describe('registerKitTap', () => {
     expect(results[3]?.remaining).toBe(6);
     const again = tapAt([0, 100, 200, 300, 400, 500, 600, 700]);
     expect(again[7]?.event).toBe('tap');
+  });
+});
+
+describe('hideInRecentsCopy', () => {
+  it('keeps the brief words on Android', () => {
+    expect(hideInRecentsCopy('android')).toEqual({
+      label: 'Hide content in the recent apps screen',
+      description: 'Recent apps shows a blank card. Screenshots and screen recordings are blocked too.',
+    });
+  });
+
+  it('speaks of the app switcher on iPhone, and promises no screenshot block there', () => {
+    const copy = hideInRecentsCopy('ios');
+    expect(copy.label).toBe('Hide content in the app switcher');
+    expect(`${copy.label} ${copy.description}`).not.toMatch(/recent apps|screenshot|recording/i);
   });
 });

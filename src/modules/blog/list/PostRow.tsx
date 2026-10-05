@@ -187,7 +187,7 @@ function ActionPanel({
   const iconStyle = useAnimatedStyle(() => ({ transform: [{ scale: 0.9 + armed.get() * 0.2 }] }));
 
   return (
-    <View style={[styles.panel, { width, backgroundColor: colors.bg }]} importantForAccessibility="no-hide-descendants">
+    <View style={[styles.panel, { width, backgroundColor: colors.bg }]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
       <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: tone.bg }, tintStyle]} />
       <View style={[styles.panelContent, side === 'left' ? styles.panelLeft : styles.panelRight]}>
         <Animated.View style={iconStyle}>

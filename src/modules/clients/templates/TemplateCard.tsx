@@ -24,7 +24,7 @@ export const TemplateCard = memo(function TemplateCard({ template: t, meta, onPr
   return (
     <View style={styles.wrap}>
       <Card onPress={() => onPress(t)} accessibilityLabel={templateSpokenLabel(meta, t)} accessibilityHint="Edits the template">
-        <View style={styles.top} importantForAccessibility="no-hide-descendants">
+        <View style={styles.top} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
           <Text
             variant="bodyStrong"
             color={t.active ? 'ink' : 'ink4'}
@@ -35,7 +35,7 @@ export const TemplateCard = memo(function TemplateCard({ template: t, meta, onPr
           </Text>
           <Badge label={ownerLabel(meta, t.owner)} tone={t.owner === 'client' ? 'gold' : 'neutral'} />
         </View>
-        <View importantForAccessibility="no-hide-descendants">
+        <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
           <Text variant="small" color="ink3" numberOfLines={2} style={styles.details}>
             {templateDetails(meta, t)}
           </Text>

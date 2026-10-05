@@ -54,7 +54,7 @@ export function LoaderPreview({ replay, onReplay }: LoaderPreviewProps) {
             accessible
             accessibilityLabel={`Appear delay demo. ${delayCaption(showAfterMs)}`}
           >
-            <View style={styles.delayInner} importantForAccessibility="no-hide-descendants">
+            <View style={styles.delayInner} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
               <PageLoader key={replay} size={28} />
             </View>
           </View>

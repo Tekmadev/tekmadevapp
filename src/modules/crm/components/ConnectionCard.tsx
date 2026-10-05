@@ -84,10 +84,10 @@ function ProbeRow({ result }: { result: CrmProbeResult }) {
   const spoken = [result.ok ? 'Passed' : 'Failed', result.sentence, detail].filter(Boolean).join('. ');
   return (
     <View style={styles.probe} accessible accessibilityLabel={spoken}>
-      <View style={styles.probeIcon} importantForAccessibility="no-hide-descendants">
+      <View style={styles.probeIcon} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <Icon icon={result.ok ? CircleCheck : CircleX} size={18} tone={result.ok ? 'ok' : 'signal'} />
       </View>
-      <View style={styles.probeText} importantForAccessibility="no-hide-descendants">
+      <View style={styles.probeText} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <Text variant="body">
           {result.sentence}
         </Text>

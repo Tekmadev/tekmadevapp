@@ -293,7 +293,7 @@ export const BlackHole = memo(function BlackHole({
 
   const a11y = accessibilityLabel
     ? ({ accessible: true, accessibilityRole: 'progressbar', accessibilityLabel } as const)
-    : ({ accessible: false, importantForAccessibility: 'no-hide-descendants' } as const);
+    : ({ accessible: false, importantForAccessibility: 'no-hide-descendants', accessibilityElementsHidden: true } as const);
 
   return (
     <View style={[{ width: size, height: size }, style]} {...a11y}>

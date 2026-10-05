@@ -37,7 +37,7 @@ const TemplateCard = memo(function TemplateCard({ template, index, still }: Temp
         accessibilityLabel={`${template.name}. Subject: ${template.subject}. Use when: ${template.useWhen}`}
         accessibilityHint="Opens the preview and the HTML"
       >
-        <View importantForAccessibility="no-hide-descendants" style={styles.card}>
+        <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={styles.card}>
           <View style={styles.top}>
             <Text variant="title" numberOfLines={2} style={styles.name}>
               {template.name}

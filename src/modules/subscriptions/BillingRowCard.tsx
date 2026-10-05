@@ -53,7 +53,7 @@ function BillingCard({ title, amount, line, badge, foot, spoken, hint, onPress, 
   return (
     <Animated.View entering={still || index >= STAGGER_MAX ? undefined : enterPull(index)} style={styles.wrap}>
       <Card onPress={onPress} accessibilityLabel={spoken} accessibilityHint={hint}>
-        <View importantForAccessibility="no-hide-descendants" style={styles.body}>
+        <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={styles.body}>
           <View style={styles.line}>
             <Text variant="title" numberOfLines={1} style={styles.grow}>
               {title}

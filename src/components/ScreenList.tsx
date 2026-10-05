@@ -163,7 +163,11 @@ export function ScreenList<T>({
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        // The pull replaces Android's stretch and iOS's bounce; both at once would fight.
         overScrollMode={chrome.pull.enabled ? 'never' : 'auto'}
+        bounces={!chrome.pull.enabled}
+        // iOS: rows under the keyboard can still be scrolled up (Android resizes the window instead).
+        automaticallyAdjustKeyboardInsets
       />
     </ScreenFrame>
   );

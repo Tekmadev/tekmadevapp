@@ -12,17 +12,22 @@ import { SearchSheet } from '@/modules/search/SearchSheet';
 /**
  * The signed-in area: tabs plus every pushed screen (native stack), and the
  * app-level pieces that live as long as someone is signed in: the global
- * search sheet, the biometric offer, the Android launcher shortcuts
- * (registered here, routed here, cleared when this unmounts on sign-out),
- * the app lock and "Hide content in the recent apps screen" (brief 8.18),
- * and push notifications (brief section 9).
+ * search sheet, the biometric offer, the app shortcuts (long-press the app icon,
+ * on Android and iPhone: registered here, routed here, cleared when this
+ * unmounts on sign-out), the app lock and "Hide content in the recent apps
+ * screen" (brief 8.18), and push notifications (brief section 9).
+ *
+ * Every pushed screen shows its own back button: iPhone has no system back.
+ * The iOS edge swipe pops any screen; the blog editor's unsaved-changes guard
+ * (usePreventRemove) turns that swipe into its "Save your changes?" sheet.
+ * The native stack ignores `gestureEnabled` on Android (back is handled in JS).
  */
 export default function AppLayout() {
   const { colors } = useTheme();
   // Inside the signed-in layout (not the root) so a shortcut can navigate once routes exist.
   useQuickActionRouting(onQuickAction);
   useAppShortcuts();
-  // FLAG_SECURE on Android (app switcher blur on iOS) while the setting is on.
+  // FLAG_SECURE on Android (the app switcher cover on iOS) while the setting is on.
   useSecureScreen();
 
   return (
@@ -36,7 +41,7 @@ export default function AppLayout() {
       >
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="clients/new" options={{ animation: 'fade_from_bottom' }} />
-        <Stack.Screen name="blog/[id]" options={{ animation: 'fade_from_bottom', gestureEnabled: false }} />
+        <Stack.Screen name="blog/[id]" options={{ animation: 'fade_from_bottom' }} />
         <Stack.Screen name="links/qr/[id]" options={{ animation: 'fade' }} />
         <Stack.Screen name="kit" />
         <Stack.Screen name="assistant" options={{ animation: 'fade_from_bottom' }} />

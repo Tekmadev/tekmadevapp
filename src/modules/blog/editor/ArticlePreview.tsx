@@ -153,7 +153,7 @@ export function ArticlePreview({ form, author, categoryName, publishedAt, isPubl
           </Text>
           {faqs.map((f, i) => (
             <View key={i} style={[styles.faq, i > 0 ? { borderTopColor: colors.line, borderTopWidth: 1 } : null]}>
-              <Text variant="title" style={styles.faqQuestion}>
+              <Text variant="title" weight="700">
                 {f.question}
               </Text>
               <Text variant="body" color="ink2">
@@ -194,5 +194,4 @@ const styles = StyleSheet.create({
   skeleton: { gap: space[3] },
   faqs: { gap: space[2] },
   faq: { gap: space[2], paddingVertical: space[4] },
-  faqQuestion: { fontWeight: '700' },
 });

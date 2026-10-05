@@ -65,7 +65,7 @@ export const ClientRowCard = memo(function ClientRowCard({ row, meta, onPress, i
         accessibilityLabel={rowSpokenLabel(meta, row)}
         accessibilityHint="Opens the client"
       >
-        <View style={styles.top} importantForAccessibility="no-hide-descendants">
+        <View style={styles.top} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
           <View style={styles.name}>
             <Text variant="title" numberOfLines={2} style={styles.nameText}>
               {row.businessName}
@@ -74,11 +74,11 @@ export const ClientRowCard = memo(function ClientRowCard({ row, meta, onPress, i
           </View>
           <Badge label={statusLabel(meta, row.status)} tone={STATUS_TONES[row.status]} dot />
         </View>
-        <Text variant="small" color="ink3" numberOfLines={1} style={styles.plan} importantForAccessibility="no-hide-descendants">
+        <Text variant="small" color="ink3" numberOfLines={1} style={styles.plan} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
           {planLine}
         </Text>
 
-        <View style={styles.grid} importantForAccessibility="no-hide-descendants">
+        <View style={styles.grid} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
           <Cell label="Stage" value={stage}>
             {row.blocked ? <Badge label="Blocked" tone="signal" /> : null}
           </Cell>
@@ -90,7 +90,7 @@ export const ClientRowCard = memo(function ClientRowCard({ row, meta, onPress, i
         </View>
 
         {attention.length > 0 ? (
-          <View style={styles.attention} importantForAccessibility="no-hide-descendants">
+          <View style={styles.attention} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
             {attention.map((label) => (
               <Badge key={label} label={label} tone="gold" />
             ))}

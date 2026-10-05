@@ -52,7 +52,7 @@ export function MetricRows({ columns, rows, titleLabel, header = true, inset = l
   return (
     <View testID={testID} style={style}>
       {header ? (
-        <View style={[styles.row, styles.headerRow, { paddingHorizontal: inset }]} importantForAccessibility="no-hide-descendants">
+        <View style={[styles.row, styles.headerRow, { paddingHorizontal: inset }]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
           <Text variant="eyebrow" numberOfLines={1} style={styles.title}>
             {titleLabel ?? ''}
           </Text>

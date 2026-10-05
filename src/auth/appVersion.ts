@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 import type { Me } from '@/api/schemas/session';
 import { env } from '@/lib/env';
 
@@ -44,4 +46,21 @@ export function safeApkUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   const trimmed = url.trim();
   return /^https:\/\/[^\s/]+\.[^\s]+$/i.test(trimmed) ? trimmed : null;
+}
+
+/**
+ * The link "Download" opens: the APK on Android. An iPhone never installs an
+ * APK, so it gets no link and is told who to ask instead.
+ */
+export function updateDownloadUrl(apkUrl: string | null | undefined, platform: string = Platform.OS): string | null {
+  return platform === 'ios' ? null : safeApkUrl(apkUrl);
+}
+
+/** When the server has no download link yet, the update comes from the founder by hand. */
+export const ASK_FOR_APK = 'Ask Shajeed I. for the latest APK.';
+export const ASK_FOR_UPDATE_IOS = 'Ask Shajeed I. for the latest iPhone version.';
+
+/** Who to ask for the update when there is nothing to download, in the words of the platform. */
+export function askForUpdate(platform: string = Platform.OS): string {
+  return platform === 'ios' ? ASK_FOR_UPDATE_IOS : ASK_FOR_APK;
 }

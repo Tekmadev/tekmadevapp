@@ -6,6 +6,7 @@ import { Section } from '@/components/Section';
 import { Skeleton, SkeletonGroup } from '@/components/Skeleton';
 import { Text } from '@/components/Text';
 import { layout, radius, space } from '@/design/tokens';
+import { type } from '@/design/typography';
 
 import { cellStyle, KpiBlock, useSmallKpiColumns } from './AnalyticsKpis';
 import { averageLabel, chartTitle, clampScale, expectedAveragePer, expectedBucket, peakLabel } from './logic';
@@ -18,9 +19,9 @@ const LEGEND_ROW = 44;
 /** Sources usually fill the top 7 plus Other. */
 const LEGEND_WIDTHS: DimensionValue[] = ['46%', '38%', '52%', '34%', '42%', '30%', '44%', '28%'];
 
-/** StatCard parts: the eyebrow row, the number lines (lg 40sp, md 28sp at 1.16) and the small sub line. */
+/** StatCard parts: the eyebrow row, the number lines (lg 40sp, md 28sp display) and the small sub line. */
 const LABEL_ROW = 28;
-const NUMBER_LINE = { lg: 46, md: 32 } as const;
+const NUMBER_LINE = { lg: type.kpi.lineHeight, md: type.number.lineHeight } as const;
 const SUB_LINE = 18;
 
 /**

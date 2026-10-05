@@ -72,7 +72,7 @@ export const SubmissionRowCard = memo(function SubmissionRowCard({ row, onPress,
   return (
     <Animated.View entering={still || index >= STAGGER_MAX ? undefined : enterPull(index)} style={styles.wrap}>
       <Card onPress={() => onPress(row)} accessibilityLabel={rowSpokenLabel(row)} accessibilityHint="Opens the submission">
-        <View importantForAccessibility="no-hide-descendants">
+        <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
           <View style={styles.top}>
             <Text variant="eyebrow" numberOfLines={2} style={styles.tool}>
               {row.toolName}

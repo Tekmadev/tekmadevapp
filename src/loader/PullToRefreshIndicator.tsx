@@ -236,7 +236,7 @@ export const PullToRefreshIndicator = memo(function PullToRefreshIndicator({
   });
 
   return (
-    <View style={{ width: size, height: size }} accessible={false} importantForAccessibility="no-hide-descendants">
+    <View style={{ width: size, height: size }} accessible={false} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
       <MarkCanvas size={size} bleed={BLEED} color={colors.gold} pose={pose} />
     </View>
   );

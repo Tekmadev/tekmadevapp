@@ -1,14 +1,14 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
 import { router, usePathname } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 import { notificationKeys, notificationQuery } from '@/api/endpoints/notifications';
 import { ApiError, errorMessage } from '@/api/errors';
 import type { NotificationItem } from '@/api/schemas/notifications';
 import { useAppLock } from '@/auth/lock/lockStore';
-import { useCapabilities } from '@/auth/permissions';
+import { useCan, useCapabilities } from '@/auth/permissions';
 import { useMe, useSession } from '@/auth/session';
 import { INBOX } from '@/lib/deeplinks';
 import { useIsOnline } from '@/lib/connectivity';
@@ -19,11 +19,12 @@ import { cachedRows } from '@/modules/inbox/cache';
 import { isOpenAction } from '@/modules/inbox/logic';
 import { destinationOf, openLink } from '@/modules/inbox/navigation';
 import { NotificationDetailSheet } from '@/modules/inbox/NotificationDetailSheet';
+import { inboxSummaryQuery } from '@/modules/inbox/queries';
 import { useInboxActions } from '@/modules/inbox/useInboxActions';
 
 import { ensureChannels } from './channels';
 import { installForegroundHandler, installResponseListener, setPushAppLocked } from './foreground';
-import { pushRoute, retriesWhenOnline, rowIdOf, type PushPayload } from './logic';
+import { iconBadgeCount, pushRoute, retriesWhenOnline, rowIdOf, type PushPayload } from './logic';
 import { PushOfferSheet } from './PushOfferSheet';
 import { installPushSignOut, onDevicePushToken, registerThisPhone, resumeRegistration } from './registration';
 import { usePushState, usePushTaps, takeTap } from './store';
@@ -43,6 +44,28 @@ const lockIsUp = (atStart: boolean) => usePrefs.getState().biometricUnlock && (u
 
 /** The app is in front (iOS "inactive" and Android "background" are on their way in or out). */
 const appInFront = () => AppState.currentState !== 'background' && AppState.currentState !== 'inactive';
+
+/**
+ * iOS: the app icon badge follows the bell's unread count (the server's pushes
+ * carry no badge, so nothing else would ever set or clear it), and goes back to
+ * none on sign-out. Reads the summary the bell already polls; never fetches.
+ * Android launchers badge the notifications in the shade themselves.
+ */
+function useIosIconBadge() {
+  const canView = useCan('notifications.view');
+  const unread = useQuery({ ...inboxSummaryQuery(), enabled: false, select: (summary) => summary.unread }).data;
+  const count = iconBadgeCount(unread, canView);
+  useEffect(() => {
+    if (Platform.OS !== 'ios' || count === null) return;
+    Notifications.setBadgeCountAsync(count).catch(() => undefined);
+  }, [count]);
+  useEffect(
+    () => () => {
+      if (Platform.OS === 'ios') Notifications.setBadgeCountAsync(0).catch(() => undefined);
+    },
+    [],
+  );
+}
 
 function useAppLocked(): { locked: boolean; atStart: boolean } {
   const [atStart] = useState(lockedAtStart);
@@ -71,6 +94,7 @@ export function PushHost() {
   const { locked, atStart } = useAppLocked();
   const pending = usePushTaps((s) => s.pending);
   const [detail, setDetail] = useState<{ id: string; open: boolean } | null>(null);
+  useIosIconBadge();
 
   useEffect(() => {
     setPushAppLocked(locked);

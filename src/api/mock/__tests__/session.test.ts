@@ -1,7 +1,8 @@
 import { api, newIdempotencyKey, setAuthBridge } from '@/api/client';
 import { sendTestPush } from '@/api/endpoints/notifications';
-import { getMe, getMeta, registerDevice, unregisterDevice, updateProfile } from '@/api/endpoints/session';
+import { getMe, getMeta, registerDevice, registerPushDevice, unregisterDevice, updateProfile } from '@/api/endpoints/session';
 import { ApiError } from '@/api/errors';
+import { mockDevices } from '@/api/mock/fixtures/notifications';
 import { loaderState } from '@/api/mock/fixtures/settings';
 import { zMeta } from '@/api/schemas/meta';
 import { metaFragment as notificationsMeta } from '@/api/schemas/notifications';
@@ -131,6 +132,22 @@ describe('POST /devices and DELETE /devices/:id', () => {
     const gone = await apiError(unregisterDevice(first.id));
     expect(gone.status).toBe(404);
     await unregisterDevice(a.id);
+  });
+
+  it('names an unnamed phone the way the server does, per platform', async () => {
+    asManager();
+    const iphone = await registerPushDevice(
+      { token: pushToken('maya-iphone'), platform: 'ios', appVersion: '0.4.1', deviceName: '' },
+      newIdempotencyKey(),
+    );
+    expect(mockDevices.find((d) => d.id === iphone.id)?.deviceName).toBe('iPhone');
+    const android = await registerPushDevice(
+      { token: pushToken('maya-android'), platform: 'android', appVersion: '0.4.1', deviceName: '' },
+      newIdempotencyKey(),
+    );
+    expect(mockDevices.find((d) => d.id === android.id)?.deviceName).toBe('Android phone');
+    await unregisterDevice(iphone.id);
+    await unregisterDevice(android.id);
   });
 
   it('never removes a phone that belongs to someone else', async () => {

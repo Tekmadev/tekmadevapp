@@ -16,7 +16,7 @@ export function NotConnectedCard() {
   const { tones } = useTheme();
   return (
     <Card accessibilityLabel={`${TITLE}. ${BODY}`}>
-      <View style={styles.top} importantForAccessibility="no-hide-descendants">
+      <View style={styles.top} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <View style={[styles.icon, { backgroundColor: tones.neutral.bg }]}>
           <Icon icon={Unplug} size={18} color="ink2" />
         </View>

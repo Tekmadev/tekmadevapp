@@ -1,6 +1,6 @@
 import { Sparkles } from 'lucide-react-native';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { Badge } from '@/components/Badge';
@@ -23,6 +23,20 @@ import { PullToRefreshIndicator } from '@/loader/PullToRefreshIndicator';
 import { useLoaderSettings } from '@/loader/settings';
 
 import { Caption, Demo, Labeled, Wrap } from '../kitLayout';
+
+/** The system setting the loader follows, by its name on each platform. */
+const REDUCE_MOTION = Platform.select({
+  ios: {
+    note: 'Follows iPhone Settings, Accessibility, Motion, Reduce Motion, live.',
+    on: 'Reduce Motion is on',
+    off: 'Reduce Motion is off',
+  },
+  default: {
+    note: 'Follows Android Settings, Accessibility, Remove animations, live.',
+    on: 'Remove animations is on',
+    off: 'Remove animations is off',
+  },
+});
 
 export type LoaderDemosProps = {
   /** Drives the TopProgress demo and the Kit screen's own header hairline. */
@@ -54,9 +68,9 @@ export function LoaderDemos({ refetching, onRefetchingChange, onReplaySplash }: 
 
   return (
     <>
-      <Demo title="Reduced motion" note="Follows Android Settings, Accessibility, Remove animations, live.">
+      <Demo title="Reduced motion" note={REDUCE_MOTION.note}>
         <View style={styles.row}>
-          <Badge label={reduceMotion ? 'Remove animations is on' : 'Remove animations is off'} tone={reduceMotion ? 'gold' : 'muted'} dot />
+          <Badge label={reduceMotion ? REDUCE_MOTION.on : REDUCE_MOTION.off} tone={reduceMotion ? 'gold' : 'muted'} dot />
         </View>
         <Text variant="small" color="ink3">
           When it is on, every mark stops spinning and scaling: all four pieces fade together, 1 to 0.4 to 1 over 1.6s. The

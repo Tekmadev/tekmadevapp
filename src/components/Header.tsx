@@ -85,8 +85,9 @@ export function Header({
         {left ? <View style={styles.left}>{left}</View> : null}
         <Animated.View
           style={[styles.titleBox, { paddingLeft: left ? space[1] : layout.gutter }, titleStyle]}
-          // While the large title is visible it is the heading TalkBack reads, not this one.
+          // While the large title is visible it is the heading TalkBack and VoiceOver read, not this one.
           importantForAccessibility={collapse ? 'no-hide-descendants' : 'auto'}
+          accessibilityElementsHidden={Boolean(collapse)}
         >
           {eyebrow ? (
             <Text variant="eyebrow" numberOfLines={1}>

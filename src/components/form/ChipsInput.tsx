@@ -13,10 +13,11 @@ import {
 import { Icon } from '@/components/Icon';
 import { PressableScale } from '@/components/PressableScale';
 import { Text } from '@/components/Text';
+import { caretColors } from '@/design/caret';
 import { haptics } from '@/design/haptics';
 import { useTheme } from '@/design/theme';
 import { radius, space, withAlpha } from '@/design/tokens';
-import { MAX_FONT_SCALE, type } from '@/design/typography';
+import { faceOf, MAX_FONT_SCALE, type } from '@/design/typography';
 
 import { addChips, removeChip, splitChipText } from './chips';
 import { Field } from './Field';
@@ -210,9 +211,7 @@ export const ChipsInput = forwardRef<TextInput, ChipsInputProps>(function ChipsI
                 editable={!disabled}
                 placeholder={floated ? (full ? `Up to ${maxItems} ${plural}` : placeholder) : undefined}
                 placeholderTextColor={colors.ink4}
-                cursorColor={colors.gold}
-                selectionHandleColor={colors.gold}
-                selectionColor={withAlpha(colors.gold, 0.3)}
+                {...caretColors(colors.gold)}
                 underlineColorAndroid="transparent"
                 maxFontSizeMultiplier={MAX_FONT_SCALE}
                 autoCapitalize={autoCapitalize}
@@ -270,8 +269,7 @@ const styles = StyleSheet.create({
     margin: 0,
     paddingVertical: 0,
     paddingHorizontal: 0,
-    fontFamily: type.body.fontFamily,
-    fontWeight: type.body.fontWeight,
+    ...faceOf('body'),
     fontSize: type.body.fontSize,
     includeFontPadding: false,
   },

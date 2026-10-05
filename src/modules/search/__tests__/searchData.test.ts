@@ -81,6 +81,11 @@ describe('searchScreensFor', () => {
     expect(titles).not.toContain('Pricing');
   });
 
+  it('finds App settings by what an iPhone calls its unlock and app switcher (jest runs as iOS)', () => {
+    const settings = searchScreensFor(OWNER).find((s) => s.title === 'App settings');
+    expect(settings?.keywords).toEqual(expect.arrayContaining(['biometric', 'face id', 'touch id', 'app switcher']));
+  });
+
   it('gives nothing when nobody is signed in', () => {
     expect(searchScreensFor({ role: null, features: undefined })).toEqual([]);
   });

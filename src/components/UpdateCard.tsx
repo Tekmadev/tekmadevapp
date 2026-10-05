@@ -2,7 +2,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { ArrowDownToLine, X } from 'lucide-react-native';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { safeApkUrl } from '@/auth/appVersion';
+import { askForUpdate, safeApkUrl, updateDownloadUrl } from '@/auth/appVersion';
 import { useTheme, type Theme } from '@/design/theme';
 import { radius, space } from '@/design/tokens';
 import { env } from '@/lib/env';
@@ -14,8 +14,7 @@ import { Icon } from './Icon';
 import { IconButton } from './IconButton';
 import { Text } from './Text';
 
-/** When the server has no download link yet, the update comes from the founder by hand. */
-export const ASK_FOR_APK = 'Ask Shajeed I. for the latest APK.';
+export { ASK_FOR_APK } from '@/auth/appVersion';
 
 /**
  * Opens the APK link in a Custom Tab tinted like the app; the browser handles
@@ -36,7 +35,7 @@ export function openApkDownload(url: string | null | undefined, colors: Theme['c
 export type UpdateCardProps = {
   /** From GET /me `app.latestVersion`. */
   latestVersion: string;
-  /** From GET /me `app.apkUrl`; null (or not https) shows who to ask instead. */
+  /** From GET /me `app.apkUrl`; null (or not https, or an iPhone) shows who to ask instead. */
   apkUrl: string | null;
   /** Hide it. The caller decides how long for (e.g. until the next version). */
   onDismiss: () => void;
@@ -51,7 +50,7 @@ export type UpdateCardProps = {
  */
 export function UpdateCard({ latestVersion, apkUrl, onDismiss, style, testID }: UpdateCardProps) {
   const { colors } = useTheme();
-  const download = safeApkUrl(apkUrl);
+  const download = updateDownloadUrl(apkUrl);
 
   return (
     <Card style={style} testID={testID}>
@@ -81,7 +80,7 @@ export function UpdateCard({ latestVersion, apkUrl, onDismiss, style, testID }: 
         />
       ) : (
         <Text variant="small" color="ink2" style={styles.ask}>
-          {ASK_FOR_APK}
+          {askForUpdate()}
         </Text>
       )}
     </Card>

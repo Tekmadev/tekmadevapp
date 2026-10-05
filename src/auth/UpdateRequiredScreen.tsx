@@ -8,7 +8,7 @@ import { ApiError, errorMessage } from '@/api/errors';
 import { Button } from '@/components/Button';
 import { PendingButton } from '@/components/PendingButton';
 import { Text } from '@/components/Text';
-import { ASK_FOR_APK, openApkDownload } from '@/components/UpdateCard';
+import { openApkDownload } from '@/components/UpdateCard';
 import { haptics } from '@/design/haptics';
 import { durations, enterPull, springs } from '@/design/motion';
 import { useTheme } from '@/design/theme';
@@ -16,7 +16,7 @@ import { space } from '@/design/tokens';
 import { env } from '@/lib/env';
 import { LogoMark } from '@/loader/LogoMark';
 
-import { isBelowMinVersion, isUpdateAvailable, safeApkUrl } from './appVersion';
+import { askForUpdate, isBelowMinVersion, isUpdateAvailable, updateDownloadUrl } from './appVersion';
 import { session, useMe, useSession } from './session';
 
 export const UPDATE_MESSAGES = {
@@ -50,7 +50,7 @@ export function UpdateRequiredScreen() {
   const me = useMe();
   const [problem, setProblem] = useState<string | null>(null);
 
-  const apkUrl = safeApkUrl(me?.app.apkUrl);
+  const apkUrl = updateDownloadUrl(me?.app.apkUrl);
   const latest = me && isUpdateAvailable(me.app) ? me.app.latestVersion : null;
 
   const checkAgain = async () => {
@@ -121,7 +121,7 @@ export function UpdateRequiredScreen() {
               />
             ) : (
               <Text variant="bodyStrong" color="ink2">
-                {ASK_FOR_APK}
+                {askForUpdate()}
               </Text>
             )}
             <PendingButton

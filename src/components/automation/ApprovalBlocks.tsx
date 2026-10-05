@@ -10,7 +10,7 @@ import { Text, type TextColor } from '@/components/Text';
 import { haptics } from '@/design/haptics';
 import { useTheme, type Theme } from '@/design/theme';
 import { radius, space } from '@/design/tokens';
-import { fonts, type TypeVariant } from '@/design/typography';
+import type { TypeVariant } from '@/design/typography';
 import { notice } from '@/lib/notice';
 
 import { diffWords, type DiffSpan } from './diff';
@@ -66,16 +66,20 @@ function Spans({ spans, variant, color }: SpansProps) {
   return (
     <>
       {spans.map((s, i) => {
+        // Bold and code go through the face props: iOS needs a font file per weight and family.
+        const weight = s.bold ? '700' : undefined;
+        const family = s.code ? 'mono' : undefined;
         const style: TextStyle[] = [];
-        if (s.bold) style.push(styles.bold);
         if (s.italic) style.push(styles.italic);
-        if (s.code) style.push({ fontFamily: fonts.mono, backgroundColor: colors.bg3 });
+        if (s.code) style.push({ backgroundColor: colors.bg3 });
         if (isSafeHref(s.href)) {
           const href = s.href;
           return (
             <Text
               key={i}
               variant={variant}
+              weight={weight}
+              family={family}
               tone="gold"
               accessibilityRole="link"
               style={[...style, styles.linkText]}
@@ -89,7 +93,7 @@ function Spans({ spans, variant, color }: SpansProps) {
           );
         }
         return (
-          <Text key={i} variant={variant} color={color} style={style}>
+          <Text key={i} variant={variant} color={color} weight={weight} family={family} style={style}>
             {s.text}
           </Text>
         );
@@ -297,7 +301,6 @@ function DiffView({ before, after, label }: { before: string; after: string; lab
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  bold: { fontWeight: '700' },
   italic: { fontStyle: 'italic' },
   linkText: { textDecorationLine: 'underline' },
   markdown: { gap: space[3] },

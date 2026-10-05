@@ -134,7 +134,7 @@ export function useThemeCrossFade(ref: RefObject<View | null>): {
   const style = useAnimatedStyle(() => ({ opacity: opacity.get() }));
 
   const overlay = cover && image ? (
-    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]} importantForAccessibility="no-hide-descendants">
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
       <Canvas style={StyleSheet.absoluteFill} androidWarmup>
         <SkiaImage image={image} x={0} y={0} width={size.width} height={size.height} fit="fill" />
       </Canvas>

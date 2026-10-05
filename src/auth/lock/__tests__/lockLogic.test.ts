@@ -1,5 +1,8 @@
 import {
+  BIOMETRIC_OFFER_COPY,
   biometricDescription,
+  biometricOfferCopy,
+  coversContent,
   LOCK_COPY,
   markAreaHeight,
   MARK_GAP,
@@ -43,23 +46,36 @@ describe('shouldLockOnResume', () => {
 
 describe('unlockErrorMessage', () => {
   it('stays quiet when the prompt was dismissed', () => {
-    expect(unlockErrorMessage('user_cancel')).toBeNull();
-    expect(unlockErrorMessage('system_cancel')).toBeNull();
-    expect(unlockErrorMessage('app_cancel')).toBeNull();
+    for (const platform of ['android', 'ios']) {
+      expect(unlockErrorMessage('user_cancel', platform)).toBeNull();
+      expect(unlockErrorMessage('system_cancel', platform)).toBeNull();
+      expect(unlockErrorMessage('app_cancel', platform)).toBeNull();
+    }
   });
 
   it('explains lockout, missing setup and plain failures', () => {
-    expect(unlockErrorMessage('lockout')).toBe(LOCK_COPY.lockout);
-    expect(unlockErrorMessage('not_enrolled')).toBe(LOCK_COPY.unavailable);
-    expect(unlockErrorMessage('passcode_not_set')).toBe(LOCK_COPY.unavailable);
-    expect(unlockErrorMessage('authentication_failed')).toBe(LOCK_COPY.failed);
-    expect(unlockErrorMessage('unknown')).toBe(LOCK_COPY.failed);
+    expect(unlockErrorMessage('lockout', 'android')).toBe(LOCK_COPY.lockout);
+    expect(unlockErrorMessage('not_enrolled', 'android')).toBe(LOCK_COPY.unavailable);
+    expect(unlockErrorMessage('passcode_not_set', 'android')).toBe(LOCK_COPY.unavailable);
+    expect(unlockErrorMessage('authentication_failed', 'android')).toBe(LOCK_COPY.failed);
+    expect(unlockErrorMessage('unknown', 'android')).toBe(LOCK_COPY.failed);
+  });
+
+  it('names Face ID, Touch ID and the passcode on iPhone', () => {
+    expect(unlockErrorMessage('not_enrolled', 'ios')).toBe(LOCK_COPY.unavailableIos);
+    expect(unlockErrorMessage('passcode_not_set', 'ios')).toBe(
+      'This iPhone has no Face ID, Touch ID or passcode set up. Sign out, then sign in with your password.',
+    );
+    expect(unlockErrorMessage('lockout', 'ios')).toBe(LOCK_COPY.lockout);
+    expect(unlockErrorMessage('user_fallback', 'ios')).toBe(LOCK_COPY.failed);
   });
 
   it('turning it on never suggests signing out', () => {
     expect(turnOnErrorMessage('not_available', 'android')).toBe(biometricDescription(NO_UNLOCK_SUPPORT, 'android'));
     expect(turnOnErrorMessage('lockout', 'android')).toBe(LOCK_COPY.lockout);
     expect(turnOnErrorMessage('user_cancel', 'android')).toBeNull();
+    expect(turnOnErrorMessage('not_available', 'ios')).toBe(biometricDescription(NO_UNLOCK_SUPPORT, 'ios'));
+    expect(turnOnErrorMessage('not_available', 'ios')).toBe('Set up a passcode on this iPhone first, then turn this on.');
   });
 });
 
@@ -71,12 +87,77 @@ describe('biometricDescription', () => {
     expect(biometricDescription({ method: 'biometric', fingerprint: true, face: true }, 'android')).toBe(
       'Open the app with your fingerprint or face. Your screen lock works too.',
     );
-    expect(biometricDescription({ method: 'biometric', fingerprint: false, face: true }, 'ios')).toBe(
-      'Open the app with your face. Your passcode works too.',
-    );
     expect(biometricDescription({ method: 'credential', fingerprint: false, face: false }, 'android')).toBe(
       "Open the app with your phone's screen lock.",
     );
+    expect(biometricDescription({ method: 'none', fingerprint: false, face: false }, 'android')).toBe(
+      'Set up a fingerprint or a screen lock on this phone first, then turn this on.',
+    );
+  });
+
+  it('says Face ID, Touch ID and passcode on iPhone', () => {
+    expect(biometricDescription({ method: 'biometric', fingerprint: false, face: true }, 'ios')).toBe(
+      'Open the app with Face ID. Your passcode works too.',
+    );
+    expect(biometricDescription({ method: 'biometric', fingerprint: true, face: false }, 'ios')).toBe(
+      'Open the app with Touch ID. Your passcode works too.',
+    );
+    expect(biometricDescription({ method: 'biometric', fingerprint: false, face: false }, 'ios')).toBe(
+      'Open the app with Face ID or Touch ID. Your passcode works too.',
+    );
+    expect(biometricDescription({ method: 'credential', fingerprint: false, face: true }, 'ios')).toBe(
+      'Open the app with your iPhone passcode.',
+    );
+    expect(biometricDescription({ method: 'none', fingerprint: false, face: true }, 'ios')).toBe(
+      'Set up Face ID or a passcode on this iPhone first, then turn this on.',
+    );
+  });
+});
+
+describe('biometricOfferCopy', () => {
+  it('keeps the brief words on Android', () => {
+    expect(biometricOfferCopy('android', null)).toBe(BIOMETRIC_OFFER_COPY);
+    expect(BIOMETRIC_OFFER_COPY.title).toBe('Unlock with your fingerprint next time?');
+  });
+
+  it('says Face ID on an iPhone with Face ID (and when it cannot tell)', () => {
+    for (const kind of ['Face ID', null] as const) {
+      const copy = biometricOfferCopy('ios', kind);
+      expect(copy.title).toBe('Unlock with Face ID next time?');
+      expect(copy.body).toBe('When you come back to the app, Face ID opens it. You can change this any time in Settings.');
+      expect(copy.turnedOn).toBe('Face ID unlock is on.');
+      expect(copy.failed).toBe('Could not confirm your face. Try again.');
+    }
+  });
+
+  it('says Touch ID on an iPhone with a home button', () => {
+    const copy = biometricOfferCopy('ios', 'Touch ID');
+    expect(copy.title).toBe('Unlock with Touch ID next time?');
+    expect(copy.notEnrolled).toBe('Set up Touch ID in your iPhone settings first, then turn this on in Settings.');
+    expect(copy.failed).toBe('Could not confirm your fingerprint. Try again.');
+    expect(copy.prompt).toBe('Turn on Touch ID unlock');
+  });
+
+  it('never mentions a fingerprint sensor on iPhone', () => {
+    const all = Object.values(biometricOfferCopy('ios', 'Face ID')).join(' ');
+    expect(all).not.toMatch(/fingerprint/i);
+  });
+});
+
+describe('coversContent (iOS app switcher cover)', () => {
+  it('covers in the background, always', () => {
+    expect(coversContent('background', false)).toBe(true);
+    expect(coversContent('background', true)).toBe(true);
+  });
+
+  it('covers while inactive (app switcher, Control Center), but not for our own system prompt', () => {
+    expect(coversContent('inactive', false)).toBe(true);
+    expect(coversContent('inactive', true)).toBe(false);
+  });
+
+  it('shows the app while active or still unknown', () => {
+    expect(coversContent('active', false)).toBe(false);
+    expect(coversContent('unknown', false)).toBe(false);
   });
 });
 

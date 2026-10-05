@@ -4,9 +4,10 @@ import { StyleSheet, TextInput, View, type StyleProp, type TextInputProps, type 
 
 import { Icon } from '@/components/Icon';
 import { PressableScale } from '@/components/PressableScale';
+import { caretColors } from '@/design/caret';
 import { useTheme } from '@/design/theme';
-import { layout, radius, withAlpha } from '@/design/tokens';
-import { MAX_FONT_SCALE, type } from '@/design/typography';
+import { layout, radius } from '@/design/tokens';
+import { faceOf, MAX_FONT_SCALE, type } from '@/design/typography';
 
 import { FieldBox, FieldIconButton, type FieldFill } from './InputChrome';
 
@@ -116,9 +117,7 @@ export const SearchField = forwardRef<TextInput, SearchFieldProps>(function Sear
             editable={!disabled}
             placeholder={placeholder}
             placeholderTextColor={colors.ink4}
-            cursorColor={colors.gold}
-            selectionHandleColor={colors.gold}
-            selectionColor={withAlpha(colors.gold, 0.3)}
+            {...caretColors(colors.gold)}
             underlineColorAndroid="transparent"
             maxFontSizeMultiplier={MAX_FONT_SCALE}
             returnKeyType="search"
@@ -165,8 +164,7 @@ const styles = StyleSheet.create({
     margin: 0,
     paddingHorizontal: 0,
     paddingVertical: 12,
-    fontFamily: type.body.fontFamily,
-    fontWeight: type.body.fontWeight,
+    ...faceOf('body'),
     fontSize: type.body.fontSize,
     includeFontPadding: false,
   },

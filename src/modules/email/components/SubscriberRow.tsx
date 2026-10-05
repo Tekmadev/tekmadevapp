@@ -47,7 +47,7 @@ export const SubscriberRow = memo(function SubscriberRow({ subscriber, meta, now
         accessibilityLabel={spoken}
         accessibilityHint="Opens the subscriber"
       >
-        <View style={styles.row} importantForAccessibility="no-hide-descendants">
+        <View style={styles.row} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
           <View style={styles.texts}>
             <Text variant="body" numberOfLines={1} ellipsizeMode="middle">
               {subscriber.email}

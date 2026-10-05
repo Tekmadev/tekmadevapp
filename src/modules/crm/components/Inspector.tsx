@@ -24,7 +24,7 @@ export function Comparison({ result, now }: { result: CrmInspect; now: Date }) {
   const rows = compareRows(result.site, result.crm, now);
   return (
     <Card padded={false}>
-      <View style={styles.headRow} importantForAccessibility="no-hide-descendants">
+      <View style={styles.headRow} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <Text variant="eyebrow" style={styles.col}>
           This site
         </Text>
@@ -48,13 +48,13 @@ function CompareLine({ row }: { row: CompareRow }) {
   const spoken = `${row.label}. This site: ${row.site}. CRM: ${crmText}.${row.disagree ? ' They disagree.' : ''}`;
   return (
     <View style={styles.line} accessible accessibilityLabel={spoken}>
-      <View style={styles.labelRow} importantForAccessibility="no-hide-descendants">
+      <View style={styles.labelRow} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <Text variant="small" color="ink3">
           {row.label}
         </Text>
         {row.disagree ? <Badge label="disagree" tone="warn" /> : null}
       </View>
-      <View style={styles.values} importantForAccessibility="no-hide-descendants">
+      <View style={styles.values} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <Text variant={row.mono ? 'mono' : 'body'} style={styles.col} selectable>
           {row.site}
         </Text>
@@ -100,7 +100,7 @@ export function ConsentHistory({ events, meta, now }: { events: readonly Consent
           <Fragment key={`${event.at}-${event.event}-${i}`}>
             {i > 0 ? <Divider inset insetEnd /> : null}
             <View style={styles.event} accessible accessibilityLabel={[line.title, line.detail, when].filter(Boolean).join('. ')}>
-              <View style={styles.eventTop} importantForAccessibility="no-hide-descendants">
+              <View style={styles.eventTop} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
                 <Text variant="bodyStrong" style={styles.flex}>
                   {line.title}
                 </Text>

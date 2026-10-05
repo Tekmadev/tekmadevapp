@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
-import { AppState, Modal, StyleSheet } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
+import { use, useEffect, useLayoutEffect, useState } from 'react';
+import { AppState, Keyboard, Modal, Platform, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { useSession } from '@/auth/session';
+import { OverlayRootContext } from '@/components/sheet/context';
 import { usePrefs } from '@/lib/prefs';
 
 import { LockScreen } from './LockScreen';
@@ -22,9 +24,14 @@ function lockedAtStart(): boolean {
  * whenever the app returns after the chosen "Lock after" delay, until the
  * person unlocks or signs out.
  *
- * It is a Modal (its own window), so it sits above sheets, toasts and the boot
- * splash, TalkBack cannot reach what is under it, and Android back cannot
+ * Android: a Modal (its own window), so it sits above sheets, toasts and the
+ * boot splash, TalkBack cannot reach what is under it, and Android back cannot
  * dismiss it (`onRequestClose` does nothing; Home still leaves the app).
+ *
+ * iOS: the top layer of the overlay root instead (LockLayer). An iOS Modal is a
+ * presented view controller, and UIKit refuses to present one while another is
+ * up (the image viewer, the in-app browser): the lock would silently not show.
+ * There is no back button or edge swipe that reaches under it either.
  */
 export function LockGate() {
   const [atStart] = useState(lockedAtStart);
@@ -40,6 +47,11 @@ export function LockGate() {
     };
   }, []);
 
+  if (Platform.OS === 'ios') return <LockLayer locked={locked} />;
+  return <LockModal locked={locked} />;
+}
+
+function LockModal({ locked }: { locked: boolean }) {
   return (
     <Modal
       visible={locked}
@@ -57,6 +69,25 @@ export function LockGate() {
       </GestureHandlerRootView>
     </Modal>
   );
+}
+
+/**
+ * iOS: the lock drawn above every sheet and toast in the app's own view, in the
+ * same commit as the decision to lock (a layout effect), so no frame shows the
+ * app. The keyboard goes down and an open in-app browser is closed, because
+ * presented controllers would sit above it. The image viewer hides itself while
+ * locked (ImageViewer).
+ */
+function LockLayer({ locked }: { locked: boolean }) {
+  const root = use(OverlayRootContext);
+  useLayoutEffect(() => {
+    if (!locked || !root) return undefined;
+    Keyboard.dismiss();
+    WebBrowser.dismissBrowser().catch(() => undefined);
+    return root.showLayer({ key: 'app-lock', order: 1, modal: true, node: <LockScreen /> });
+  }, [locked, root]);
+  // Outside an overlay root (never in the app) the Modal is the only way to cover the screen.
+  return root ? null : <LockModal locked={locked} />;
 }
 
 /** Android back on the lock does nothing: only unlocking or signing out removes it. */

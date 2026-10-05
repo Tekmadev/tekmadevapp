@@ -61,7 +61,7 @@ function SyncStatus({ lastSync, now }: { lastSync: AdsLastSync | null; now: Date
     const spoken = [line.label, line.when, line.error].filter(Boolean).join(', ');
     return (
       <View style={styles.status} accessible accessibilityLabel={spoken} accessibilityLiveRegion="polite">
-        <View style={styles.row} importantForAccessibility="no-hide-descendants">
+        <View style={styles.row} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
           <Icon icon={TriangleAlert} size={18} tone="signal" />
           <Text variant="bodyStrong" tone="signal" style={styles.label}>
             {line.label}
@@ -83,7 +83,7 @@ function SyncStatus({ lastSync, now }: { lastSync: AdsLastSync | null; now: Date
 
   return (
     <View style={styles.status} accessible accessibilityLabel={line.label} accessibilityLiveRegion="polite">
-      <View style={styles.row} importantForAccessibility="no-hide-descendants">
+      <View style={styles.row} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <Icon icon={line.kind === 'ok' ? CircleCheck : Clock} size={18} tone={line.kind === 'ok' ? 'ok' : 'muted'} />
         <Text variant="bodyStrong" color={line.kind === 'ok' ? 'ink' : 'ink3'} style={styles.label}>
           {line.label}

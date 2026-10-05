@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 import { ApiError, MESSAGES } from '@/api/errors';
 
 /**
@@ -19,8 +21,22 @@ export type MediaErrorKind =
   /** This build has no Supabase URL or publishable key. */
   | 'not_configured';
 
+/** Where picked photos come from, in the words of the platform: the gallery on Android, Photos on iPhone. */
+export const PICK_COPY = Platform.select({
+  ios: {
+    library: 'Choose from Photos',
+    hint: 'Choose from your photos or take a photo.',
+    cameraDenied: 'Camera access is off. Allow it in Settings, or choose from your photos.',
+  },
+  default: {
+    library: 'Choose from gallery',
+    hint: 'Choose from the gallery or take a photo.',
+    cameraDenied: 'Camera access is off. Allow it in Settings, or choose from the gallery.',
+  },
+});
+
 export const MEDIA_MESSAGES = {
-  cameraDenied: 'Camera access is off. Allow it in Settings, or choose from the gallery.',
+  cameraDenied: PICK_COPY.cameraDenied,
   gallery: 'Could not open your photos. Try again.',
   camera: 'Could not open the camera. Try again.',
   unreadable: 'That image could not be read. Try another one.',

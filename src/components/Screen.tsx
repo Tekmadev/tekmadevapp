@@ -76,8 +76,11 @@ export function Screen({
     scrollEventThrottle: 16,
     keyboardShouldPersistTaps: 'handled' as const,
     showsVerticalScrollIndicator: false,
-    // The pull replaces Android's stretch at the top; both at once would fight.
+    // The pull replaces Android's stretch and iOS's bounce; both at once would fight.
     overScrollMode: chrome.pull.enabled ? ('never' as const) : ('auto' as const),
+    bounces: !chrome.pull.enabled,
+    // iOS: content under the keyboard can still be scrolled up (Android resizes the window instead).
+    automaticallyAdjustKeyboardInsets: !keyboardAware,
     stickyHeaderIndices: stickyHeaderIndices?.map((i) => i + OWN_CHILDREN),
     contentContainerStyle: [
       padded ? styles.gutter : null,

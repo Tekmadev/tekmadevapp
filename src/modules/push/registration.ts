@@ -13,12 +13,15 @@ import { readJSON, storage, StorageKeys, writeJSON } from '@/lib/storage';
 
 import {
   deviceLabel,
+  IOS_TOKEN_TIMEOUT_MS,
   needsRegistration,
   parseRegistration,
   registrationIsCurrent,
   registrationSignature,
   SETUP_MESSAGES,
   tokenErrorMessage,
+  tokenTimeoutError,
+  withTimeout,
   type PushRegistration,
   type SetupError,
 } from './logic';
@@ -94,6 +97,18 @@ function fail(error: SetupError) {
   usePushState.setState({ status: 'failed', error });
 }
 
+/**
+ * The native push token (FCM on Android, APNs on iOS). On iOS it gives up after
+ * a while: Apple may never answer (the simulator, a build without the push
+ * entitlement), which then fails with the plain "could not get a push token"
+ * like any other refusal. A token that arrives later still registers, through
+ * the token listener (onDevicePushToken).
+ */
+function nativeToken(): Promise<Notifications.DevicePushToken> {
+  const request = Notifications.getDevicePushTokenAsync();
+  return Platform.OS === 'ios' ? withTimeout(request, IOS_TOKEN_TIMEOUT_MS, tokenTimeoutError) : request;
+}
+
 const signedInUserId = (): string | null => {
   const state = useSession.getState();
   return state.status === 'signedIn' ? (state.me?.user.id ?? null) : null;
@@ -123,7 +138,7 @@ async function register(options: RegisterOptions): Promise<void> {
   usePushState.setState({ status: 'registering', error: null });
   let token: string;
   try {
-    const device = options.devicePushToken ?? (await Notifications.getDevicePushTokenAsync());
+    const device = options.devicePushToken ?? (await nativeToken());
     lastDeviceToken = typeof device.data === 'string' ? device.data : null;
     const expo = await Notifications.getExpoPushTokenAsync({ projectId: project, devicePushToken: device });
     token = expo.data;

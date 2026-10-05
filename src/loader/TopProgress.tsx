@@ -89,6 +89,7 @@ export const TopProgress = memo(function TopProgress({ active, style }: TopProgr
       pointerEvents="none"
       accessible={false}
       importantForAccessibility="no-hide-descendants"
+      accessibilityElementsHidden
       style={[styles.bar, { backgroundColor: colors.gold }, style, barStyle]}
     />
   );

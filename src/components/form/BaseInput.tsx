@@ -14,8 +14,8 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { PressableScale } from '@/components/PressableScale';
 import { Text } from '@/components/Text';
 import { useTheme } from '@/design/theme';
-import { withAlpha } from '@/design/tokens';
-import { fonts, MAX_FONT_SCALE, type } from '@/design/typography';
+import { caretColors } from '@/design/caret';
+import { faceOf, fontFace, MAX_FONT_SCALE, type } from '@/design/typography';
 
 import { Field } from './Field';
 import {
@@ -177,7 +177,7 @@ export const BaseInput = forwardRef<TextInput, InternalProps>(function BaseInput
             <View style={styles.valueRow}>
               {prefix ? (
                 <Animated.View style={[styles.adornment, adornmentAlign, adornment]}>
-                  <Text variant="body" color="ink3" style={monospace ? styles.mono : null}>
+                  <Text variant="body" color="ink3" family={monospace ? 'mono' : undefined}>
                     {prefix}
                   </Text>
                 </Animated.View>
@@ -201,9 +201,7 @@ export const BaseInput = forwardRef<TextInput, InternalProps>(function BaseInput
                 maxLength={maxLength}
                 placeholder={!hasLabel || floated ? placeholder : undefined}
                 placeholderTextColor={colors.ink4}
-                cursorColor={colors.gold}
-                selectionHandleColor={colors.gold}
-                selectionColor={withAlpha(colors.gold, 0.3)}
+                {...caretColors(colors.gold)}
                 underlineColorAndroid="transparent"
                 maxFontSizeMultiplier={MAX_FONT_SCALE}
                 textAlignVertical={multiline ? 'top' : 'center'}
@@ -261,8 +259,7 @@ const styles = StyleSheet.create({
     flex: 1,
     margin: 0,
     paddingHorizontal: 0,
-    fontFamily: type.body.fontFamily,
-    fontWeight: type.body.fontWeight,
+    ...faceOf('body'),
     fontSize: type.body.fontSize,
     includeFontPadding: false,
   },
@@ -270,9 +267,8 @@ const styles = StyleSheet.create({
   multiline: {
     lineHeight: type.body.lineHeight,
   },
-  mono: {
-    fontFamily: fonts.mono,
-  },
+  // Geist Mono at the body weight (400).
+  mono: fontFace('mono'),
   adornment: {
     pointerEvents: 'none',
   },

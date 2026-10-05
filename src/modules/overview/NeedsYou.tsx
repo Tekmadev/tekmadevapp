@@ -76,7 +76,7 @@ function AttentionCardView({ card, size, countFromZero }: { card: AttentionCard;
       // Gold accent: every card shown has something waiting.
       style={[size, { borderColor: withAlpha(colors.gold, 0.4) }]}
     >
-      <View importantForAccessibility="no-hide-descendants">
+      <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <View style={styles.cardTop}>
           <View style={[styles.iconCircle, { backgroundColor: colors.goldTint }]}>
             <Icon icon={ICONS[card.key]} size={16} color="gold" />
@@ -98,7 +98,7 @@ function AllClear({ minHeight }: { minHeight: number }) {
   const { colors } = useTheme();
   return (
     <Card style={[styles.clear, { minHeight }]} accessibilityLabel="Nothing is waiting on you.">
-      <View style={styles.clearInner} importantForAccessibility="no-hide-descendants">
+      <View style={styles.clearInner} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <View style={[styles.checkCircle, { backgroundColor: colors.goldTint }]}>
           <Icon icon={CircleCheck} size={24} color="goldMid" strokeWidth={1.75} />
         </View>

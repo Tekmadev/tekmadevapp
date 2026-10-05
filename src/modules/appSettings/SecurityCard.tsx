@@ -15,15 +15,17 @@ import { space } from '@/design/tokens';
 import { notice } from '@/lib/notice';
 import { usePrefs } from '@/lib/prefs';
 
-import { LOCK_AFTER_OPTIONS, SETTINGS_COPY } from './logic';
+import { hideInRecentsCopy, LOCK_AFTER_OPTIONS, SETTINGS_COPY } from './logic';
 import { SettingsGroup } from './SettingsGroup';
 
 /** Shown (disabled) while the first check of the phone's unlock methods runs, so the row does not jump. */
 const CHECKING = biometricDescription({ method: 'biometric', fingerprint: false, face: false }, Platform.OS);
+const HIDE_CONTENT = hideInRecentsCopy(Platform.OS);
 
 /**
  * Security (brief 8.18, section 13 phase 6): biometric unlock, how soon it
- * locks again, and "Hide content in the recent apps screen". Biometric unlock
+ * locks again, and "Hide content in the recent apps screen" ("in the app
+ * switcher" on iPhone). Biometric unlock
  * is only offered when the phone has a biometric or a screen lock set up, and
  * turning it on asks for one successful unlock first, so nobody locks
  * themselves out. Everything here is local, so it works offline.
@@ -101,8 +103,8 @@ export function SecurityCard({ index }: { index: number }) {
       ) : null}
       <Divider />
       <SwitchRow
-        label={SETTINGS_COPY.hideInRecents}
-        description={Platform.OS === 'ios' ? SETTINGS_COPY.hideInRecentsIos : SETTINGS_COPY.hideInRecentsAndroid}
+        label={HIDE_CONTENT.label}
+        description={HIDE_CONTENT.description}
         value={hideInRecents}
         onValueChange={(next) => usePrefs.getState().setHideInRecents(next)}
         testID="settings-hide-in-recents"
