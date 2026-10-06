@@ -201,7 +201,8 @@ function TeamBody() {
       {adding && mayAdd ? <AddTeamMemberSheet roles={addableRoles(mayMakeOwners)} onClose={() => setAdding(false)} /> : null}
       {openMember ? (
         <TeamMemberSheet
-          key={openMember.email}
+          // Keys differ from the RoleSheet's: siblings with the same key make React drop one of the two sheets.
+          key={`member:${openMember.email}`}
           member={openMember}
           myEmail={myEmail}
           mayRemove={mayRemove}
@@ -213,7 +214,7 @@ function TeamBody() {
         />
       ) : null}
       {roleTarget && roleOptions.length > 0 ? (
-        <RoleSheet key={roleTarget.email} member={roleTarget} roles={roleOptions} onClose={() => setReroling(null)} />
+        <RoleSheet key={`role:${roleTarget.email}`} member={roleTarget} roles={roleOptions} onClose={() => setReroling(null)} />
       ) : null}
       <ConfirmSheet
         visible={pauseTarget !== null}
