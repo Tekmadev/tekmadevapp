@@ -202,6 +202,15 @@ describe('the form', () => {
     expect(demoFormHasText({ ...form, offer: 'Drains' }, { businessName: 'Acme Plumbing', area: 'Hamilton' })).toBe(true);
   });
 
+  it('cuts a long prefill to the limits (a lead business may be 200 characters)', () => {
+    const long = 'B'.repeat(150);
+    const form = emptyDemoForm({ businessName: long, area: 'A'.repeat(130) });
+    expect(form.businessName).toHaveLength(120);
+    expect(form.area).toHaveLength(120);
+    expect(demoFormErrors({ ...form, businessType: 'Cafe', offer: 'Coffee' })).toEqual({});
+    expect(demoFormHasText(form, { businessName: long, area: 'A'.repeat(130) })).toBe(false);
+  });
+
   it('marks the four required fields and the limits, with the server keys and words', () => {
     expect(demoFormErrors(emptyDemoForm())).toEqual({
       businessName: 'Enter the business name.',

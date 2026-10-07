@@ -51,11 +51,15 @@ const tooLong = (limit: number) => `Keep this to ${formatCount(limit)} character
 
 export type DemoPrefill = { businessName?: string; area?: string };
 
+/**
+ * A fresh form with what is known filled in, cut to the form's limits (a lead's
+ * business may be 200 characters, a demo's 120), like the website's prefill.
+ */
 export function emptyDemoForm(prefill: DemoPrefill = {}): DemoForm {
   return {
-    businessName: prefill.businessName?.trim() ?? '',
+    businessName: (prefill.businessName?.trim() ?? '').slice(0, DEMO_LIMITS.businessName).trim(),
     businessType: '',
-    area: prefill.area?.trim() ?? '',
+    area: (prefill.area?.trim() ?? '').slice(0, DEMO_LIMITS.area).trim(),
     offer: '',
     website: '',
     brand: '',

@@ -5,7 +5,9 @@ import { StyleSheet, View } from 'react-native';
 import { createLead } from '@/api/endpoints/leads';
 import { ApiError, fieldErrors } from '@/api/errors';
 import type { Lead, LeadNeed, LeadsMeta } from '@/api/schemas/leads';
+import { useCan } from '@/auth/permissions';
 import { Select } from '@/components/form/Select';
+import { SwitchRow } from '@/components/form/Switch';
 import { TextArea } from '@/components/form/TextArea';
 import { TextField } from '@/components/form/TextField';
 import { PendingButton } from '@/components/PendingButton';
@@ -27,8 +29,8 @@ const LINKED: Partial<Record<keyof AddLeadForm, string>> = { business: 'name', p
 export type AddLeadSheetProps = {
   meta: LeadsMeta | undefined;
   onClose: () => void;
-  /** The lead the server created (the caller opens it). */
-  onAdded: (lead: Lead) => void;
+  /** The lead the server created: the caller opens it, or the demo request for it when `wantsDemo`. */
+  onAdded: (lead: Lead, options: { wantsDemo: boolean }) => void;
   /** "That email is already a lead": find that lead in the list instead. */
   onFindExisting: (email: string) => void;
 };
@@ -40,12 +42,19 @@ export type AddLeadSheetProps = {
  * whoever adds it. Waits for the server and sends an Idempotency-Key, so a
  * retry never adds the lead twice. Mounted only while open: each opening is a
  * fresh form and a fresh intent.
+ *
+ * "They want a demo" (off by default, for people with `demos.request`): after
+ * the lead is added, "Request a demo" opens for it instead of the lead, like
+ * "Client wants a demo" on New client. Not part of the intent: the same lead
+ * sent again keeps its key whether the switch is on or off.
  */
 export function AddLeadSheet({ meta, onClose, onAdded, onFindExisting }: AddLeadSheetProps) {
   const queryClient = useQueryClient();
   const { keyFor } = useIntentKey();
   const [form, setForm] = useState<AddLeadForm>(EMPTY_ADD_LEAD);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const canRequestDemo = useCan('demos.request');
+  const [wantsDemo, setWantsDemo] = useState(false);
 
   const set = <K extends keyof AddLeadForm>(key: K, value: AddLeadForm[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
@@ -71,7 +80,7 @@ export function AddLeadSheet({ meta, onClose, onAdded, onFindExisting }: AddLead
     refreshAfterLeadWrite(queryClient, { overview: true });
     haptics.success();
     notice.ok('Lead added.');
-    onAdded(lead);
+    onAdded(lead, { wantsDemo: wantsDemo && canRequestDemo });
   };
 
   const onError = (error: unknown) => {
@@ -176,6 +185,14 @@ export function AddLeadSheet({ meta, onClose, onAdded, onFindExisting }: AddLead
           maxLength={LIMITS.message}
           showCount={false}
         />
+        {canRequestDemo ? (
+          <SwitchRow
+            label="They want a demo"
+            description="After the lead is added, the demo request opens so you can add what they want to see."
+            value={wantsDemo}
+            onValueChange={setWantsDemo}
+          />
+        ) : null}
       </View>
     </Sheet>
   );

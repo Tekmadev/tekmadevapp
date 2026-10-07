@@ -158,8 +158,14 @@ export function LeadsSegment({ chrome, params }: SegmentProps) {
     if (params.action) router.setParams({ action: undefined });
   };
   // Clear the one-shot action on this (still focused) route first, then open the new lead.
-  const onAdded = (lead: Lead) => {
+  const onAdded = (lead: Lead, { wantsDemo }: { wantsDemo: boolean }) => {
     closeAdd();
+    if (wantsDemo) {
+      // "They want a demo": the demo request for the new lead, like New client's switch.
+      const business = lead.business?.trim();
+      router.push({ pathname: '/demos/new', params: business ? { leadId: lead.id, businessName: business } : { leadId: lead.id } });
+      return;
+    }
     router.push({ pathname: '/leads/[id]', params: { id: lead.id } });
   };
   // "That email is already a lead": search for it, every other filter off.
