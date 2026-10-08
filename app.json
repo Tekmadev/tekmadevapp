@@ -2,7 +2,7 @@
   "expo": {
     "name": "Tekmadev Admin",
     "slug": "tekmadev-admin",
-    "version": "0.5.6",
+    "version": "0.5.7",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "tekmadev-admin",
@@ -14,7 +14,7 @@
     ],
     "android": {
       "package": "com.tekmadev.admin",
-      "versionCode": 12,
+      "versionCode": 13,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-foreground.png",
         "monochromeImage": "./assets/images/adaptive-monochrome.png",
@@ -23,7 +23,9 @@
       "predictiveBackGestureEnabled": true,
       "softwareKeyboardLayoutMode": "resize",
       "allowBackup": false,
-      "permissions": ["android.permission.REQUEST_INSTALL_PACKAGES"],
+      "permissions": [
+        "android.permission.REQUEST_INSTALL_PACKAGES"
+      ],
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.SYSTEM_ALERT_WINDOW",
@@ -38,7 +40,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.tekmadev.admin",
-      "buildNumber": "12",
+      "buildNumber": "13",
       "supportsTablet": false,
       "config": {
         "usesNonExemptEncryption": false
