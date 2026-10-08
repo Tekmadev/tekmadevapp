@@ -2,6 +2,7 @@ import { api, newIdempotencyKey, setAuthBridge } from '@/api/client';
 import { sendTestPush } from '@/api/endpoints/notifications';
 import { getMe, getMeta, registerDevice, registerPushDevice, unregisterDevice, updateProfile } from '@/api/endpoints/session';
 import { ApiError } from '@/api/errors';
+import { useMockControls } from '@/api/mock/controls';
 import { mockDevices } from '@/api/mock/fixtures/notifications';
 import { loaderState } from '@/api/mock/fixtures/settings';
 import { zMeta } from '@/api/schemas/meta';
@@ -51,6 +52,19 @@ describe('GET /me', () => {
     expect(me.loader).toEqual(loaderState.current);
     expect(me.testModeConfigured).toBe(true);
     expect(me.app).toEqual({ latestVersion: '0.1.0', minVersion: '0.1.0', apkUrl: null });
+  });
+
+  it('passes the minimum version gate and reports it, while other calls answer 426', async () => {
+    asOwner();
+    useMockControls.setState({ minVersion: '99.0.0' });
+    try {
+      const me = await getMe();
+      expect(me.app.minVersion).toBe('99.0.0');
+      expect(me.app.latestVersion).toBe('99.0.0');
+      await expect(getMeta()).rejects.toMatchObject({ status: 426 });
+    } finally {
+      useMockControls.setState({ minVersion: null });
+    }
   });
 
   it('describes a manager', async () => {

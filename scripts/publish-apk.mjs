@@ -13,12 +13,20 @@
 // Needs .env.release.local (gitignored) with SUPABASE_URL and
 // SUPABASE_SERVICE_ROLE_KEY (the server key). Without it, nothing is
 // published and the build goes on. Never prints the key.
-import { readFileSync, existsSync, statSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
 const BUCKET = 'app-releases';
 const OBJECT_PATH = 'android/tekmadev-admin.apk';
 const MAX_BYTES = 50 * 1024 * 1024; // the free plan's largest upload
+/**
+ * SHA-256 of Tekmadev's release certificate (CN=Tekmadev Innovation Inc.,
+ * docs/release-signing.md). Public, not a secret. Phones only accept updates
+ * signed with it, so an APK signed with anything else (the shared debug key
+ * when credentials/ is missing) is never published.
+ */
+const RELEASE_CERT_SHA256 = '412dde2c988d58804a11b09c4b919fdb70112b06e83aa9ec6a8f6339724b9bda';
 
 const [apkFile, version] = process.argv.slice(2);
 
@@ -41,6 +49,26 @@ function readEnvFile(file) {
   return out;
 }
 
+/** The newest build-tools apksigner in the Android SDK, or null. */
+function findApksigner() {
+  const sdk = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT;
+  if (!sdk) return null;
+  const dir = join(sdk, 'build-tools');
+  if (!existsSync(dir)) return null;
+  const versions = readdirSync(dir)
+    .filter((v) => existsSync(join(dir, v, 'apksigner')))
+    .sort((a, b) => compareVersions(b, a));
+  return versions.length ? join(dir, versions[0], 'apksigner') : null;
+}
+
+/** The SHA-256 of every certificate the APK is signed with (lowercase hex). */
+function signerDigests(apk) {
+  const apksigner = findApksigner();
+  if (!apksigner) throw new Error('apksigner not found (set ANDROID_HOME), so the signing key cannot be checked');
+  const out = execFileSync(apksigner, ['verify', '--print-certs', apk], { encoding: 'utf8' });
+  return [...out.matchAll(/certificate SHA-256 digest:\s*([0-9a-f]{64})/gi)].map((m) => m[1].toLowerCase());
+}
+
 /** "0.10.1" is newer than "0.9.9". */
 function compareVersions(a, b) {
   const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0);
@@ -61,6 +89,17 @@ const env = readEnvFile(envFile);
 const url = (env.SUPABASE_URL ?? '').replace(/\/+$/, '');
 const key = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY || '';
 if (!/^https:\/\/[^\s/]+$/.test(url) || !key) done('PUBLISH_SKIPPED (.env.release.local needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)');
+
+// Only an APK signed with Tekmadev's release key, and nothing else, is ever offered to phones.
+let digests;
+try {
+  digests = signerDigests(apkFile);
+} catch (err) {
+  done(`PUBLISH_FAILED ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`, 1);
+}
+if (digests.length !== 1 || digests[0] !== RELEASE_CERT_SHA256) {
+  done('PUBLISH_FAILED this APK is not signed with the Tekmadev release key (restore credentials/, see docs/release-signing.md); phones would refuse it', 1);
+}
 
 const size = statSync(apkFile).size;
 if (size > MAX_BYTES) {

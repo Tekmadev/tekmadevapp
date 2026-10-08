@@ -48,6 +48,8 @@ echo "APK_READY $OUT"
 # fails the build: the APK is still in dist/.
 if [ "${NO_PUBLISH:-}" = "1" ]; then
   echo "PUBLISH_SKIPPED (NO_PUBLISH=1)"
+elif [ ! -f "$RELEASE_KEY" ]; then
+  echo "PUBLISH_SKIPPED (signed with the debug key: phones on Tekmadev's key would refuse it)"
 else
   node scripts/publish-apk.mjs "$OUT" "$VERSION" || echo "PUBLISH_FAILED: the APK is still in $OUT"
 fi

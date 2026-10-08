@@ -131,7 +131,9 @@ export const mockTransport: Transport = async (request) => {
     await sleep((min + Math.random() * (max - min)) * controls.latencyScale, request.signal);
   }
 
-  if (controls.minVersion && compareVersions(request.headers['X-App-Version'] ?? '0.0.0', controls.minVersion) < 0) {
+  // Like the server: GET /me passes the gate, so a too-old app still learns the versions and gets a fresh download link.
+  const versionGated = !(request.method === 'GET' && request.path === '/me');
+  if (versionGated && controls.minVersion && compareVersions(request.headers['X-App-Version'] ?? '0.0.0', controls.minVersion) < 0) {
     return fail(426, 'upgrade_required', 'This version of the app is too old. Update to keep going.');
   }
 

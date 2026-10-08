@@ -1,6 +1,7 @@
 import type { Capability } from '@/auth/capabilities';
 
 import type { Me, SearchResultType } from '../../schemas/session';
+import { useMockControls } from '../controls';
 import { metaFixture } from '../fixtures/meta';
 import { inboxStateFor, mockDevices } from '../fixtures/notifications';
 import { searchFixtures } from '../fixtures/overview';
@@ -8,6 +9,7 @@ import { loaderState } from '../fixtures/settings';
 import { MOCK_ACCOUNTS } from '../fixtures/staff';
 import { capabilitiesFor, mockCan } from '../permissions';
 import { fail, mockId, notFound, nowIso, ok, str, type MockRoute, type MockStaff } from '../router';
+import { compareVersions } from '@/auth/appVersion';
 import { env } from '@/lib/env';
 
 /**
@@ -64,6 +66,10 @@ export const routes: MockRoute[] = [
     handler: ({ user }) => {
       // Like the server: the first /me sets up this user's inbox read state.
       inboxStateFor(user.id, user.role);
+      // The dev panel's minimum version shows here too (GET /me passes the gate), and latest is never below it.
+      const minVersion = useMockControls.getState().minVersion ?? '0.1.0';
+      const current = env.appVersion === '0.0.0' ? '0.1.0' : env.appVersion;
+      const latestVersion = compareVersions(current, minVersion) < 0 ? minVersion : current;
       const me: Me = {
         user: { id: user.id, email: user.email, name: staffName(user) },
         role: user.role,
@@ -74,7 +80,7 @@ export const routes: MockRoute[] = [
         timezone: 'America/Toronto',
         loader: { ...loaderState.current },
         testModeConfigured: true,
-        app: { latestVersion: env.appVersion === '0.0.0' ? '0.1.0' : env.appVersion, minVersion: '0.1.0', apkUrl: null },
+        app: { latestVersion, minVersion, apkUrl: null },
       };
       return ok(me);
     },
