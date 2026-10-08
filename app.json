@@ -2,7 +2,7 @@
   "expo": {
     "name": "Tekmadev Admin",
     "slug": "tekmadev-admin",
-    "version": "0.5.4",
+    "version": "0.5.5",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "tekmadev-admin",
@@ -14,7 +14,7 @@
     ],
     "android": {
       "package": "com.tekmadev.admin",
-      "versionCode": 10,
+      "versionCode": 11,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-foreground.png",
         "monochromeImage": "./assets/images/adaptive-monochrome.png",
@@ -37,7 +37,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.tekmadev.admin",
-      "buildNumber": "10",
+      "buildNumber": "11",
       "supportsTablet": false,
       "config": {
         "usesNonExemptEncryption": false
