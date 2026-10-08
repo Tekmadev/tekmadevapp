@@ -47,6 +47,7 @@ example
 .env.*
 !.env.example
 !.env.sentry.local.example
+!.env.release.local.example
 # Sentry upload token for builds (docs/release-signing.md)
 .env.sentry.local
 

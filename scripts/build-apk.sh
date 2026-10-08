@@ -3,6 +3,7 @@
 #   scripts/build-apk.sh minor|major|launch   (minor: 0.2.0 -> 0.2.1, major: 0.2.1 -> 0.3.0)
 # Needs Node, the Android SDK and JDK 17 on PATH. Output: dist/tekmadev-admin-<version>.apk
 # Installs it on a connected phone when adb sees one (NO_INSTALL=1 builds only).
+# Publishes it for in-app updates when .env.release.local is set up (NO_PUBLISH=1 skips that).
 #
 # Signing: Tekmadev's own key from credentials/android/ (docs/release-signing.md);
 # without it the APK is signed with the shared debug key and a warning is printed.
@@ -41,6 +42,15 @@ mkdir -p dist
 OUT="dist/tekmadev-admin-$VERSION.apk"
 cp android/app/build/outputs/apk/release/app-release.apk "$OUT"
 echo "APK_READY $OUT"
+
+# In-app updates: upload the APK and tell the server the new version
+# (scripts/publish-apk.mjs, needs .env.release.local). A failed publish never
+# fails the build: the APK is still in dist/.
+if [ "${NO_PUBLISH:-}" = "1" ]; then
+  echo "PUBLISH_SKIPPED (NO_PUBLISH=1)"
+else
+  node scripts/publish-apk.mjs "$OUT" "$VERSION" || echo "PUBLISH_FAILED: the APK is still in $OUT"
+fi
 
 if [ "${NO_INSTALL:-}" = "1" ]; then
   echo "INSTALL_SKIPPED (NO_INSTALL=1)"

@@ -8,7 +8,7 @@ import { ApiError, errorMessage } from '@/api/errors';
 import { Button } from '@/components/Button';
 import { PendingButton } from '@/components/PendingButton';
 import { Text } from '@/components/Text';
-import { openApkDownload } from '@/components/UpdateCard';
+import { downloadLatestApk } from '@/components/UpdateCard';
 import { haptics } from '@/design/haptics';
 import { durations, enterPull, springs } from '@/design/motion';
 import { useTheme } from '@/design/theme';
@@ -117,7 +117,7 @@ export function UpdateRequiredScreen() {
                 label="Download the update"
                 icon={ArrowDownToLine}
                 fullWidth
-                onPress={() => openApkDownload(apkUrl, colors)}
+                onPress={() => downloadLatestApk(apkUrl, colors)}
               />
             ) : (
               <Text variant="bodyStrong" color="ink2">

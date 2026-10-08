@@ -3,6 +3,7 @@ import { ArrowDownToLine, X } from 'lucide-react-native';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { askForUpdate, safeApkUrl, updateDownloadUrl } from '@/auth/appVersion';
+import { session } from '@/auth/session';
 import { useTheme, type Theme } from '@/design/theme';
 import { radius, space } from '@/design/tokens';
 import { env } from '@/lib/env';
@@ -30,6 +31,23 @@ export function openApkDownload(url: string | null | undefined, colors: Theme['c
     showTitle: true,
   }).catch(() => notice.err('Could not open the download link.'));
   return true;
+}
+
+/**
+ * "Download": the server's APK link is signed and stops working after a few
+ * hours, and the card may have been on screen longer than that, so ask GET /me
+ * for a fresh link first. Offline, or when that read fails, the link already
+ * on screen is tried instead.
+ */
+export async function downloadLatestApk(current: string | null, colors: Theme['colors']): Promise<boolean> {
+  let url = current;
+  try {
+    const fresh = await session.refreshMe();
+    url = (fresh && updateDownloadUrl(fresh.app.apkUrl)) || current;
+  } catch {
+    // Keep the link on screen.
+  }
+  return openApkDownload(url, colors);
 }
 
 export type UpdateCardProps = {
@@ -74,7 +92,7 @@ export function UpdateCard({ latestVersion, apkUrl, onDismiss, style, testID }: 
           icon={ArrowDownToLine}
           variant="secondary"
           size="sm"
-          onPress={() => openApkDownload(download, colors)}
+          onPress={() => downloadLatestApk(download, colors)}
           accessibilityLabel={`Download version ${latestVersion}`}
           style={styles.action}
         />

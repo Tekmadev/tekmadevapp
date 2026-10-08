@@ -640,3 +640,11 @@ Contract: the website's docs/admin-api/demos.md (first drafted in the orchestrat
 - A lead's demo requests follow it to the client when it converts; a request made on a lead that is already a client gets that client too.
 - 2026-10-05 (owner): Add a lead is first in the gold + sheet, before New client and the brief's order: adding leads is the sales team's main job, and it was hard to find at the bottom.
 - 2026-10-07 (owner): Add a lead gets "They want a demo" (off by default, `demos.request`), like New client's switch: after the lead is added, the demo request opens for it instead of the lead. The website's Add lead has the same checkbox. The switch is not part of the intent, so it never changes the Idempotency-Key.
+
+## In-app updates (owner decision 2026-10-08)
+
+- Android updates come from inside the app: every `npm run apk` publishes the APK to a private Supabase bucket and sets the server's latest version (docs/release-signing.md). GitHub is not used: a private repo's release files need a GitHub sign-in to download, and a public one would hand the internal app to anyone.
+- The download link comes from GET /me only (signed-in staff), signed for six hours. "Download" asks GET /me for a fresh link first, so a card left on screen for hours still works; offline it tries the link it has.
+- Native libraries are stored compressed in the APK (`useLegacyPackaging`) to keep it under the free plan's 50 MB upload limit (about 36 MB instead of 58 MB). Installs take a little more space on the phone; nothing else changes.
+- Later, once the Google Play organization account exists, Play's internal testing track replaces this for Android (updates through the Play Store). The bucket link stays as the fallback.
+

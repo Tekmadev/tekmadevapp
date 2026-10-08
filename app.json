@@ -181,6 +181,7 @@
           "android": {
             "enableMinifyInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
+            "useLegacyPackaging": true,
             "extraProguardRules": "-keep class com.shopify.reactnative.skia.** { *; }\n-keep class com.margelo.nitro.** { *; }\n-keep class com.mrousavy.mmkv.** { *; }"
           }
         }

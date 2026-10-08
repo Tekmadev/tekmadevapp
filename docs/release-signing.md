@@ -89,3 +89,34 @@ the app version, and the signed-in admin's id. Development builds never report.
    symbols) for that build. Without the file, builds still work: they just skip the upload.
 5. **Privacy settings** (recommended): in Sentry, Project Settings > Security & Privacy, turn
    on "Prevent Storing of IP Addresses" and keep the data scrubbers on.
+
+## In-app updates (publishing a build)
+
+Every `npm run apk` also publishes the new APK so phones offer it ("Update available" on Home
+and About, and "Check for updates"). Tapping Download asks the server for a fresh link, the
+phone downloads the APK, and Android installs it over the old version (same Tekmadev key, so
+sign-in and data stay; the first time, Android asks to allow installs from the browser).
+
+How it works:
+
+- `scripts/publish-apk.mjs` uploads the APK to the private Supabase bucket `app-releases` as
+  `android/tekmadev-admin.apk` (replaced each time), then writes `latestVersion` and
+  `apkPath` into the `site_settings` row `mobile_app`. It refuses to go back to an older
+  version than the one the server already offers.
+- The website's GET /me (signed-in staff only) answers `app.apkUrl` with a signed link to that
+  file, valid six hours. The bucket is private: nobody downloads the app without signing in.
+- The free Supabase plan takes files up to 50 MB. Native libraries are compressed in the APK
+  (`useLegacyPackaging`), which keeps it near 36 MB. If a build ever passes 50 MB, the publish
+  step says so and the APK is still in `dist/` to share by hand.
+
+One-time setup (owner):
+
+1. Run `supabase/migrations/20261008000100_app_releases_bucket.sql` (website repo) in the
+   Supabase SQL editor. It creates the private bucket.
+2. In `.env.release.local` at this project's root (gitignored; `.env.release.local.example`
+   shows the shape), paste the server key after `SUPABASE_SERVICE_ROLE_KEY=`. It is in
+   Supabase > Project Settings > API Keys (the secret or `service_role` key). Never commit it.
+3. Put the website change live (branch `app-updates`).
+
+`NO_PUBLISH=1 npm run apk -- minor` builds without publishing. To publish an APK that is
+already built: `node scripts/publish-apk.mjs dist/tekmadev-admin-<version>.apk <version>`.
