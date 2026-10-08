@@ -1,11 +1,13 @@
 import * as WebBrowser from 'expo-web-browser';
 import { ArrowDownToLine, X } from 'lucide-react-native';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { useState } from 'react';
+import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { askForUpdate, safeApkUrl, updateDownloadUrl } from '@/auth/appVersion';
 import { session } from '@/auth/session';
 import { useTheme, type Theme } from '@/design/theme';
 import { radius, space } from '@/design/tokens';
+import { ApkInstallerError, downloadAndInstallApk } from '@/lib/apkInstall';
 import { env } from '@/lib/env';
 import { notice } from '@/lib/notice';
 
@@ -36,10 +38,13 @@ export function openApkDownload(url: string | null | undefined, colors: Theme['c
 /**
  * "Download": the server's APK link is signed and stops working after a few
  * hours, and the card may have been on screen longer than that, so ask GET /me
- * for a fresh link first. Offline, or when that read fails, the link already
- * on screen is tried instead.
+ * for a fresh link first (offline, or when that read fails, the link already
+ * on screen is tried). On Android the app downloads the APK itself and opens
+ * Android's installer: a browser download of an APK can hang at 100% and
+ * never save the file. The browser is the fallback only when the installer
+ * cannot be opened.
  */
-export async function downloadLatestApk(current: string | null, colors: Theme['colors']): Promise<boolean> {
+export async function downloadLatestApk(current: string | null, colors: Theme['colors'], onProgress?: (percent: number | null) => void): Promise<void> {
   let url = current;
   try {
     const fresh = await session.refreshMe();
@@ -47,7 +52,43 @@ export async function downloadLatestApk(current: string | null, colors: Theme['c
   } catch {
     // Keep the link on screen.
   }
-  return openApkDownload(url, colors);
+  const safe = safeApkUrl(url);
+  if (!safe) {
+    notice.err('The download link is missing. Check for updates again.');
+    return;
+  }
+  if (Platform.OS !== 'android') {
+    openApkDownload(safe, colors);
+    return;
+  }
+  try {
+    await downloadAndInstallApk(safe, onProgress);
+  } catch (e) {
+    if (e instanceof ApkInstallerError) {
+      openApkDownload(safe, colors);
+      return;
+    }
+    notice.err('The update did not download. Check your connection and try again.');
+  }
+}
+
+/** A Download button's state: the black hole and "Downloading 45%" while the update downloads. */
+export function useApkDownload(current: string | null) {
+  const { colors } = useTheme();
+  const [pending, setPending] = useState(false);
+  const [percent, setPercent] = useState<number | null>(null);
+  const start = async () => {
+    if (pending) return;
+    setPending(true);
+    setPercent(null);
+    try {
+      await downloadLatestApk(current, colors, setPercent);
+    } finally {
+      setPending(false);
+      setPercent(null);
+    }
+  };
+  return { start, pending, pendingLabel: percent === null ? 'Downloading' : `Downloading ${percent}%` };
 }
 
 export type UpdateCardProps = {
@@ -69,6 +110,7 @@ export type UpdateCardProps = {
 export function UpdateCard({ latestVersion, apkUrl, onDismiss, style, testID }: UpdateCardProps) {
   const { colors } = useTheme();
   const download = updateDownloadUrl(apkUrl);
+  const apk = useApkDownload(download);
 
   return (
     <Card style={style} testID={testID}>
@@ -92,7 +134,9 @@ export function UpdateCard({ latestVersion, apkUrl, onDismiss, style, testID }: 
           icon={ArrowDownToLine}
           variant="secondary"
           size="sm"
-          onPress={() => downloadLatestApk(download, colors)}
+          pending={apk.pending}
+          pendingLabel={apk.pendingLabel}
+          onPress={apk.start}
           accessibilityLabel={`Download version ${latestVersion}`}
           style={styles.action}
         />

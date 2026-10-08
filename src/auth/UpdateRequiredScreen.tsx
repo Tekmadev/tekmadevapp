@@ -8,7 +8,7 @@ import { ApiError, errorMessage } from '@/api/errors';
 import { Button } from '@/components/Button';
 import { PendingButton } from '@/components/PendingButton';
 import { Text } from '@/components/Text';
-import { downloadLatestApk } from '@/components/UpdateCard';
+import { useApkDownload } from '@/components/UpdateCard';
 import { haptics } from '@/design/haptics';
 import { durations, enterPull, springs } from '@/design/motion';
 import { useTheme } from '@/design/theme';
@@ -51,6 +51,7 @@ export function UpdateRequiredScreen() {
   const [problem, setProblem] = useState<string | null>(null);
 
   const apkUrl = updateDownloadUrl(me?.app.apkUrl);
+  const apk = useApkDownload(apkUrl);
   const latest = me && isUpdateAvailable(me.app) ? me.app.latestVersion : null;
 
   const checkAgain = async () => {
@@ -117,7 +118,9 @@ export function UpdateRequiredScreen() {
                 label="Download the update"
                 icon={ArrowDownToLine}
                 fullWidth
-                onPress={() => downloadLatestApk(apkUrl, colors)}
+                pending={apk.pending}
+                pendingLabel={apk.pendingLabel}
+                onPress={apk.start}
               />
             ) : (
               <Text variant="bodyStrong" color="ink2">
