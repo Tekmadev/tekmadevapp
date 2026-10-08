@@ -120,7 +120,7 @@ Staff phones need the paid account.
 
 ### Owner steps (in order)
 
-1. **D-U-N-S number** for Tekmadev Innovation Inc. (free). Apple's lookup:
+1. **D-U-N-S number** for Tekmadev Innovation Inc. (free). **Done 2026-10-07.** Apple's lookup:
    https://developer.apple.com/enroll/duns-lookup/ (sign in with an Apple ID).
    Look the company up first; if it is not there, request one with the exact
    legal name and address from the incorporation papers. About 5 business
