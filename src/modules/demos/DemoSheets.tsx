@@ -175,7 +175,8 @@ export function DemoLinkSheet({ demo, markReady = false, onClose }: DemoLinkShee
       <View style={styles.body}>
         <TextField
           label="Link"
-          help="The full https:// link the salesperson opens on their phone."
+          placeholder="https://name.vercel.app"
+          help="Usually the demo's Vercel link. The salesperson opens it on their phone."
           value={url}
           onChangeText={(v) => {
             setUrl(v);
