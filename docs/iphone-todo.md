@@ -126,7 +126,7 @@ Staff phones need the paid account.
    legal name and address from the incorporation papers. About 5 business
    days, then up to 2 more for Apple to receive it. The same number serves
    the Google Play organization account.
-2. **Apple Developer Program, as an organization** (US$99 a year), with the
+2. **Apple Developer Program, as an organization** (US$99 a year; **submitted 2026-10-07, being processed**), with the
    same legal name and address, the website tekmadev.com, and ideally an
    @tekmadev.com email. Apple's review can take days to weeks.
 3. **Staff list**: each staff member's Apple ID email, for TestFlight.
