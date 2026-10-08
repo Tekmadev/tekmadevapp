@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Building2, CalendarClock, ExternalLink } from 'lucide-react-native';
+import { Building2, CalendarClock, ExternalLink, PenLine } from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -14,6 +14,7 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { ErrorState } from '@/components/ErrorState';
 import { Icon } from '@/components/Icon';
+import { IconButton } from '@/components/IconButton';
 import { KeyValue, type KeyValueItem } from '@/components/KeyValue';
 import { Screen } from '@/components/Screen';
 import { Section } from '@/components/Section';
@@ -24,9 +25,11 @@ import { layout, radius, space } from '@/design/tokens';
 import { useIsOnline } from '@/lib/connectivity';
 import { formatPhone } from '@/lib/format';
 import { DemoCard } from '@/modules/demos/DemoCard';
+import { openHref } from '@/modules/inbox/navigation';
 import { useMinuteClock, useRefetchOnFocus } from '@/modules/overview/hooks';
 
 import { ContactLogPrompt } from './ContactLogPrompt';
+import { EditLeadSheet } from './EditLeadSheet';
 import { LeadContactActions } from './LeadContactActions';
 import { LeadDetailSkeleton } from './LeadDetailSkeleton';
 import { LogTouchSheet } from './LogTouchSheet';
@@ -84,9 +87,11 @@ type LeadBodyProps = {
   meta: LeadsMeta | undefined;
   now: Date;
   touches: TouchesState;
+  /** "Edit lead", when the server says this person may (`canEdit`). */
+  onEdit?: () => void;
 };
 
-function LeadBody({ lead, meta, now, touches }: LeadBodyProps) {
+function LeadBody({ lead, meta, now, touches, onEdit }: LeadBodyProps) {
   const status = statusBadge(meta, lead.status);
   const qualifiers = asksQualifiers(lead);
   const clientId = lead.convertedClientId;
@@ -187,7 +192,10 @@ function LeadBody({ lead, meta, now, touches }: LeadBodyProps) {
       {/* Demo requests for this lead and "Request a demo" (2026-10-05). */}
       <DemoCard target={{ leadId: lead.id }} businessName={lead.business} style={styles.demo} />
 
-      <Section title="Details">
+      <Section
+        title="Details"
+        action={onEdit ? { label: 'Edit lead', onPress: onEdit, accessibilityHint: 'Opens the lead details to change them' } : undefined}
+      >
         <Card padded={false}>
           <KeyValue items={details} />
         </Card>
@@ -224,6 +232,8 @@ function LeadBody({ lead, meta, now, touches }: LeadBodyProps) {
  * booked call in Toronto time, Outreach (status, follow-up, owner, "Log
  * outreach" and the touches timeline), every field with the brief's labels,
  * the message as typed and the attribution (not for leads added by hand).
+ * "Edit lead" (the pencil in the header, and next to Details) opens the
+ * details to change, only when the server says `canEdit`.
  * Opened from a list row or Home, it shows the lead already in the cache at
  * once, then loads the full record and its touches. Needs `leads.view`; the
  * client button and the outreach controls follow the person's capabilities.
@@ -259,6 +269,15 @@ function LeadDetail() {
   useRefetchOnFocus((options) => (id && !notFound ? touchesQuery.refetch(options) : undefined), touchesQuery.dataUpdatedAt);
 
   const lead = notFound ? undefined : query.data;
+  // An older server sends no canEdit: no Edit button.
+  const canEdit = lead?.canEdit === true;
+  const [editing, setEditing] = useState(false);
+  const edit = canEdit ? () => setEditing(true) : undefined;
+  // "That email is already a lead" on Edit lead: Leads, searching for it (the website's /admin/leads?q=).
+  const findExisting = (email: string) => {
+    setEditing(false);
+    openHref({ pathname: '/customers', params: { segment: 'leads', q: email } });
+  };
 
   const touches: TouchesState = {
     data: touchesQuery.data,
@@ -277,7 +296,7 @@ function LeadDetail() {
   if (!id) {
     body = <ErrorState message={MESSAGES.notFound} />;
   } else if (lead) {
-    body = <LeadBody lead={lead} meta={meta.data} now={now} touches={touches} />;
+    body = <LeadBody lead={lead} meta={meta.data} now={now} touches={touches} onEdit={edit} />;
   } else if (query.isError) {
     body = <ErrorState error={query.error} onRetry={notFound ? undefined : () => query.refetch()} />;
   } else if (query.fetchStatus === 'paused') {
@@ -294,8 +313,11 @@ function LeadDetail() {
       onRefresh={id ? () => Promise.all([query.refetch(), meta.refetch(), notFound ? null : touchesQuery.refetch()]) : undefined}
       refetching={query.isFetching && !query.isPending}
       queryKey={leadKeys.detail(id)}
+      headerRight={edit ? <IconButton icon={PenLine} accessibilityLabel="Edit lead" onPress={edit} /> : undefined}
     >
       {body}
+      {/* Stays open if canEdit changes meanwhile: a save then says why (403) and closes. */}
+      {editing && lead ? <EditLeadSheet lead={lead} meta={meta.data} onClose={() => setEditing(false)} onFindExisting={findExisting} /> : null}
     </Screen>
   );
 }

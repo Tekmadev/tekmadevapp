@@ -15,7 +15,7 @@ Where: the website worktree
 `/Users/shajeed/Coding/Projects/NextJS/tekmadev3/.worktrees/admin-api-v1`,
 branch `staff-management`. Work only there, never in the owner's main checkout.
 
-Status: built by the leads workspace workflow (2026-10-06), **not committed**
+Status (2026-10-08): **review fixes done, Edit lead and the demo shortcut added, committed on `staff-management`; goes live when the owner merges it.** Originally built by the leads workspace workflow (2026-10-06),
 (about 48 files: `lib/leads-web.ts`, `lib/leads-ui.ts`,
 `app/admin/(dashboard)/leads/[id]/`, `components/admin/leads/*`,
 `components/admin/MobileTabBar.tsx`, `RefreshOnResume.tsx`, the web manifest,

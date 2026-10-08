@@ -133,14 +133,31 @@ export function createLead(input: NewLeadInput, idempotencyKey: string) {
   return api.post<Lead>('/leads', input, { schema: zLead, idempotencyKey });
 }
 
-/** PATCH /leads/:id: only the keys sent change; null clears the follow-up or the owner. */
+/**
+ * PATCH /leads/:id: only the keys sent change; null (or blank) clears the
+ * follow-up, the owner or a detail. The details (edit lead, the website's
+ * docs/admin-api/outreach.md section 4) have POST /leads's rules and limits;
+ * the lead must still have a name or a business and an email or a phone.
+ * Staff may send them only on a lead they found or that is assigned to them
+ * (the lead's `canEdit`), else 403 `forbidden`. Status, follow-up and owner:
+ * any `leads.update` caller.
+ */
 export type LeadPatch = {
+  name?: string | null;
+  business?: string | null;
+  /** Lowercased by the server. 409 `duplicate` when another lead has it. */
+  email?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  need?: LeadNeed | null;
+  /** What you know about them (line breaks kept). */
+  message?: string | null;
   status?: SettableLeadStatus;
   followUpAt?: string | null;
   assignedTo?: string | null;
 };
 
-/** PATCH /leads/:id -> the full Lead. */
+/** PATCH /leads/:id -> the full Lead (with `canEdit` for the caller). */
 export function updateLead(id: string, patch: LeadPatch) {
   return api.patch<Lead>(`/leads/${seg(id)}`, patch, { schema: zLead });
 }

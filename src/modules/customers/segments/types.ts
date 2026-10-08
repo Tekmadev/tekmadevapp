@@ -49,6 +49,8 @@ export type CustomersParams = {
   view?: string;
   /** One-shot action from a quick action ("log-call"). Cleared once handled. */
   action?: string;
+  /** Leads: a one-shot search ("Find it" for an email that is already a lead), every other filter off. Cleared once handled. */
+  q?: string;
 };
 
 /**

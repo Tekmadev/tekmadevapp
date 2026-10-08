@@ -282,7 +282,8 @@ describe('POST /demos', () => {
         idempotencyKey: key(),
       }),
     );
-    expect([e.status, e.code, e.message]).toEqual([400, 'validation', 'Check the highlighted fields.']);
+    // The message is the first problem's words, like the server's.
+    expect([e.status, e.code, e.message]).toEqual([400, 'validation', 'Enter the business name.']);
     expect(Object.keys(e.fields ?? {}).sort()).toEqual(['area', 'brand', 'businessName', 'businessType', 'customers', 'neededBy', 'offer', 'wants', 'website'].sort());
     expect(e.fields).toMatchObject({ businessName: 'Enter the business name.', area: 'Enter the city or area they serve.', neededBy: 'Pick a valid date.' });
   });
@@ -324,9 +325,119 @@ describe('POST /demos', () => {
     expect(again.id).toBe(first.id);
     expect(demosDb.length).toBe(before + 1);
     const changed = await apiError(api.post('/demos', { ...body, wants: 'Something else' }));
-    expect([changed.status, changed.code]).toEqual([409, 'idempotency']);
+    expect([changed.status, changed.code, changed.message]).toEqual([
+      409,
+      'idempotency_conflict',
+      'That request was already sent with different details. Start again.',
+    ]);
     const missing = await apiError(api.post('/demos', { ...body, idempotencyKey: undefined }));
     expect([missing.status, missing.code]).toEqual([400, 'idempotency']);
+  });
+});
+
+describe('POST /demos with demoUrl: already built (demos.manage)', () => {
+  const LINK = 'https://hamilton-grooming.vercel.app';
+
+  it('starts ready, the caller as the builder, with the created, builder, link and status events', async () => {
+    asManager();
+    const created = await createDemo(
+      { leadId: hexId('ld', 212), business: { ...BUSINESS, name: 'Hamilton Mobile Grooming' }, wants: null, neededBy: null, demoUrl: `  ${LINK}  ` },
+      key(),
+    );
+    expect(zDemoRequest.safeParse(created).success).toBe(true);
+    expect(created).toMatchObject({
+      status: 'ready',
+      demoUrl: LINK,
+      builderEmail: 'manager@tekmadev.test',
+      requestedBy: 'manager@tekmadev.test',
+      requestedByName: 'Maya Chen',
+      readyAt: created.createdAt,
+      shownAt: null,
+      cancelledAt: null,
+      builderNote: null,
+      leadId: hexId('ld', 212),
+      can: { edit: true, cancel: true, markShown: true, manage: true },
+    });
+    expect(created.events.map((e) => [e.type, e.from, e.to, e.by])).toEqual([
+      ['created', null, 'requested', 'manager@tekmadev.test'],
+      ['builder', null, 'manager@tekmadev.test', 'manager@tekmadev.test'],
+      ['link', null, LINK, 'manager@tekmadev.test'],
+      ['status', 'requested', 'ready', 'manager@tekmadev.test'],
+    ]);
+    // Staff reading it: nothing to do on someone else's request.
+    asStaff();
+    expect((await getDemo(created.id)).can).toEqual({ edit: false, cancel: false, markShown: false, manage: false });
+    // From then on an ordinary ready request.
+    asManager();
+    expect((await updateDemo(created.id, { status: 'shown' })).status).toBe('shown');
+  });
+
+  it('carries the client when the lead already became one, and works for a client too', async () => {
+    asOwner();
+    const lead = await createDemo({ leadId: hexId('ld', 716), business: BUSINESS, demoUrl: 'https://orleans-auto.vercel.app' }, key());
+    expect(lead).toMatchObject({ status: 'ready', leadId: hexId('ld', 716), clientId: 'cl_orleansauto', builderEmail: 'owner@tekmadev.test' });
+    const client = await createDemo({ clientId: 'cl_acmeplumb01', business: BUSINESS, demoUrl: 'https://acme-demo.vercel.app' }, key());
+    expect(client).toMatchObject({ status: 'ready', clientId: 'cl_acmeplumb01', clientName: 'Acme Plumbing' });
+  });
+
+  it('refuses a link from staff with 403 forbidden and writes nothing; no link is an ordinary request', async () => {
+    asStaff();
+    const before = demosDb.length;
+    const e = await apiError(createDemo({ leadId: hexId('ld', 105), business: BUSINESS, demoUrl: LINK }, key()));
+    expect([e.status, e.code, e.message]).toEqual([403, 'forbidden', 'Your role cannot do that.']);
+    // The 403 comes before the 404.
+    const gone = await apiError(createDemo({ leadId: 'ld_nope', business: BUSINESS, demoUrl: LINK }, key()));
+    expect(gone.status).toBe(403);
+    expect(demosDb.length).toBe(before);
+    for (const demoUrl of [null, '', '   ']) {
+      const plain = await createDemo({ leadId: hexId('ld', 105), business: BUSINESS, demoUrl }, key());
+      expect(plain).toMatchObject({ status: 'requested', demoUrl: null, builderEmail: null, readyAt: null });
+      expect(plain.events.map((ev) => ev.type)).toEqual(['created']);
+    }
+    asManager();
+    const missing = await apiError(createDemo({ leadId: 'ld_nope', business: BUSINESS, demoUrl: LINK }, key()));
+    expect([missing.status, missing.message]).toEqual([404, 'That lead no longer exists.']);
+  });
+
+  it('checks the link with the other fields: one 400 validation, the first problem as the message', async () => {
+    asManager();
+    const both = await apiError(api.post('/demos', { leadId: hexId('ld', 105), business: { ...BUSINESS, offer: ' ' }, demoUrl: 'http://x.vercel.app', idempotencyKey: key() }));
+    expect([both.status, both.code, both.message]).toEqual([400, 'validation', 'Say what they sell or do.']);
+    expect(both.fields).toEqual({ offer: 'Say what they sell or do.', demoUrl: 'Enter a full link starting with https://.' });
+    for (const demoUrl of ['grooming.vercel.app', 'https://localhost', 'https://user:pw@x.vercel.app', 'https://x.vercel.app/a b', `https://${'a'.repeat(2000)}.app`, 42]) {
+      const e = await apiError(api.post('/demos', { leadId: hexId('ld', 105), business: BUSINESS, demoUrl, idempotencyKey: key() }));
+      expect([e.status, e.code, e.message, e.fields]).toEqual([400, 'validation', 'Enter a full link starting with https://.', { demoUrl: 'Enter a full link starting with https://.' }]);
+    }
+    // A bad link from staff is a 400 first (validation comes before the role check).
+    asStaff();
+    const staff = await apiError(api.post('/demos', { leadId: hexId('ld', 105), business: BUSINESS, demoUrl: 'http://x', idempotencyKey: key() }));
+    expect([staff.status, staff.code]).toEqual([400, 'validation']);
+  });
+
+  it('replays the same key with the same link, and refuses a different, added or removed link', async () => {
+    asManager();
+    const before = demosDb.length;
+    const k = key();
+    const body = { leadId: hexId('ld', 207), business: { ...BUSINESS, name: 'Ottawa Valley Snow' }, demoUrl: LINK, idempotencyKey: k };
+    const first = await api.post<DemoRequest>('/demos', body);
+    const again = await api.post<DemoRequest>('/demos', { ...body, demoUrl: ` ${LINK} ` });
+    expect(again.id).toBe(first.id);
+    expect(demosDb.length).toBe(before + 1);
+    const conflict = [409, 'idempotency_conflict', 'That request was already sent with different details. Start again.'];
+    for (const demoUrl of ['https://other.vercel.app', null]) {
+      const e = await apiError(api.post('/demos', { ...body, demoUrl }));
+      expect([e.status, e.code, e.message]).toEqual(conflict);
+    }
+
+    // Without a link, a blank one is the same request; adding one is not.
+    const k2 = key();
+    const plain = { leadId: hexId('ld', 207), business: { ...BUSINESS, name: 'Ottawa Valley Snow' }, idempotencyKey: k2 };
+    const plainFirst = await api.post<DemoRequest>('/demos', plain);
+    expect((await api.post<DemoRequest>('/demos', { ...plain, demoUrl: '' })).id).toBe(plainFirst.id);
+    expect((await api.post<DemoRequest>('/demos', { ...plain, demoUrl: null })).id).toBe(plainFirst.id);
+    const added = await apiError(api.post('/demos', { ...plain, demoUrl: LINK }));
+    expect([added.status, added.code]).toEqual([409, 'idempotency_conflict']);
+    expect(demosDb.length).toBe(before + 2);
   });
 });
 

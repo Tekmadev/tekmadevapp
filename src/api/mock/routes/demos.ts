@@ -32,9 +32,17 @@ import { byNewest, fail, mockUuid, nowIso, ok, paginate, type MockContext, type 
  * - A closed request answers 409 `demo_closed`; someone else's request without
  *   `demos.manage` answers 403 `forbidden`.
  * - `can` says exactly that for the caller.
+ * - "Already built?" (owner decision 2026-10-08): POST /demos with `demoUrl`
+ *   needs `demos.manage` (403 `forbidden` otherwise, nothing written) and
+ *   starts ready, the caller as the builder, with the created, builder, link
+ *   and status events. Blank or null is no link.
  * Capabilities are checked first, before validation and before a 404, like
  * the server's route wrapper. Creates are idempotent on the body's
- * `idempotencyKey` (the transport also replays on the Idempotency-Key header).
+ * `idempotencyKey` (the transport also replays on the Idempotency-Key header):
+ * the same key and the same request (as parsed, the link included) answer the
+ * first result, a different one is 409 `idempotency_conflict`.
+ * Notifications ("Demo requested", "Demo ready") are the server's; the mock
+ * does not write them.
  */
 
 /** The server's copy. The first five are the contract's; the rest are the mock's choices (docs: report). */
@@ -52,7 +60,7 @@ const M = {
   step: 'That status change is not allowed now.',
   locked: 'This demo is ready. Only the builder can change it now.',
   idempotency: 'Send an idempotency key with the request.',
-  idempotencyReused: 'That request was already sent with different details. Try again.',
+  idempotencyReused: 'That request was already sent with different details. Start again.',
   businessName: 'Enter the business name.',
   businessNameLong: 'Keep the business name to 120 characters or fewer.',
   businessType: 'Enter the kind of business.',
@@ -235,7 +243,9 @@ function builderField(raw: unknown, issues: Issues): string | null | undefined {
   return undefined;
 }
 
-const validationError = (issues: Issues): MockResult => fail(400, 'validation', M.validation, issues as Record<string, string>);
+/** One 400 with every bad field; `message` is the first problem's words, like the server's. */
+const validationError = (issues: Issues): MockResult =>
+  fail(400, 'validation', Object.values(issues).find((m): m is string => !!m) ?? M.validation, issues as Record<string, string>);
 const hasIssues = (issues: Issues) => Object.keys(issues).length > 0;
 
 /* ---------- writes ---------- */
@@ -252,10 +262,21 @@ const touchedEvent = (user: MockStaff, at: string, type: DemoEvent['type'], from
 /** Same key and body: the first result. Same key, different body: refused. Keyed per caller. */
 const createdByKey = new Map<string, { signature: string; id: string }>();
 
-/** What the create's body says, without its key (the replay check compares this). */
-function signatureOf(body: Record<string, unknown>): string {
-  const { idempotencyKey: _ignored, ...rest } = body;
-  return JSON.stringify(rest);
+/**
+ * What the create asks for, as parsed (the replay check compares this, like
+ * the server's request hash). No link is left out, so a blank or null
+ * `demoUrl` hashes as if it was not sent.
+ */
+function signatureOf(request: {
+  clientId: string | null;
+  leadId: string | null;
+  business: Partial<DemoBusiness>;
+  wants: string | null;
+  neededBy: string | null;
+  demoUrl: string | null;
+}): string {
+  const { demoUrl, ...rest } = request;
+  return JSON.stringify(demoUrl ? { ...rest, demoUrl } : rest);
 }
 
 function counts(rows: DemoRecord[], me: string): DemoCounts {
@@ -311,27 +332,36 @@ export const routes: MockRoute[] = [
       const { body, user } = ctx;
       const denied = requireCap(user, 'demos.request');
       if (denied) return denied;
-      const key = typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';
-      if (!key) return fail(400, 'idempotency', M.idempotency);
-      const replay = createdByKey.get(`${user.id}:${key}`);
-      if (replay) {
-        const first = findDemo(replay.id);
-        if (replay.signature !== signatureOf(body)) return fail(409, 'idempotency', M.idempotencyReused);
-        if (first) return ok(view(first, user, true), 201);
-      }
-
-      // Exactly one of clientId / leadId.
+      // 1. Exactly one of clientId / leadId.
       const clientId = typeof body.clientId === 'string' && body.clientId.trim() ? body.clientId.trim() : null;
       const leadId = typeof body.leadId === 'string' && body.leadId.trim() ? body.leadId.trim() : null;
       if ((clientId === null) === (leadId === null)) return fail(400, 'target', M.target);
 
+      // 2. Every field at once, the link included.
       const issues: Issues = {};
       const business = businessFields(body.business, true, issues);
       const wants = text(body.wants, 'wants', { max: 2000, tooLong: M.wantsLong }, issues);
       const neededBy = neededByField(body.neededBy, issues);
+      const demoUrl = demoUrlField(body.demoUrl, issues) ?? null;
       if (hasIssues(issues)) return validationError(issues);
 
-      // Unknown (or trashed, or hidden test) client or lead: 404.
+      // 3. The key.
+      const key = typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';
+      if (!key) return fail(400, 'idempotency', M.idempotency);
+
+      // 4. Only a builder adds a demo that is already built. Nothing is written.
+      if (demoUrl && !mockCan(user, 'demos.manage')) return fail(403, 'forbidden', M.forbidden);
+
+      // 5. The same key: the first result for the same request, else a conflict (a different link too).
+      const signature = signatureOf({ clientId, leadId, business, wants: wants ?? null, neededBy: neededBy ?? null, demoUrl });
+      const replay = createdByKey.get(`${user.id}:${key}`);
+      if (replay) {
+        if (replay.signature !== signature) return fail(409, 'idempotency_conflict', M.idempotencyReused);
+        const first = findDemo(replay.id);
+        if (first) return ok(view(first, user, true), 201);
+      }
+
+      // 6. Unknown (or trashed, or hidden test) client or lead: 404.
       let linkedClient: string | null = null;
       if (clientId) {
         const c = clientById(clientId);
@@ -347,6 +377,7 @@ export const routes: MockRoute[] = [
 
       const at = nowIso();
       const me = emailOf(user);
+      const created = touchedEvent(user, at, 'created', null, 'requested');
       const record: DemoRecord = {
         id: mockUuid(),
         status: 'requested',
@@ -372,10 +403,22 @@ export const routes: MockRoute[] = [
         readyAt: null,
         shownAt: null,
         cancelledAt: null,
-        events: [touchedEvent(user, at, 'created', null, 'requested')],
+        events: [created],
       };
+      if (demoUrl) {
+        // Already built: the same history a builder leaves (asked, picked up, link added, marked ready).
+        record.status = 'ready';
+        record.demoUrl = demoUrl;
+        record.builderEmail = me;
+        record.readyAt = at;
+        record.events.push(
+          touchedEvent(user, at, 'builder', null, me),
+          touchedEvent(user, at, 'link', null, demoUrl),
+          touchedEvent(user, at, 'status', 'requested', 'ready'),
+        );
+      }
       demosDb.unshift(record);
-      createdByKey.set(`${user.id}:${key}`, { signature: signatureOf(body), id: record.id });
+      createdByKey.set(`${user.id}:${key}`, { signature, id: record.id });
       return ok(view(record, user, true), 201);
     },
   },

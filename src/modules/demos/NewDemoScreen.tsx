@@ -10,6 +10,7 @@ import { leadKeys } from '@/api/endpoints/leads';
 import { ApiError, fieldErrors } from '@/api/errors';
 import type { ClientBundle } from '@/api/schemas/clients';
 import type { Lead } from '@/api/schemas/leads';
+import { useCan } from '@/auth/permissions';
 import { RequireCapability } from '@/auth/RequireCapability';
 import { Card } from '@/components/Card';
 import { DraftRestoreNotice } from '@/components/form/DraftRestoreNotice';
@@ -25,7 +26,17 @@ import { notice } from '@/lib/notice';
 
 import { applyDemo } from './cache';
 import { DemoFields } from './DemoFields';
-import { demoFormErrors, demoTarget, emptyDemoForm, newDemoInput, type DemoForm, type DemoFormErrors, type DemoFormTarget } from './demoForm';
+import {
+  demoFormErrors,
+  demoLinkOf,
+  demoTarget,
+  emptyDemoForm,
+  newDemoInput,
+  restoredDemoForm,
+  type DemoForm,
+  type DemoFormErrors,
+  type DemoFormTarget,
+} from './demoForm';
 
 const CHECK_FIELDS = 'Check the highlighted fields.';
 const NO_TARGET = 'Open a client or a lead first, then tap Request a demo.';
@@ -43,6 +54,11 @@ const first = (value: string | string[] | undefined) => (Array.isArray(value) ? 
  * show under their fields; on success "Demo requested." and the request
  * opens in place of this form. What is typed is kept as a local draft until
  * the server has it. Needs `demos.request`.
+ *
+ * Owners and managers (`demos.manage`) also get "Already built? Demo link"
+ * (owner decision 2026-10-08): with a link the request is saved as ready to
+ * show, with them as the builder, and the people on the lead or client get
+ * "Demo ready" instead of the builders getting "Demo requested".
  */
 export function NewDemoScreen() {
   return (
@@ -70,6 +86,8 @@ function NewDemoForm() {
   const [target] = useState(() => demoTarget(first(params.clientId), first(params.leadId)));
   const [forName] = useState(() => (target ? targetName(queryClient, target, prefill.businessName) : ''));
   const [initial] = useState(() => emptyDemoForm(prefill));
+  // "Already built? Demo link": owners and managers only (the server answers 403 for anyone else).
+  const withLink = useCan('demos.manage');
 
   const draftKey = target ? ('clientId' in target ? `demos.new.client.${target.clientId}` : `demos.new.lead.${target.leadId}`) : null;
   const autosave = useAutosave<DemoForm>(draftKey);
@@ -106,7 +124,7 @@ function NewDemoForm() {
   }
 
   const submit = async () => {
-    const local = demoFormErrors(form);
+    const local = demoFormErrors(form, { withLink });
     if (Object.keys(local).length > 0) {
       setErrors(local);
       setFormError(CHECK_FIELDS);
@@ -115,7 +133,7 @@ function NewDemoForm() {
     }
     setErrors({});
     setFormError(null);
-    const input = newDemoInput(target, form);
+    const input = newDemoInput(target, form, { withLink });
     // Same details as the last try: the same intent, so the same key.
     const signature = JSON.stringify(input);
     const key = intent?.signature === signature ? intent.key : newIdempotencyKey();
@@ -124,7 +142,7 @@ function NewDemoForm() {
     const demo = await create.mutateAsync({ input, key });
     autosave.clear();
     haptics.success();
-    notice.ok('Demo requested.');
+    notice.ok(demo.status === 'ready' ? 'Saved as ready to show.' : 'Demo requested.');
     router.replace({ pathname: '/demos/[id]', params: { id: demo.id } });
   };
 
@@ -139,6 +157,8 @@ function NewDemoForm() {
   };
 
   const kind = 'clientId' in target ? 'client' : 'lead';
+  // With a link the button says what happens: it is saved as ready, nobody builds it.
+  const hasLink = demoLinkOf(form, { withLink }) !== null;
 
   return (
     <Screen title="Request a demo" back keyboardAware>
@@ -146,7 +166,7 @@ function NewDemoForm() {
         draft={offer.draft}
         onRestore={() => {
           const restored = offer.restore();
-          if (restored) setForm(restored);
+          if (restored) setForm(restoredDemoForm(initial, restored));
         }}
         onDiscard={offer.discard}
         style={styles.draft}
@@ -162,7 +182,7 @@ function NewDemoForm() {
         </Text>
       </Card>
 
-      <DemoFields form={form} errors={errors} onChange={change} />
+      <DemoFields form={form} errors={errors} onChange={change} withLink={withLink} />
 
       {formError ? (
         <Text variant="small" color="signal" weight="500" accessibilityLiveRegion="polite" style={styles.formError}>
@@ -171,7 +191,14 @@ function NewDemoForm() {
       ) : null}
 
       <View style={styles.submit}>
-        <PendingButton label="Request a demo" pendingLabel="Requesting" variant="primary" fullWidth onPress={submit} onError={onError} />
+        <PendingButton
+          label={hasLink ? 'Save as ready to show' : 'Request a demo'}
+          pendingLabel={hasLink ? 'Saving' : 'Requesting'}
+          variant="primary"
+          fullWidth
+          onPress={submit}
+          onError={onError}
+        />
       </View>
     </Screen>
   );

@@ -3,6 +3,7 @@ import { summarize } from '../fixtures/notifications';
 import { overviewFor, topLinksNow } from '../fixtures/overview';
 import { mockCan, requireCap } from '../permissions';
 import { ok, type MockRoute, type MockStaff } from '../router';
+import { leadForCaller } from './leads';
 
 /**
  * Mock routes for the "overview" domain: GET /overview, the Home screen in one
@@ -16,6 +17,7 @@ import { ok, type MockRoute, type MockStaff } from '../router';
  * - Without `links.view`: `topLinks` is null.
  * - `inbox` and `attention.needsAction` are the caller's own inbox (their
  *   categories, test rows excluded).
+ * - `recentLeads` are GET /leads rows, with `canEdit` for the caller.
  */
 export function overviewForCaller(user: MockStaff): Overview {
   const base = overviewFor(user);
@@ -27,6 +29,7 @@ export function overviewForCaller(user: MockStaff): Overview {
     attention: { ...base.attention, needsAction: inbox.needsAction },
     topLinks: mockCan(user, 'links.view') ? topLinksNow() : null,
     recentSubscriptions: revenue ? base.recentSubscriptions : null,
+    recentLeads: base.recentLeads.map((lead) => leadForCaller(lead, user)),
     inbox,
   };
 }

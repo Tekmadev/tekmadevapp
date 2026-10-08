@@ -649,3 +649,11 @@ Contract: the website's docs/admin-api/demos.md (first drafted in the orchestrat
 - 2026-10-08: "Download" saves the APK in the app's cache and opens Android's installer (expo-file-system, expo-intent-launcher, REQUEST_INSTALL_PACKAGES). A Custom Tab download of the APK hung at 100% on the owner's Samsung and never saved the file. The first update asks once to allow installs from Tekmadev Admin. The browser is only a fallback when the installer cannot open.
 - Later, once the Google Play organization account exists, Play's internal testing track replaces this for Android (updates through the Play Store). The bucket link stays as the fallback. Google Play does not allow apps from the Play Store to update themselves, so the Play build must drop REQUEST_INSTALL_PACKAGES and the in-app download.
 
+## Edit lead and the demo shortcut (owner decisions 2026-10-08)
+
+- Leads can be edited after they are added (name, business, email, phone, website, need, note), so a typo or a new number never forces a lead to become a client. Owners and managers edit any lead; staff only leads they found or that are assigned to them (server rule, `canEdit` on every lead). One email is one lead: another lead's email answers 409 with "Find it".
+- The app has two ways in: the header pencil ("Edit lead" for screen readers) and an "Edit lead" link next to Details. The sheet saves only what changed ("Save changes", pending "Saving"), compared with the lead as it was when the sheet opened, so a teammate's newer change is never undone. The website edits on its own page (/admin/leads/[id]/edit), "Edit lead" next to Refresh.
+- Known edge: staff may assign any lead to themselves (assignee is plain `leads.update`, unchanged), and then they can edit it.
+- "Already built? Demo link" on the demo request form, for owners and managers only (`demos.manage`): the request is saved straight as ready to show, with the caller as builder. Button "Save as ready to show", toast "Saved as ready to show.". "Demo ready" goes to the lead's assignee and finder, or the client's strategist, never to the caller.
+- "I booked this call" never re-books a lead that is no longer booked and never takes a credit someone else holds (the server writes the booker only while it is empty).
+

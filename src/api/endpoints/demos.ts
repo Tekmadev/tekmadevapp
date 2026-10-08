@@ -79,13 +79,21 @@ export type NewDemoInput = ({ clientId: string; leadId?: undefined } | { leadId:
   business: DemoBusinessInput;
   wants?: string | null;
   neededBy?: string | null;
+  /**
+   * Already built (needs `demos.manage`, else 403 `forbidden`): an https link,
+   * and the request starts ready with the caller as the builder. Null or
+   * blank: an ordinary request.
+   */
+  demoUrl?: string | null;
 };
 
 /**
  * POST /demos -> 201 the request. The key goes in the body (the contract) and
  * in the Idempotency-Key header (like every other create): the same key and
  * body return the first result, so a retry never asks twice.
- * 400 `target`, 400 `validation` (fields), 404 for an unknown client or lead.
+ * 400 `target`, 400 `validation` (fields, `demoUrl` included), 403 `forbidden`
+ * for a link without `demos.manage`, 409 `idempotency_conflict` for the key
+ * with a different body (a different link too), 404 for an unknown client or lead.
  */
 export function createDemo(input: NewDemoInput, idempotencyKey: string) {
   return api.post<DemoRequest>('/demos', { ...input, idempotencyKey }, { schema: zDemoRequest, idempotencyKey });

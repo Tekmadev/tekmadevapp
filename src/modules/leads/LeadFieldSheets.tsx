@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { assigneesQuery, updateLead } from '@/api/endpoints/leads';
+import { assigneesQuery, getLead, updateLead } from '@/api/endpoints/leads';
 import { MESSAGES } from '@/api/errors';
 import type { Lead, LeadStatus, LeadsMeta } from '@/api/schemas/leads';
 import { useMe } from '@/auth/session';
@@ -19,7 +19,7 @@ import { notice } from '@/lib/notice';
 
 import { applyLead, refreshAfterLeadWrite } from './cache';
 import { leadTitle, statusOptions } from './logic';
-import { BOOKED_BY_HAND_HINT, isMe, isSettableStatus, staffName, statusChoiceBlock } from './outreach';
+import { BOOKED_BY_HAND_HINT, claimOutcome, claimSendsBooked, isMe, isSettableStatus, staffName, statusChoiceBlock } from './outreach';
 
 /** The "Nobody" choice (no email is empty). */
 const NOBODY = '';
@@ -173,27 +173,33 @@ export type ClaimBookingSheetProps = {
 };
 
 /**
- * "I booked this call" (PATCH /leads/:id `status: booked`, `leads.update`):
- * on a lead that shows booked with nobody holding the booking credit (a
- * calendar booking that came from outreach, or a call booked by phone before
- * credit existed), it records the signed-in person as the booker. The first
- * person to book a lead keeps the credit, so the toast says who has it.
- * Mounted only while open.
+ * "I booked this call" (`leads.update`): on a lead that shows booked with
+ * nobody holding the booking credit (a calendar booking that came from
+ * outreach, or a call booked by phone before credit existed), it records the
+ * signed-in person as the booker. Like the website (claimLeadBooking), it
+ * reads the lead first (GET /leads/:id) and sends PATCH `status: booked` only
+ * when it still shows booked with nobody holding the credit, so a stale screen
+ * never moves a won, lost or contacted lead back to booked. The first person
+ * to book a lead keeps the credit, so the toast says who has it, and a booked
+ * lead with no booker after the save says nothing was recorded. The screen
+ * takes the lead as the server has it either way. Mounted only while open.
  */
 export function ClaimBookingSheet({ lead, onClose }: ClaimBookingSheetProps) {
   const queryClient = useQueryClient();
   const me = useMe();
 
   const claim = async () => {
-    const updated = await updateLead(lead.id, { status: 'booked' });
-    applyLead(queryClient, updated);
+    const current = await getLead(lead.id);
+    const latest = claimSendsBooked(current) ? await updateLead(lead.id, { status: 'booked' }) : current;
+    applyLead(queryClient, latest);
     refreshAfterLeadWrite(queryClient);
-    const booker = updated.bookedBy ?? null;
-    if (booker && !isMe(booker, me?.user.email)) {
-      notice.err(`${staffName(booker)} already has the booking credit.`);
-    } else {
+    const outcome = claimOutcome(latest, me?.user.email);
+    if (outcome.ok) {
       haptics.success();
-      notice.ok('Booking recorded. The booking credit is yours.');
+      notice.ok(outcome.message);
+    } else {
+      haptics.error();
+      notice.err(outcome.message);
     }
     onClose();
   };

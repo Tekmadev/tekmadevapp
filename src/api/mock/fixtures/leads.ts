@@ -446,6 +446,8 @@ type FoundSeed = {
   website?: string;
   /** Booked by this person this many days ago (a call booked by phone or DM: no calendar booking). */
   booked?: [by: string, daysAgo: number];
+  /** Handed over to someone else since (default: whoever found it). Staff can still edit a lead they found. */
+  assignedTo?: string;
   followUp?: [dayOffset: number, hour: number];
   touches?: TouchSeed[];
 };
@@ -495,6 +497,8 @@ const FOUND: FoundSeed[] = [
     phone: '+19055550303',
     status: 'qualified',
     booked: [STAFF, 2.1],
+    // Shajeed took it over after the discovery call; Noah found it, so he can still edit it.
+    assignedTo: OWNER,
     touches: [
       ['call', 3.1 * 1440, STAFF, 'Interested, booked a call with Shajeed', null],
       ['meeting', 1.0 * 1440, OWNER, 'Discovery call done', 'Two locations. Wants the missed-call text back first.'],
@@ -587,7 +591,7 @@ for (const seed of FOUND) {
     convertedClientId: null,
     website: seed.website ?? null,
     followUpAt: seed.followUp ? torontoAt(seed.followUp[0], seed.followUp[1]) : null,
-    assignedTo: by,
+    assignedTo: seed.assignedTo ? staffRef(seed.assignedTo) : by,
     addedBy: by,
     foundBy: by,
     bookedBy: null,

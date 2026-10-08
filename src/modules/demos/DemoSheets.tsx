@@ -23,10 +23,9 @@ import { notice } from '@/lib/notice';
 
 import { applyDemo, showDemoError } from './cache';
 import { DemoFields } from './DemoFields';
-import { demoFormErrors, demoFormFrom, demoPatchFrom, type DemoForm, type DemoFormErrors } from './demoForm';
+import { DEMO_LINK_MESSAGE, demoFormErrors, demoFormFrom, demoPatchFrom, type DemoForm, type DemoFormErrors } from './demoForm';
 import { isDemoLink, personName } from './labels';
 
-const LINK_MESSAGE = 'Enter a full link starting with https://.';
 const NOTE_LIMIT = 1000;
 
 /** Send a patch, put the answer in the cache, say so. A 400 with fields is the caller's to show inline. */
@@ -144,7 +143,7 @@ export function DemoLinkSheet({ demo, markReady = false, onClose }: DemoLinkShee
 
   const save = async () => {
     if (trimmed && !isDemoLink(trimmed)) {
-      setError(LINK_MESSAGE);
+      setError(DEMO_LINK_MESSAGE);
       haptics.error();
       return;
     }

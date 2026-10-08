@@ -4,12 +4,9 @@ import { StyleSheet, View } from 'react-native';
 
 import { createLead } from '@/api/endpoints/leads';
 import { ApiError, fieldErrors } from '@/api/errors';
-import type { Lead, LeadNeed, LeadsMeta } from '@/api/schemas/leads';
+import type { Lead, LeadsMeta } from '@/api/schemas/leads';
 import { useCan } from '@/auth/permissions';
-import { Select } from '@/components/form/Select';
 import { SwitchRow } from '@/components/form/Switch';
-import { TextArea } from '@/components/form/TextArea';
-import { TextField } from '@/components/form/TextField';
 import { PendingButton } from '@/components/PendingButton';
 import { Sheet } from '@/components/sheet/Sheet';
 import { reportSubmitError } from '@/components/SubmitGroup';
@@ -20,11 +17,9 @@ import { notice } from '@/lib/notice';
 import { useIntentKey } from '@/modules/clients/sections/sectionData';
 
 import { applyLead, refreshAfterLeadWrite } from './cache';
-import { needOptions, sourceLabel } from './logic';
-import { addLeadErrors, addLeadInput, EMPTY_ADD_LEAD, LIMITS, type AddLeadForm } from './outreach';
-
-/** A name or a business answers one rule, an email or a phone the other: typing in one clears the rule's error. */
-const LINKED: Partial<Record<keyof AddLeadForm, string>> = { business: 'name', phone: 'email' };
+import { LeadFormFields, useLeadForm } from './LeadFormFields';
+import { sourceLabel } from './logic';
+import { addLeadErrors, addLeadInput, EMPTY_ADD_LEAD } from './outreach';
 
 export type AddLeadSheetProps = {
   meta: LeadsMeta | undefined;
@@ -52,23 +47,11 @@ export type AddLeadSheetProps = {
 export function AddLeadSheet({ meta, onClose, onAdded, onFindExisting }: AddLeadSheetProps) {
   const queryClient = useQueryClient();
   const { keyFor } = useIntentKey();
-  const [form, setForm] = useState<AddLeadForm>(EMPTY_ADD_LEAD);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const { form, errors, setErrors, set } = useLeadForm(EMPTY_ADD_LEAD);
   const canRequestDemo = useCan('demos.request');
   const [wantsDemo, setWantsDemo] = useState(false);
   // "They want a demo" appears under Need once the need is a website (Webline).
   const offerDemo = canRequestDemo && form.need === 'website';
-
-  const set = <K extends keyof AddLeadForm>(key: K, value: AddLeadForm[K]) => {
-    setForm((f) => ({ ...f, [key]: value }));
-    setErrors((current) => {
-      const drop = [key, LINKED[key]].filter((f): f is string => !!f && f in current);
-      if (drop.length === 0) return current;
-      const next = { ...current };
-      for (const f of drop) delete next[f];
-      return next;
-    });
-  };
 
   const submit = async () => {
     const local = addLeadErrors(form);
@@ -113,88 +96,21 @@ export function AddLeadSheet({ meta, onClose, onAdded, onFindExisting }: AddLead
         <Text variant="small" color="ink3">
           {`Source: ${sourceLabel(meta, 'outreach')}. Assigned to you. A name or a business, and an email or a phone number.`}
         </Text>
-        <TextField
-          label="Name"
-          value={form.name}
-          onChangeText={(v) => set('name', v)}
-          error={errors.name}
-          maxLength={LIMITS.name}
-          showCount={false}
-          autoCapitalize="words"
-          autoComplete="off"
-          textContentType="none"
-          returnKeyType="next"
-        />
-        <TextField
-          label="Business"
-          value={form.business}
-          onChangeText={(v) => set('business', v)}
-          error={errors.business}
-          maxLength={LIMITS.business}
-          showCount={false}
-          autoCapitalize="words"
-          autoComplete="off"
-          returnKeyType="next"
-        />
-        <TextField
-          label="Email"
-          value={form.email}
-          onChangeText={(v) => set('email', v)}
-          error={errors.email}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoComplete="off"
-          textContentType="none"
-        />
-        <TextField
-          label="Phone"
-          value={form.phone}
-          onChangeText={(v) => set('phone', v)}
-          error={errors.phone}
-          keyboardType="phone-pad"
-          autoComplete="off"
-          textContentType="none"
-        />
-        <TextField
-          label="Website or profile"
-          value={form.website}
-          onChangeText={(v) => set('website', v)}
-          error={errors.website}
-          help="Their site, or a handle like instagram.com/name."
-          maxLength={LIMITS.website}
-          showCount={false}
-          keyboardType="url"
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoComplete="off"
-        />
-        <Select<LeadNeed>
-          label="Need"
-          options={needOptions(meta)}
-          value={form.need}
-          onChange={(v) => set('need', v)}
-          onClear={() => set('need', null)}
-          placeholder="Not sure yet"
-          error={errors.need}
-          sheetTitle="What they need"
-        />
-        {offerDemo ? (
-          <SwitchRow
-            label="They want a demo"
-            description="After the lead is added, the demo request opens so you can add what they want to see."
-            value={wantsDemo}
-            onValueChange={setWantsDemo}
-          />
-        ) : null}
-        <TextArea
-          label="Note"
-          value={form.message}
-          onChangeText={(v) => set('message', v)}
-          error={errors.message}
-          help="What you know about them: where you found them, what they asked."
-          maxLength={LIMITS.message}
-          showCount={false}
+        <LeadFormFields
+          form={form}
+          errors={errors}
+          meta={meta}
+          onChange={set}
+          afterNeed={
+            offerDemo ? (
+              <SwitchRow
+                label="They want a demo"
+                description="After the lead is added, the demo request opens so you can add what they want to see."
+                value={wantsDemo}
+                onValueChange={setWantsDemo}
+              />
+            ) : null
+          }
         />
       </View>
     </Sheet>

@@ -96,6 +96,13 @@ export const zLead = z.object({
   foundBy: zStaffRef.nullable().optional(),
   /** Who first moved it to booked or logged the booking: credit role "booker". */
   bookedBy: zStaffRef.nullable().optional(),
+  /**
+   * Whether the caller may edit the details (PATCH /leads/:id name, business,
+   * email, ...): owners and managers on any lead, staff on a lead they found
+   * or that is assigned to them. Optional: older servers do not send it; read
+   * undefined as false (no Edit button).
+   */
+  canEdit: z.boolean().optional(),
 });
 export type Lead = z.infer<typeof zLead>;
 

@@ -1,7 +1,19 @@
-import { zLeadNeed, zLeadRevenue, zLeadSource, zLeadStatus, zTouchKind, type Lead, type LeadStatus, type StaffRef, type Touch, type TouchKind } from '../../schemas/leads';
+import {
+  zLeadNeed,
+  zLeadRevenue,
+  zLeadSource,
+  zLeadStatus,
+  zTouchKind,
+  type Lead,
+  type LeadNeed,
+  type LeadStatus,
+  type StaffRef,
+  type Touch,
+  type TouchKind,
+} from '../../schemas/leads';
 import { findLead, leadAssignees, leadsDb, leadTouchesDb, recordBooking } from '../fixtures/leads';
-import { requireAnyCap, requireCap } from '../permissions';
-import { byNewest, fail, matches, mockId, nowIso, ok, paginate, type MockContext, type MockResult, type MockRoute } from '../router';
+import { mockCan, requireAnyCap, requireCap } from '../permissions';
+import { byNewest, fail, matches, mockId, nowIso, ok, paginate, type MockContext, type MockResult, type MockRoute, type MockStaff } from '../router';
 
 /**
  * Mock routes for the "leads" domain (contract section 11, Customers) and its
@@ -13,6 +25,10 @@ import { byNewest, fail, matches, mockId, nowIso, ok, paginate, type MockContext
  * records who found it; the first person to book a lead (by hand, or logging
  * a calendar booking) is its booker. Booked is settable on a lead with no
  * calendar booking.
+ * Edit lead (outreach.md section 4): PATCH /leads/:id also takes the lead's
+ * details (name, business, email, phone, website, need, message), staff only
+ * on a lead they found or that is assigned to them, and every lead answered
+ * carries `canEdit` for the caller.
  * Search and filters run here, like on the server. Unknown filter values are a
  * 400 rather than a silent empty list.
  */
@@ -35,6 +51,7 @@ const M = {
   websiteLong: 'Keep the website to 300 characters or fewer.',
   messageLong: 'Keep the note to 5,000 characters or fewer.',
   duplicate: 'That email is already a lead. Find it in Leads and log the touch there.',
+  editNotYours: 'You can only edit leads you found or that are assigned to you.',
   kind: 'Pick a call, email, DM, meeting or other.',
   outcomeLong: 'Keep the outcome to 200 characters or fewer.',
   noteLong: 'Keep the note to 5,000 characters or fewer.',
@@ -218,6 +235,74 @@ function teamMember(email: string): StaffRef | MockResult {
 }
 const isResult = (v: StaffRef | MockResult): v is MockResult => 'status' in v;
 
+/* ---------- edit lead: who may, and what changes ---------- */
+
+const sameEmail = (ref: StaffRef | null | undefined, email: string) => !!ref && ref.email.trim().toLowerCase() === email;
+
+/**
+ * The server's canEditLead: `leads.update`, and an owner or a manager, or
+ * staff on a lead they found or that is assigned to them.
+ */
+function canEditLead(user: MockStaff, lead: Lead): boolean {
+  if (!mockCan(user, 'leads.update')) return false;
+  if (user.role === 'owner' || user.role === 'manager') return true;
+  const me = user.email.trim().toLowerCase();
+  return !!me && (sameEmail(lead.foundBy, me) || sameEmail(lead.assignedTo, me));
+}
+
+/**
+ * A lead as this caller gets it: the stored row plus `canEdit` (never stored:
+ * it depends on who asks). GET /overview's recent leads use it too (the
+ * server builds them with GET /leads's own code).
+ */
+export const leadForCaller = (lead: Lead, user: MockStaff): Lead => ({ ...lead, canEdit: canEditLead(user, lead) });
+
+/** The details PATCH /leads/:id edits, as parsed: absent undefined, cleared null. */
+type LeadDetails = {
+  name?: string | null;
+  business?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  need?: LeadNeed | null;
+  message?: string | null;
+};
+const DETAIL_KEYS = ['name', 'business', 'email', 'phone', 'website', 'need', 'message'] as const;
+
+/** Trimmed text, or null when blank. */
+const stored = (v: string | null | undefined): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);
+
+/**
+ * The details a patch changes. A value the lead already has is left out (its
+ * own email in another casing too), like the server's detailColumns.
+ */
+function changedDetails(lead: Lead, details: LeadDetails): LeadDetails {
+  const out: LeadDetails = {};
+  for (const key of DETAIL_KEYS) {
+    const next = details[key];
+    if (next === undefined) continue;
+    const was = stored(lead[key]);
+    const same = key === 'email' ? (was?.toLowerCase() ?? null) === next : was === next;
+    if (!same) (out as Record<string, string | null>)[key] = next;
+  }
+  return out;
+}
+
+/**
+ * After the edit the lead must still have a name or a business, and an email
+ * or a phone (POST /leads's two rules, codes and copy). A key not sent keeps
+ * what the lead shows. Null: fine.
+ */
+function incompleteLead(lead: Lead, details: LeadDetails): MockResult | null {
+  const after = (key: 'name' | 'business' | 'email' | 'phone') => (details[key] !== undefined ? (details[key] ?? null) : stored(lead[key]));
+  const fields: Record<string, string> = {};
+  if (!after('name') && !after('business')) fields.name = M.name;
+  if (!after('email') && !after('phone')) fields.email = M.contact;
+  if (fields.name) return fail(400, 'name', M.name, fields);
+  if (fields.email) return fail(400, 'email', M.contact, fields);
+  return null;
+}
+
 /* ---------- the list ---------- */
 
 /** Phone digits match with any punctuation in between ("6135550199" finds "(613) 555-0199"). */
@@ -279,7 +364,7 @@ export const routes: MockRoute[] = [
       }
       const page = paginate(rows, { ...query, cursor: cursor ? NEWEST_CURSOR + cursor.slice(3) : '' });
       const next = page.nextCursor && byFollowUp ? FOLLOW_UP_CURSOR + page.nextCursor.slice(3) : page.nextCursor;
-      return ok({ items: page.items, nextCursor: next });
+      return ok({ items: page.items.map((lead) => leadForCaller(lead, user)), nextCursor: next });
     },
   },
   {
@@ -350,7 +435,7 @@ export const routes: MockRoute[] = [
       };
       if (lead.status === 'booked') recordBooking(lead, callerRef(ctx), lead.createdAt);
       leadsDb.unshift(lead);
-      return ok(lead, 201);
+      return ok(leadForCaller(lead, ctx.user), 201);
     },
   },
   {
@@ -372,7 +457,7 @@ export const routes: MockRoute[] = [
       const denied = requireCap(user, 'leads.view');
       if (denied) return denied;
       const lead = findLead(params.id);
-      return lead ? ok(lead) : notFound();
+      return lead ? ok(leadForCaller(lead, user)) : notFound();
     },
   },
   {
@@ -383,27 +468,59 @@ export const routes: MockRoute[] = [
       const { params, user, body } = ctx;
       const denied = requireCap(user, 'leads.update');
       if (denied) return denied;
+      // The body's format, in the server's key order (details first): one 400 with every field.
       const issues = new Issues();
+      const details: LeadDetails = {
+        name: text(body, 'name', issues, 120, M.nameLong),
+        business: text(body, 'business', issues, 200, M.businessLong),
+        email: email(body, issues),
+        phone: phone(body, issues),
+        website: text(body, 'website', issues, 300, M.websiteLong),
+        need: oneOf(body, 'need', zLeadNeed.options, issues, M.need),
+        message: text(body, 'message', issues, 5000, M.messageLong),
+      };
       const status = settableStatus(body, issues);
       const followUp = followUpAt(body, issues);
       const assignedTo = assignee(body, issues);
       if (issues.found) return issues.result();
       const lead = findLead(params.id);
       if (!lead) return notFound();
+      // Any detail key is an edit: staff only on their own leads, and the whole lead must still hold up.
+      // Everything is checked before anything is written.
+      let changes: LeadDetails = {};
+      if (DETAIL_KEYS.some((key) => details[key] !== undefined)) {
+        if (!canEditLead(user, lead)) return fail(403, 'forbidden', M.editNotYours);
+        const incomplete = incompleteLead(lead, details);
+        if (incomplete) return incomplete;
+        changes = changedDetails(lead, details);
+      }
       const refused = refuseBooked(lead, status);
       if (refused) return refused;
+      // One email is one lead, whatever the casing (its own email is not a change).
+      const newEmail = changes.email;
+      if (newEmail && leadsDb.some((l) => l.id !== lead.id && l.email.trim().toLowerCase() === newEmail)) {
+        return fail(409, 'duplicate', M.duplicate, { email: M.duplicate });
+      }
       let owner: StaffRef | null | undefined = assignedTo === null ? null : undefined;
       if (assignedTo) {
         const member = teamMember(assignedTo);
         if (isResult(member)) return member;
         owner = member;
       }
+      if (changes.name !== undefined) lead.name = changes.name;
+      if (changes.business !== undefined) lead.business = changes.business;
+      // A lead with no email shows "" (the contract).
+      if (changes.email !== undefined) lead.email = changes.email ?? '';
+      if (changes.phone !== undefined) lead.phone = changes.phone;
+      if (changes.website !== undefined) lead.website = changes.website;
+      if (changes.need !== undefined) lead.need = changes.need;
+      if (changes.message !== undefined) lead.message = changes.message;
       // Setting the status it already shows writes nothing, but "booked" still records the first booker.
       if (status !== undefined && status !== lead.status) lead.status = status;
       if (status === 'booked') recordBooking(lead, callerRef(ctx), nowIso());
       if (followUp !== undefined) lead.followUpAt = followUp;
       if (owner !== undefined) lead.assignedTo = owner;
-      return ok(lead);
+      return ok(leadForCaller(lead, user));
     },
   },
   {
@@ -460,7 +577,7 @@ export const routes: MockRoute[] = [
       // The touch that books it: its author is the booker when nobody is yet.
       if (status === 'booked') recordBooking(lead, touch.by, touch.at);
       if (followUp !== undefined) lead.followUpAt = followUp;
-      return ok({ touch, lead }, 201);
+      return ok({ touch, lead: leadForCaller(lead, user) }, 201);
     },
   },
 ];

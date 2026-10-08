@@ -8,7 +8,7 @@ import { TextField } from '@/components/form/TextField';
 import { layout } from '@/design/tokens';
 import { todayToronto } from '@/lib/dates';
 
-import { DEMO_LIMITS, type DemoForm, type DemoFormErrors } from './demoForm';
+import { DEMO_LIMITS, DEMO_LINK_LIMIT, type DemoForm, type DemoFormErrors } from './demoForm';
 
 export type DemoFieldsProps = {
   form: DemoForm;
@@ -16,6 +16,8 @@ export type DemoFieldsProps = {
   onChange: <K extends keyof DemoForm>(key: K, value: DemoForm[K]) => void;
   /** Box fill: bg2 on a screen, the sheet's own on a sheet. */
   fill?: FieldFill;
+  /** "Already built? Demo link" at the end ("Request a demo", for `demos.manage`). */
+  withLink?: boolean;
 };
 
 /**
@@ -23,9 +25,11 @@ export type DemoFieldsProps = {
  * and the Edit sheet: the business (name, kind, area and what they sell are
  * required, marked "Required." under the field), then what the client wants
  * to see and when it is needed (a Toronto calendar date, today or later).
+ * With `withLink`, an optional "Already built? Demo link": the request is
+ * then saved as ready to show (the link sheet's https check and copy).
  * Field errors come from the local check or the server, under the same keys.
  */
-export function DemoFields({ form, errors, onChange, fill }: DemoFieldsProps) {
+export function DemoFields({ form, errors, onChange, fill, withLink = false }: DemoFieldsProps) {
   const text = (key: Exclude<keyof DemoForm, 'neededBy'>) => (value: string) => onChange(key, value);
   return (
     <View style={styles.sections}>
@@ -126,6 +130,25 @@ export function DemoFields({ form, errors, onChange, fill }: DemoFieldsProps) {
           error={errors.neededBy}
           fill={fill}
         />
+        {withLink ? (
+          <TextField
+            label="Already built? Demo link"
+            placeholder="https://name.vercel.app"
+            help="Paste the link and it is saved as ready to show."
+            value={form.demoUrl}
+            onChangeText={text('demoUrl')}
+            error={errors.demoUrl}
+            maxLength={DEMO_LINK_LIMIT}
+            showCount={false}
+            keyboardType="url"
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="off"
+            clearable
+            monospace
+            fill={fill}
+          />
+        ) : null}
       </FormSection>
     </View>
   );

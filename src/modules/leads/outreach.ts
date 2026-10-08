@@ -8,9 +8,9 @@ import { isValidEmail } from '@/lib/text';
 /**
  * Pure helpers for outreach on leads (the website's docs/admin-api/outreach.md):
  * touch kinds, the statuses a person may set, follow-up states (overdue in
- * signal, today in gold), the "Add a lead" and "Log outreach" forms with the
- * server's own rules and copy, and the "Log this call" prompt after a one-tap
- * contact. No React Native here, so it is unit tested.
+ * signal, today in gold), the "Add a lead", "Edit lead" and "Log outreach"
+ * forms with the server's own rules and copy, and the "Log this call" prompt
+ * after a one-tap contact. No React Native here, so it is unit tested.
  */
 
 /* ---------- touch kinds ---------- */
@@ -96,6 +96,42 @@ export const staffName = (ref: StaffRef) => ref.name?.trim() || ref.email;
 /** Whether a reference is the signed-in person (emails compare without case). */
 export const isMe = (ref: StaffRef | null | undefined, myEmail: string | null | undefined) =>
   !!ref && !!myEmail && ref.email.trim().toLowerCase() === myEmail.trim().toLowerCase();
+
+/* ---------- "I booked this call" ---------- */
+
+/** The website's copy for a claim (lib/leads-web.ts claimLeadBooking), so both say the same. */
+export const CLAIM_COPY = {
+  /** The lead does not show booked any more (a stale screen): a claim never moves it back to booked. */
+  notBooked: 'This lead no longer shows booked. Refresh to see the latest.',
+  /** Booked was sent but nobody was recorded: the server has nowhere to keep the credit yet. */
+  notReady: 'The booking credit needs a database update first. Ask the owner to apply the staff management migration.',
+  yours: 'Booking recorded. The booking credit is yours.',
+} as const;
+
+export type ClaimOutcome =
+  | { ok: true; message: string }
+  | { ok: false; code: 'not_booked' | 'booked_by_other' | 'not_recorded'; message: string };
+
+/**
+ * Whether a claim sends booked: only when the lead read just now shows booked
+ * and nobody holds the credit (like the website, which reads the lead first).
+ */
+export const claimSendsBooked = (lead: Pick<Lead, 'status' | 'bookedBy'>) => lead.status === 'booked' && !lead.bookedBy;
+
+/**
+ * What "I booked this call" says, from the lead as the server has it (the
+ * read before the claim, or what the PATCH answered), with the website's
+ * codes and copy: not booked is refused, the credit is the caller's (ok) or
+ * someone else's (refused, with who), and no booker means nothing was
+ * recorded (never "yours").
+ */
+export function claimOutcome(lead: Pick<Lead, 'status' | 'bookedBy'>, myEmail: string | null | undefined): ClaimOutcome {
+  if (lead.status !== 'booked') return { ok: false, code: 'not_booked', message: CLAIM_COPY.notBooked };
+  const booker = lead.bookedBy;
+  if (!booker) return { ok: false, code: 'not_recorded', message: CLAIM_COPY.notReady };
+  if (isMe(booker, myEmail)) return { ok: true, message: CLAIM_COPY.yours };
+  return { ok: false, code: 'booked_by_other', message: `${staffName(booker)} already has the booking credit.` };
+}
 
 /* ---------- follow-ups ---------- */
 
@@ -191,7 +227,7 @@ export function sameInstant(a: string | null, b: string | null): boolean {
   return ta !== undefined && ta === tb;
 }
 
-/* ---------- Add a lead (POST /leads) ---------- */
+/* ---------- Add a lead (POST /leads) and Edit lead (PATCH /leads/:id) ---------- */
 
 /** The server's copy (lib/admin-api/leads/input.ts), so local and server errors read the same. */
 export const LEAD_COPY = {
@@ -205,11 +241,14 @@ export const LEAD_COPY = {
   messageLong: 'Keep the note to 5,000 characters or fewer.',
   outcomeLong: 'Keep the outcome to 200 characters or fewer.',
   noteLong: 'Keep the note to 5,000 characters or fewer.',
+  /** 403 `forbidden` on an edit: staff on a lead they did not find and do not own. */
+  editNotYours: 'You can only edit leads you found or that are assigned to you.',
 } as const;
 
 export const LIMITS = { name: 120, business: 200, website: 300, message: 5000, outcome: 200, note: 5000 } as const;
 
-export type AddLeadForm = {
+/** The lead's details as "Add a lead" and "Edit lead" show them (the same fields, in the same order). */
+export type LeadForm = {
   name: string;
   business: string;
   email: string;
@@ -220,7 +259,29 @@ export type AddLeadForm = {
   message: string;
 };
 
-export const EMPTY_ADD_LEAD: AddLeadForm = { name: '', business: '', email: '', phone: '', website: '', need: null, message: '' };
+/** The "Add a lead" form (the same fields as Edit lead). */
+export type AddLeadForm = LeadForm;
+
+export const EMPTY_ADD_LEAD: LeadForm = { name: '', business: '', email: '', phone: '', website: '', need: null, message: '' };
+
+/** The text fields, in the form's order (the server's detail keys, need aside). */
+type LeadTextKey = Exclude<keyof LeadForm, 'need'>;
+const LEAD_TEXT_KEYS: readonly LeadTextKey[] = ['name', 'business', 'email', 'phone', 'website', 'message'];
+
+/**
+ * A name or a business answers one rule, an email or a phone the other:
+ * typing in the second field of a pair clears the rule's error on the first.
+ */
+export const LINKED_LEAD_FIELDS: Partial<Record<keyof LeadForm, keyof LeadForm>> = { business: 'name', phone: 'email' };
+
+/** The errors left once `key` is typed in: its own, and the rule it shares (same object when nothing goes). */
+export function clearLeadFieldError(errors: Record<string, string>, key: keyof LeadForm): Record<string, string> {
+  const drop = [key, LINKED_LEAD_FIELDS[key]].filter((f): f is keyof LeadForm => !!f && f in errors);
+  if (drop.length === 0) return errors;
+  const next = { ...errors };
+  for (const f of drop) delete next[f];
+  return next;
+}
 
 /** The server's phone rule: 7 to 15 digits, only digits, spaces, ( ) + . and -. */
 export function isValidLeadPhone(input: string): boolean {
@@ -230,31 +291,41 @@ export function isValidLeadPhone(input: string): boolean {
 }
 
 /**
- * Inline errors before anything is sent, keyed like the server's `fields`
- * (name, business, email, phone, website, message): the same rules and words
- * as POST /leads, so a server error lands on the same field.
+ * The checks shared by Add and Edit. The two rules on the whole lead (a name
+ * or a business, an email or a phone) always run; a field's own format and
+ * length only when `check` says so (Edit checks only what was changed, since
+ * only that is sent).
  */
-export function addLeadErrors(form: AddLeadForm): Record<string, string> {
+function leadFormErrors(form: LeadForm, check: (key: LeadTextKey) => boolean): Record<string, string> {
   const errors: Record<string, string> = {};
   const name = form.name.trim();
   const business = form.business.trim();
   const email = form.email.trim();
   const phone = form.phone.trim();
-  if (name.length > LIMITS.name) errors.name = LEAD_COPY.nameLong;
+  if (check('name') && name.length > LIMITS.name) errors.name = LEAD_COPY.nameLong;
   else if (!name && !business) errors.name = LEAD_COPY.name;
-  if (business.length > LIMITS.business) errors.business = LEAD_COPY.businessLong;
-  if (email && (email.length > 254 || !isValidEmail(email))) errors.email = LEAD_COPY.email;
+  if (check('business') && business.length > LIMITS.business) errors.business = LEAD_COPY.businessLong;
+  if (email && check('email') && (email.length > 254 || !isValidEmail(email))) errors.email = LEAD_COPY.email;
   else if (!email && !phone) errors.email = LEAD_COPY.contact;
-  if (phone && !isValidLeadPhone(phone)) errors.phone = LEAD_COPY.phone;
-  if (form.website.trim().length > LIMITS.website) errors.website = LEAD_COPY.websiteLong;
-  if (form.message.trim().length > LIMITS.message) errors.message = LEAD_COPY.messageLong;
+  if (phone && check('phone') && !isValidLeadPhone(phone)) errors.phone = LEAD_COPY.phone;
+  if (check('website') && form.website.trim().length > LIMITS.website) errors.website = LEAD_COPY.websiteLong;
+  if (check('message') && form.message.trim().length > LIMITS.message) errors.message = LEAD_COPY.messageLong;
   return errors;
 }
 
+/**
+ * Inline errors before anything is sent, keyed like the server's `fields`
+ * (name, business, email, phone, website, message): the same rules and words
+ * as POST /leads, so a server error lands on the same field.
+ */
+export function addLeadErrors(form: LeadForm): Record<string, string> {
+  return leadFormErrors(form, () => true);
+}
+
 /** The POST body: trimmed, blanks left out (the server sets the source and assigns the lead to whoever adds it). */
-export function addLeadInput(form: AddLeadForm): NewLeadInput {
+export function addLeadInput(form: LeadForm): NewLeadInput {
   const input: NewLeadInput = {};
-  const set = (key: 'name' | 'business' | 'email' | 'phone' | 'website' | 'message', value: string) => {
+  const set = (key: LeadTextKey, value: string) => {
     const v = value.trim();
     if (v) input[key] = v;
   };
@@ -266,6 +337,54 @@ export function addLeadInput(form: AddLeadForm): NewLeadInput {
   set('message', form.message);
   if (form.need) input.need = form.need;
   return input;
+}
+
+/** The details PATCH /leads/:id edits (status, follow-up and owner have their own sheets). */
+export type LeadDetailsPatch = Pick<LeadPatch, LeadTextKey | 'need'>;
+
+/** "Edit lead" starts from what the lead shows (no value as empty text, an older server's missing website too). */
+export function leadFormFrom(lead: Pick<Lead, 'name' | 'business' | 'email' | 'phone' | 'website' | 'need' | 'message'>): LeadForm {
+  return {
+    name: lead.name ?? '',
+    business: lead.business ?? '',
+    email: lead.email,
+    phone: lead.phone ?? '',
+    website: lead.website ?? '',
+    need: lead.need ?? null,
+    message: lead.message ?? '',
+  };
+}
+
+/**
+ * The PATCH for "Edit lead": only the details that differ from what the lead
+ * shows, trimmed, a cleared field as null (the server clears it), the email
+ * lowercased. The lead's own email in another casing is not a change, like on
+ * the server. Empty when nothing changed. Sending only the edits keeps a
+ * business that came from a free tool's form (or a booking's note) as it is.
+ */
+export function editLeadPatch(lead: Parameters<typeof leadFormFrom>[0], form: LeadForm): LeadDetailsPatch {
+  const shown = leadFormFrom(lead);
+  const patch: LeadDetailsPatch = {};
+  for (const key of LEAD_TEXT_KEYS) {
+    const next = form[key].trim();
+    const was = shown[key].trim();
+    const same = key === 'email' ? next.toLowerCase() === was.toLowerCase() : next === was;
+    if (!same) patch[key] = next ? (key === 'email' ? next.toLowerCase() : next) : null;
+  }
+  if (form.need !== shown.need) patch.need = form.need;
+  return patch;
+}
+
+/**
+ * Inline errors for "Edit lead", in the server's words: the lead must still
+ * have a name or a business and an email or a phone (what it shows counts,
+ * so the form as it stands is the lead after the edit), and a changed field
+ * must pass the same checks as on "Add a lead". A field nobody touched is not
+ * checked: it is not sent, and an old value from a website form stays as it is.
+ */
+export function editLeadErrors(lead: Parameters<typeof leadFormFrom>[0], form: LeadForm): Record<string, string> {
+  const patch = editLeadPatch(lead, form);
+  return leadFormErrors(form, (key) => key in patch);
 }
 
 /* ---------- Log outreach (POST /leads/:id/touches) ---------- */

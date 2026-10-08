@@ -6,8 +6,14 @@ import {
   addLeadInput,
   CALENDAR_STATUS_HINT,
   canClaimBooking,
+  CLAIM_COPY,
+  claimOutcome,
+  claimSendsBooked,
+  clearLeadFieldError,
   CONTACT_PROMPTS,
   dueByToday,
+  editLeadErrors,
+  editLeadPatch,
   EMPTY_ADD_LEAD,
   emptyLogTouch,
   finderOf,
@@ -23,6 +29,7 @@ import {
   isSettableStatus,
   isValidLeadPhone,
   LEAD_COPY,
+  leadFormFrom,
   loggedMessage,
   logTouchErrors,
   logTouchInput,
@@ -165,6 +172,104 @@ describe('Add a lead', () => {
   });
 });
 
+describe('Edit lead', () => {
+  type Shown = Parameters<typeof leadFormFrom>[0];
+  const lead: Shown = {
+    name: 'Olivia Martin',
+    business: 'Martin Family Dentistry',
+    email: 'Olivia.Martin@mailbox.test',
+    phone: '+16135550101',
+    website: null,
+    need: 'customers',
+    message: 'Wants more new patients.\nTwo chairs free on Fridays.',
+  };
+
+  it('starts from what the lead shows, no value as empty text', () => {
+    expect(leadFormFrom(lead)).toEqual({
+      name: 'Olivia Martin',
+      business: 'Martin Family Dentistry',
+      email: 'Olivia.Martin@mailbox.test',
+      phone: '+16135550101',
+      website: '',
+      need: 'customers',
+      message: 'Wants more new patients.\nTwo chairs free on Fridays.',
+    });
+    // A free tool lead with only an email, from an older server without website.
+    const tool = leadFormFrom({ name: null, business: null, email: 'kim@example.test', phone: null, need: null, message: null });
+    expect(tool).toEqual({ ...EMPTY_ADD_LEAD, email: 'kim@example.test' });
+    // A lead added with only a phone shows email "".
+    expect(leadFormFrom({ ...lead, email: '' }).email).toBe('');
+  });
+
+  it('sends nothing when nothing changed, the email in another casing and stray spaces included', () => {
+    const form = leadFormFrom(lead);
+    expect(editLeadPatch(lead, form)).toEqual({});
+    expect(editLeadPatch(lead, { ...form, email: ' olivia.martin@MAILBOX.test ', name: ' Olivia Martin ' })).toEqual({});
+  });
+
+  it('sends only what changed: trimmed, a cleared field as null, the email lowercased', () => {
+    const form = leadFormFrom(lead);
+    expect(
+      editLeadPatch(lead, {
+        ...form,
+        name: '  Olivia Martin-Roy ',
+        email: ' Olivia@MartinDental.test ',
+        website: ' martindental.test ',
+        business: '  ',
+        need: null,
+      }),
+    ).toEqual({ name: 'Olivia Martin-Roy', email: 'olivia@martindental.test', website: 'martindental.test', business: null, need: null });
+    expect(editLeadPatch(lead, { ...form, need: 'website', message: 'Line one\nline two ' })).toEqual({
+      need: 'website',
+      message: 'Line one\nline two',
+    });
+  });
+
+  it('keeps the two rules on the whole lead, in the server words', () => {
+    const form = leadFormFrom(lead);
+    expect(editLeadErrors(lead, form)).toEqual({});
+    // The business still answers the name rule, the phone the email rule.
+    expect(editLeadErrors(lead, { ...form, name: '', email: '' })).toEqual({});
+    expect(editLeadErrors(lead, { ...form, name: '', business: ' ' })).toEqual({ name: LEAD_COPY.name });
+    expect(editLeadErrors(lead, { ...form, email: '', phone: '' })).toEqual({ email: LEAD_COPY.contact });
+    expect(editLeadErrors(lead, { ...form, name: '', business: '', email: '', phone: '' })).toEqual({
+      name: LEAD_COPY.name,
+      email: LEAD_COPY.contact,
+    });
+  });
+
+  it('checks a changed field like Add a lead, and leaves a field nobody touched alone', () => {
+    const form = leadFormFrom(lead);
+    expect(editLeadErrors(lead, { ...form, email: 'olivia@' })).toEqual({ email: LEAD_COPY.email });
+    expect(editLeadErrors(lead, { ...form, phone: '555-01' })).toEqual({ phone: LEAD_COPY.phone });
+    expect(editLeadErrors(lead, { ...form, name: 'x'.repeat(121) })).toEqual({ name: LEAD_COPY.nameLong });
+    expect(editLeadErrors(lead, { ...form, website: 'w'.repeat(301) })).toEqual({ website: LEAD_COPY.websiteLong });
+    expect(editLeadErrors(lead, { ...form, message: 'm'.repeat(5001) })).toEqual({ message: LEAD_COPY.messageLong });
+    // A website form once stored a phone the app would not take: editing the name does not block on it.
+    const old: Shown = { ...lead, phone: 'call after 5', message: 'm'.repeat(6000) };
+    const edited = { ...leadFormFrom(old), name: 'Olivia M.' };
+    expect(editLeadErrors(old, edited)).toEqual({});
+    expect(editLeadPatch(old, edited)).toEqual({ name: 'Olivia M.' });
+  });
+
+  it('measures the edits against the lead the form opened with, so a teammate\'s newer value stays', () => {
+    // The form opened on phone A; a refetch then brought the teammate's phone B into the live lead.
+    const opened: Shown = { ...lead, phone: '+16135550101' };
+    const live: Shown = { ...lead, phone: '+16135550199' };
+    const form = { ...leadFormFrom(opened), website: 'martindental.test' };
+    // Against the snapshot only the website is sent; against the live lead phone A would undo B.
+    expect(editLeadPatch(opened, form)).toEqual({ website: 'martindental.test' });
+    expect(editLeadPatch(live, form)).toEqual({ phone: '+16135550101', website: 'martindental.test' });
+  });
+
+  it('clears an error and the rule it shares when typing', () => {
+    const errors = { name: LEAD_COPY.name, email: LEAD_COPY.contact, phone: LEAD_COPY.phone };
+    expect(clearLeadFieldError(errors, 'business')).toEqual({ email: LEAD_COPY.contact, phone: LEAD_COPY.phone });
+    expect(clearLeadFieldError(errors, 'phone')).toEqual({ name: LEAD_COPY.name });
+    expect(clearLeadFieldError(errors, 'website')).toBe(errors);
+  });
+});
+
 describe('Log outreach', () => {
   const current = '2026-10-08T14:00:00.000000Z';
 
@@ -266,5 +371,33 @@ describe('commission credit on leads', () => {
     expect(canClaimBooking({ status: 'booked', bookedBy: NOAH })).toBe(false);
     expect(canClaimBooking({ status: 'booked', bookedBy: undefined })).toBe(false);
     expect(canClaimBooking({ status: 'qualified', bookedBy: null })).toBe(false);
+  });
+
+  it('sends booked for a claim only when the lead read just now still shows booked with nobody holding the credit', () => {
+    expect(claimSendsBooked({ status: 'booked', bookedBy: null })).toBe(true);
+    // A stale screen: won, lost or contacted on the server is never moved back to booked.
+    expect(claimSendsBooked({ status: 'won', bookedBy: null })).toBe(false);
+    expect(claimSendsBooked({ status: 'contacted', bookedBy: null })).toBe(false);
+    expect(claimSendsBooked({ status: 'booked', bookedBy: NOAH })).toBe(false);
+  });
+
+  it('says what a claim did with the website codes and copy', () => {
+    const me = 'Staff@Tekmadev.test';
+    expect(claimOutcome({ status: 'won', bookedBy: null }, me)).toEqual({ ok: false, code: 'not_booked', message: CLAIM_COPY.notBooked });
+    expect(claimOutcome({ status: 'lost', bookedBy: NOAH }, me)).toMatchObject({ code: 'not_booked' });
+    expect(claimOutcome({ status: 'booked', bookedBy: NOAH }, me)).toEqual({ ok: true, message: 'Booking recorded. The booking credit is yours.' });
+    expect(claimOutcome({ status: 'booked', bookedBy: { email: 'ava@tekmadev.test', name: 'Ava Chen' } }, me)).toEqual({
+      ok: false,
+      code: 'booked_by_other',
+      message: 'Ava Chen already has the booking credit.',
+    });
+    expect(claimOutcome({ status: 'booked', bookedBy: { email: 'ava@tekmadev.test', name: null } }, me)).toMatchObject({
+      message: 'ava@tekmadev.test already has the booking credit.',
+    });
+    // Booked was sent but nobody was recorded (or an older server): never "yours".
+    expect(claimOutcome({ status: 'booked', bookedBy: null }, me)).toEqual({ ok: false, code: 'not_recorded', message: CLAIM_COPY.notReady });
+    expect(claimOutcome({ status: 'booked', bookedBy: undefined }, me)).toMatchObject({ code: 'not_recorded' });
+    // Signed out (no email): someone else's credit.
+    expect(claimOutcome({ status: 'booked', bookedBy: NOAH }, null)).toMatchObject({ code: 'booked_by_other' });
   });
 });

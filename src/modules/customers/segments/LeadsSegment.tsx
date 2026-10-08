@@ -2,7 +2,7 @@ import type { ListRenderItemInfo } from '@shopify/flash-list';
 import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { UserPlus } from 'lucide-react-native';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { leadFormsQuery, leadKeys, leadsInfiniteQuery, leadsMetaQuery, type LeadListParams } from '@/api/endpoints/leads';
@@ -48,8 +48,9 @@ const clearView = () => router.setParams({ view: undefined });
  * search and filters (source, status, need), "Lead forms" on top while the
  * filters include them, then every lead with infinite scroll. Home's "Booked
  * calls" card opens it with `view=booked`: the booked status as a removable
- * chip. A failed read is an ErrorState with Retry, never an empty list; cached
- * rows stay on screen offline under the banner.
+ * chip. "Find it" on Edit lead opens it with `q=<email>`: that search, the
+ * other filters off. A failed read is an ErrorState with Retry, never an empty
+ * list; cached rows stay on screen offline under the banner.
  *
  * Outreach: "Add a lead" (`leads.create`, also the quick action through
  * `action=add-lead`), and "Follow-ups due": the server's follow-up queue
@@ -90,6 +91,24 @@ export function LeadsSegment({ chrome, params }: SegmentProps) {
       setQ('');
     }
   }
+
+  // "Find it" from Edit lead (`q`, one shot): that search, every other filter off, like "Find it" on Add a lead.
+  const [seenSearch, setSeenSearch] = useState<string | undefined>(undefined);
+  if (params.q !== seenSearch) {
+    setSeenSearch(params.q);
+    const wanted = params.q?.trim();
+    if (wanted) {
+      setSource(null);
+      setStatusChoice(null);
+      setNeed(null);
+      setFollowUpsDue(false);
+      setSearchText(wanted);
+      setQ(wanted);
+    }
+  }
+  useEffect(() => {
+    if (params.q) router.setParams({ q: undefined, view: undefined });
+  }, [params.q]);
 
   const status = viewInfo?.status ?? statusChoice;
   const listParams: LeadListParams = { q, source, status, need, followUp: followUpsDue ? 'any' : null };

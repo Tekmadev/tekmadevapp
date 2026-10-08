@@ -145,7 +145,15 @@ describe('GET /leads', () => {
     expect(zLeadPage.safeParse(page).success).toBe(true);
     expect(page.items.length).toBe(30);
     asStaff();
-    expect((await getLeads({})).items).toEqual(page.items);
+    // The same rows; only canEdit depends on who asks (staff: leads they found or own).
+    const withoutCanEdit = (rows: Lead[]) => rows.map(({ canEdit: _canEdit, ...rest }) => rest);
+    const staffRows = (await getLeads({})).items;
+    expect(withoutCanEdit(staffRows)).toEqual(withoutCanEdit(page.items));
+    expect(page.items.every((l) => l.canEdit === true)).toBe(true);
+    for (const lead of staffRows) {
+      const mine = [lead.foundBy?.email, lead.assignedTo?.email].includes('staff@tekmadev.test');
+      expect(lead.canEdit).toBe(mine);
+    }
   });
 });
 

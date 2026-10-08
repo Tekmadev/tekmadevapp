@@ -89,7 +89,13 @@ describe('GET /overview: shape', () => {
     expect(manager.recentLeads).toEqual(owner.recentLeads);
     expect(manager.recentSubscriptions).toEqual(owner.recentSubscriptions);
     expect(manager.kpis).toEqual(owner.kpis);
-    expect(staff.recentLeads).toEqual(owner.recentLeads);
+    // The same rows for staff; only canEdit depends on who asks (like GET /leads).
+    const withoutCanEdit = (rows: typeof owner.recentLeads) => rows.map(({ canEdit: _canEdit, ...rest }) => rest);
+    expect(withoutCanEdit(staff.recentLeads)).toEqual(withoutCanEdit(owner.recentLeads));
+    expect(owner.recentLeads.every((l) => l.canEdit === true)).toBe(true);
+    for (const lead of staff.recentLeads) {
+      expect(lead.canEdit).toBe([lead.foundBy?.email, lead.assignedTo?.email].includes('staff@tekmadev.test'));
+    }
   });
 
   it('staff never get revenue: active subs and recent subscriptions are null, never zero', async () => {

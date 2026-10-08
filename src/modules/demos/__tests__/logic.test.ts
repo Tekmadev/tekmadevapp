@@ -1,14 +1,18 @@
 import type { DemoRequest } from '@/api/schemas/demos';
 
 import {
+  DEMO_LINK_MESSAGE,
   demoBusiness,
   demoFormErrors,
   demoFormFrom,
   demoFormHasText,
+  demoLinkOf,
   demoPatchFrom,
   demoTarget,
   emptyDemoForm,
   newDemoInput,
+  restoredDemoForm,
+  type DemoForm,
 } from '../demoForm';
 import {
   DEMO_STATUS,
@@ -252,5 +256,39 @@ describe('the form', () => {
       neededBy: '2026-10-09',
     });
     expect(demoBusiness(same)).toEqual(d.business);
+  });
+});
+
+describe('"Already built? Demo link" (demos.manage)', () => {
+  const filled: DemoForm = { ...emptyDemoForm({ businessName: 'Acme', area: 'Hamilton' }), businessType: 'Plumber', offer: 'Drains' };
+
+  it('is checked only on a form that has the field, with the link sheet check and words', () => {
+    expect(DEMO_LINK_MESSAGE).toBe('Enter a full link starting with https://.');
+    const bad = { ...filled, demoUrl: 'acme.vercel.app' };
+    expect(demoFormErrors(bad)).toEqual({});
+    expect(demoFormErrors(bad, { withLink: true })).toEqual({ demoUrl: DEMO_LINK_MESSAGE });
+    expect(demoFormErrors({ ...filled, demoUrl: 'http://acme.vercel.app' }, { withLink: true })).toEqual({ demoUrl: DEMO_LINK_MESSAGE });
+    expect(demoFormErrors({ ...filled, demoUrl: `https://${'a'.repeat(2000)}.app` }, { withLink: true })).toEqual({ demoUrl: DEMO_LINK_MESSAGE });
+    expect(demoFormErrors({ ...filled, demoUrl: ' https://acme.vercel.app ' }, { withLink: true })).toEqual({});
+    // Empty is fine: an ordinary request.
+    expect(demoFormErrors({ ...filled, demoUrl: '   ' }, { withLink: true })).toEqual({});
+  });
+
+  it('sends the trimmed link as demoUrl only when there is one on a form with the field', () => {
+    const withLink = { ...filled, demoUrl: '  https://acme.vercel.app  ' };
+    expect(newDemoInput({ leadId: 'ld_1' }, withLink, { withLink: true })).toMatchObject({ leadId: 'ld_1', demoUrl: 'https://acme.vercel.app' });
+    // Without the field (staff), or with nothing typed, the body has no demoUrl key at all.
+    expect('demoUrl' in newDemoInput({ leadId: 'ld_1' }, withLink)).toBe(false);
+    expect('demoUrl' in newDemoInput({ leadId: 'ld_1' }, { ...filled, demoUrl: ' ' }, { withLink: true })).toBe(false);
+    expect(demoLinkOf(withLink, { withLink: true })).toBe('https://acme.vercel.app');
+    expect(demoLinkOf(withLink)).toBeNull();
+  });
+
+  it('starts empty, is not part of editing a request, and survives a draft from an older build', () => {
+    expect(emptyDemoForm().demoUrl).toBe('');
+    expect(demoFormFrom(demo()).demoUrl).toBe('');
+    expect(demoFormHasText({ ...emptyDemoForm(), demoUrl: 'https://a.vercel.app' })).toBe(true);
+    const { demoUrl: _dropped, ...oldDraft } = { ...filled, offer: 'Drains and water heaters' };
+    expect(restoredDemoForm(emptyDemoForm(), oldDraft)).toEqual({ ...filled, offer: 'Drains and water heaters', demoUrl: '' });
   });
 });

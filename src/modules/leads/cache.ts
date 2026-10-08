@@ -1,5 +1,6 @@
 import type { InfiniteData, QueryClient } from '@tanstack/react-query';
 
+import { demoKeys } from '@/api/endpoints/demos';
 import { leadKeys } from '@/api/endpoints/leads';
 import { overviewKeys } from '@/api/endpoints/overview';
 import type { Lead, LeadPage, LogTouchResult, TouchPage } from '@/api/schemas/leads';
@@ -9,8 +10,9 @@ import type { Lead, LeadPage, LogTouchResult, TouchPage } from '@/api/schemas/le
  * the detail and any list row showing it take that lead at once; then what the
  * web admin refreshes after the same write refetches in the background:
  * the leads lists (a status, follow-up or owner can move a lead in or out of a
- * filter) and, when the write can change Home (a new lead, a new status), the
- * overview.
+ * filter) and, when the write can change Home (a new lead, a new status, a
+ * new name), the overview; after an edit, the demo requests too (they show
+ * the lead's name).
  */
 
 type ListData = InfiniteData<LeadPage> | LeadPage;
@@ -41,8 +43,10 @@ export function applyTouchResult(queryClient: QueryClient, result: LogTouchResul
 export type RefreshScope = {
   /** The lead's touches (after logging one). */
   touches?: string;
-  /** Home: total leads, booked calls and recent leads (a new lead, a changed status). */
+  /** Home: total leads, booked calls and recent leads (a new lead, a changed status, a new name). */
   overview?: boolean;
+  /** Demo requests and the Demo cards: they show the lead's business or name (after an edit). */
+  demos?: boolean;
 };
 
 /** What the web admin refreshes after a lead write. The returned lead is already in the cache, so nothing jumps. */
@@ -50,4 +54,5 @@ export function refreshAfterLeadWrite(queryClient: QueryClient, scope: RefreshSc
   void queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
   if (scope.touches) void queryClient.invalidateQueries({ queryKey: leadKeys.touches(scope.touches) });
   if (scope.overview) void queryClient.invalidateQueries({ queryKey: overviewKeys.all });
+  if (scope.demos) void queryClient.invalidateQueries({ queryKey: demoKeys.all });
 }
