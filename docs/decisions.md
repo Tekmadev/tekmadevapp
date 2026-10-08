@@ -639,7 +639,7 @@ Contract: the website's docs/admin-api/demos.md (first drafted in the orchestrat
 - The demo form keeps a local draft until the server saves it, and slides up like New client. Success toast: "Demo requested."
 - A lead's demo requests follow it to the client when it converts; a request made on a lead that is already a client gets that client too.
 - 2026-10-05 (owner): Add a lead is first in the gold + sheet, before New client and the brief's order: adding leads is the sales team's main job, and it was hard to find at the bottom.
-- 2026-10-07 (owner): Add a lead gets "They want a demo" (off by default, `demos.request`), like New client's switch: after the lead is added, the demo request opens for it instead of the lead. The website's Add lead has the same checkbox. The switch is not part of the intent, so it never changes the Idempotency-Key.
+- 2026-10-07 (owner): Add a lead gets "They want a demo" (off by default, `demos.request`; since 2026-10-08 shown under Need only when the need is a website, Webline), like New client's switch: after the lead is added, the demo request opens for it instead of the lead. The website's Add lead has the same checkbox. The switch is not part of the intent, so it never changes the Idempotency-Key.
 
 ## In-app updates (owner decision 2026-10-08)
 
